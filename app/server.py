@@ -22,7 +22,7 @@ from werkzeug.utils import secure_filename
 from motor import meli, erp
 import planilhas
 
-VERSAO = "2026-09-10s"
+VERSAO = "2026-09-10w"
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(RAIZ), "dados")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -708,6 +708,38 @@ def faltante_um():
     r = recalcular_meli(comp)
     return jsonify({"ok": True, "status": status, "quem": session["usuario"], "quando": f_quando(agora().isoformat()),
                     "faltante_total": r["resumo"]["faltante"] if r else 0,
+                    "pendentes": r["resumo"]["faltante_pendentes"] if r else 0})
+
+
+@app.route("/faltante/varios", methods=["POST"])
+@logado
+@exige("faltante")
+def faltante_varios():
+    """OK nos selecionados: grava vários pedidos de uma vez e recalcula uma vez só."""
+    d = request.get_json(silent=True) or {}
+    comp = d.get("comp") or comp_atual()
+    tab = faltante_ler("meli")
+    feitos, status = 0, {}
+    for it in d.get("itens") or []:
+        ped = str(it.get("pedido") or "").strip()
+        if not ped:
+            continue
+        v = str(it.get("valor") or "").strip()
+        v = v.replace(".", "").replace(",", ".") if "," in v else v
+        if v == "":
+            tab.pop(ped, None); status[ped] = "pendente"; feitos += 1
+            continue
+        try:
+            val = float(v)
+        except ValueError:
+            status[ped] = "erro"; continue
+        tab[ped] = {"valor": val, "obs": (it.get("obs") or "").strip(), "quem": session["usuario"],
+                    "quando": agora().isoformat()}
+        status[ped] = "preenchido"; feitos += 1
+    faltante_gravar(tab, "meli")
+    r = recalcular_meli(comp)
+    return jsonify({"ok": True, "feitos": feitos, "status": status, "quem": session["usuario"],
+                    "quando": f_quando(agora().isoformat()),
                     "pendentes": r["resumo"]["faltante_pendentes"] if r else 0})
 
 

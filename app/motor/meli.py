@@ -330,33 +330,41 @@ def _conta(linhas, k):
 
 
 def sugestoes_faltante(linhas: list[dict], faltante: dict) -> list[dict]:
-    """A tabela FALTANTE CAMPANHA: todos os pedidos de tarifa zero, com a
-    sugestão de valor quando o mesmo ANÚNCIO (ou o mesmo SKU) já foi preenchido.
-    Itens iguais têm comportamento igual — regra da Thaís (10/09/2026)."""
-    por_anuncio: dict[str, list] = {}
-    por_sku: dict[str, list] = {}
+    """A tabela FALTANTE CAMPANHA: todos os pedidos de tarifa zero, com a sugestão
+    de valor quando um pedido IGUAL já foi preenchido — mesmo SKU, mesmo preço de
+    produto, na mesma data ou na mais próxima (regra da Thaís, 10/09/2026).
+    Segunda chance: mesmo anúncio (MLB). A sugestão nunca grava sozinha: só com o OK."""
+    from datetime import date as _d
+    feitos = []
     for l in linhas:
         if not l["tarifa_zero"]:
             continue
         f = faltante.get(l["pedido_mkt"])
         if f and f.get("valor") not in (None, ""):
-            por_anuncio.setdefault(l["anuncio"], []).append((_num(f["valor"]), l["pedido_mkt"]))
-            por_sku.setdefault(l["sku"], []).append((_num(f["valor"]), l["pedido_mkt"]))
+            feitos.append((l["sku"], round(l["valor_prod"], 2), l["anuncio"], _d.fromisoformat(l["data"]),
+                           _num(f["valor"]), l["pedido_mkt"]))
     out = []
     for l in linhas:
         if not l["tarifa_zero"]:
             continue
         f = faltante.get(l["pedido_mkt"]) or {}
         sug, origem = None, ""
-        if not f:
-            cands = por_anuncio.get(l["anuncio"]) or por_sku.get(l["sku"]) or []
+        if not f and feitos:
+            d0 = _d.fromisoformat(l["data"])
+            cands = [x for x in feitos if x[0] == l["sku"] and abs(x[1] - round(l["valor_prod"], 2)) < 0.01]
+            modo = "mesmo SKU e mesmo preço"
+            if not cands:
+                cands = [x for x in feitos if x[2] == l["anuncio"]]
+                modo = "mesmo anúncio"
             if cands:
-                vals = sorted(set(round(v, 2) for v, _ in cands))
-                sug = cands[-1][0]
-                origem = ("anúncio " + l["anuncio"]) if l["anuncio"] in por_anuncio else ("SKU " + l["sku"])
+                cands.sort(key=lambda x: abs((x[3] - d0).days))
+                melhor = cands[0]
+                dias = abs((melhor[3] - d0).days)
+                sug = melhor[4]
+                origem = f"{modo} · {'mesma data' if dias == 0 else f'{dias} dia(s) de distância'} · pedido {melhor[5]}"
+                vals = sorted(set(round(x[4], 2) for x in cands))
                 if len(vals) > 1:
-                    origem += f" · valores diferentes: {', '.join(f'{v:.2f}' for v in vals)}"
+                    origem += f" · valores diferentes já usados: {', '.join(f'{v:.2f}' for v in vals)}"
         out.append({**l, "manual": f, "sugestao": sug, "sugestao_origem": origem})
-    # pendentes primeiro, depois por data
     out.sort(key=lambda x: (x["faltante_status"] != "pendente", x["data"], x["sku"]))
     return out

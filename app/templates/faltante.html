@@ -10,26 +10,38 @@
 <div class="kpis cinco">
   <div class="kpi preto"><span class="l">Pedidos de tarifa zero</span><span class="v">{{ itens|length }}</span><span class="o">o Meli não cobrou comissão nesses</span></div>
   <div class="kpi {{ 'crit' if pend else 'bom' }}"><span class="l">Pendentes</span><span class="v">{{ pend }}</span><span class="o">sem valor informado — não somam ainda</span></div>
-  <div class="kpi ouro"><span class="l">Com sugestão</span><span class="v">{{ sug }}</span><span class="o">mesmo anúncio/SKU já preenchido no mês</span></div>
+  <div class="kpi ouro"><span class="l">Com sugestão</span><span class="v">{{ sug }}</span><span class="o">mesmo SKU, mesmo preço, data mais próxima — só entra com o OK</span></div>
   <div class="kpi bom"><span class="l">Apurado (R$)</span><span class="v">R$ {{ r.resumo.faltante|brl(0) }}</span><span class="o">entra como rebate em dinheiro</span></div>
   <div class="kpi preto"><span class="l">Comissão zerada (R$)</span><span class="v">R$ {{ (itens|map(attribute='sis_rs')|reject('none')|sum)|brl(0) }}</span><span class="o">já contada como rebate de comissão</span></div>
 </div>
 <div class="bloco">
   <h2>Como funciona</h2>
-  <p style="font-size:13px;color:var(--tinta2);margin:0">Tarifa zero = o rebate da campanha foi <b>maior</b> que a comissão: o Meli zerou a comissão <b>e ainda devolve um valor</b>. O BI não tem campo para esse valor — a Gabi pesquisa no portal e informa aqui. Itens iguais têm comportamento igual: quando o mesmo anúncio (ou SKU) já foi preenchido no mês, o PLUTOS <b>sugere o valor</b> e basta aceitar. Enquanto pendente, o pedido aparece como "a apurar" e não soma.</p>
+  <p style="font-size:13px;color:var(--tinta2);margin:0">Tarifa zero = o rebate da campanha foi <b>maior</b> que a comissão: o Meli zerou a comissão <b>e ainda devolve um valor</b>. O BI não tem campo para esse valor — a Gabi pesquisa no portal e informa aqui. Itens iguais têm comportamento igual: quando um pedido do <b>mesmo SKU, com o mesmo preço, na mesma data ou na mais próxima</b> já foi preenchido, o PLUTOS <b>sugere o valor</b> — a sugestão só entra com o OK. Marque vários pedidos para aplicar o mesmo valor, a mesma observação ou a sugestão de uma vez. Enquanto pendente, o pedido aparece como "a apurar" e não soma.</p>
 </div>
-<form method="post" class="bloco">
+<form method="post" class="bloco" id="ftab">
   <div class="cab-acoes"><h2 style="margin:0">Pedidos de tarifa zero · {{ comp|mesano }}</h2>
     {% if PODE.faltante %}<span style="display:flex;gap:6px">
-      {% if sug %}<button class="bt sec" name="acao" value="aceitar_todas" type="submit" data-tip="Aceita todas as sugestões pendentes de uma vez">Aceitar {{ sug }} sugestão(ões)</button>{% endif %}
-      <button class="bt pri" name="acao" value="gravar" type="submit">Gravar valores</button></span>{% endif %}
+      <button class="bt pri" name="acao" value="gravar" type="submit" data-tip="Grava tudo que está digitado na tabela">Gravar valores</button></span>{% endif %}
   </div>
-  <div class="rol" style="max-height:70vh"><table class="cols-12">
-    <thead><tr><th>Status</th><th>Data</th><th>OC / Pedido mkt</th><th>SKU</th><th>Anúncio</th><th class="n">Produto</th><th class="n">Comissão sist.</th><th class="n">Valor devolvido (R$)</th><th>OK</th><th>Obs</th><th>Sugestão</th><th>Quem / quando</th></tr></thead>
+  <div class="barra-massa">
+    <input type="search" id="fbusca" placeholder="buscar em qualquer campo: OC, SKU, MLB, valor, obs…" class="obs" style="width:320px">
+    <span class="nota" style="margin:0" id="fconta"></span>
+    {% if PODE.faltante %}
+    <span class="sep"></span>
+    <b id="fsel">0 selecionados</b>
+    <input class="val" id="mval" placeholder="valor R$"><button type="button" class="mini" id="bval" data-tip="Coloca este valor no campo dos pedidos marcados (não grava)">Aplicar valor</button>
+    <input class="obs" id="mobs" placeholder="observação" style="width:200px"><button type="button" class="mini" id="bobs" data-tip="Coloca esta observação nos pedidos marcados (não grava)">Aplicar obs</button>
+    <button type="button" class="mini" id="bsug" data-tip="Coloca a sugestão no campo dos pedidos marcados que têm sugestão (não grava)">Aplicar sugestão</button>
+    <button type="button" class="mini ok-sel" id="bok" data-tip="Grava, um a um, os pedidos marcados">OK nos selecionados</button>
+    {% endif %}
+  </div>
+  <div class="rol" style="max-height:70vh"><table class="cols-13">
+    <thead><tr><th class="chk" data-sem-ordenar>{% if PODE.faltante %}<input type="checkbox" id="ftodos" data-tip="Marca / desmarca todos os visíveis">{% endif %}</th><th>Status</th><th>Data</th><th>OC / Pedido mkt</th><th>SKU</th><th>Anúncio</th><th class="n">Produto</th><th class="n">Comissão sist.</th><th class="n">Valor devolvido (R$)</th><th>OK</th><th>Obs</th><th>Sugestão</th><th>Quem / quando</th></tr></thead>
     <tbody>
     {% for i in itens %}
     {% set ped = i.pedido_mkt %}
     <tr data-ped="{{ ped }}" class="{{ 'pend' if i.faltante_status == 'pendente' and not i.sugestao }}{{ 'sug' if i.sugestao is not none and i.faltante_status == 'pendente' }}">
+      <td class="chk">{% if PODE.faltante %}<input type="checkbox" class="sel">{% endif %}</td>
       <td data-ord="{{ '1' if i.faltante_status == 'pendente' else '2' }}" class="st">{% if i.faltante_status == 'pendente' %}<span class="tag pend">pendente</span>{% else %}<span class="tag ok2">preenchido</span>{% endif %}</td>
       <td data-ord="{{ i.data }}">{{ i.data|dia }}</td><td class="n">{{ ped }}</td><td class="n">{{ i.sku }}</td><td class="n">{{ i.anuncio }}</td>
       <td class="n">{{ i.valor_prod|brl }}</td><td class="n">{% if i.sis_rs is not none %}{{ i.sis_rs|brl }}{% else %}—{% endif %}</td>
@@ -40,7 +52,7 @@
       <td class="qq" data-ord="{{ i.manual.quando if i.manual else '' }}" style="font-size:11px;color:var(--tinta3)">{% if i.manual %}{{ i.manual.quem }} · {{ i.manual.quando|quando }}{% endif %}</td>
     </tr>
     {% endfor %}
-    {% if not itens %}<tr><td colspan="12">Nenhum pedido de tarifa zero nesta competência.</td></tr>{% endif %}
+    {% if not itens %}<tr><td colspan="13">Nenhum pedido de tarifa zero nesta competência.</td></tr>{% endif %}
     </tbody></table></div>
 </form>
 {% endif %}
@@ -77,6 +89,55 @@
     if(ev.key !== 'Enter') return;
     var inp = ev.target.closest('input.val, input.obs'); if(!inp) return;
     ev.preventDefault(); gravar(inp.closest('tr'));
+  });
+
+  // ---- busca em qualquer campo (texto das células + valor dos inputs)
+  var busca = document.getElementById('fbusca'), conta = document.getElementById('fconta');
+  function linhas(){ return Array.prototype.slice.call(document.querySelectorAll('#ftab tbody tr[data-ped]')); }
+  function texto(tr){
+    var t = tr.textContent || '';
+    tr.querySelectorAll('input').forEach(function(i){ if(i.type !== 'checkbox') t += ' ' + i.value; });
+    return t.toLowerCase();
+  }
+  function filtrar(){
+    var q = (busca.value || '').trim().toLowerCase(), n = 0, tot = 0;
+    linhas().forEach(function(tr){ tot++; var ok = !q || texto(tr).indexOf(q) >= 0; tr.style.display = ok ? '' : 'none'; if(ok) n++; });
+    conta.textContent = q ? (n + ' de ' + tot + ' pedidos') : (tot + ' pedidos');
+  }
+  if(busca){ busca.addEventListener('input', filtrar); filtrar(); }
+
+  // ---- seleção e ações em massa (só preenchem os campos; gravar é o OK)
+  var fsel = document.getElementById('fsel');
+  function selecionadas(){ return linhas().filter(function(tr){ var c = tr.querySelector('input.sel'); return c && c.checked && tr.style.display !== 'none'; }); }
+  function contar(){ if(fsel) fsel.textContent = selecionadas().length + ' selecionados'; }
+  document.addEventListener('change', function(ev){
+    if(ev.target.id === 'ftodos'){ linhas().forEach(function(tr){ if(tr.style.display !== 'none'){ var c = tr.querySelector('input.sel'); if(c) c.checked = ev.target.checked; } }); }
+    if(ev.target.classList.contains('sel') || ev.target.id === 'ftodos') contar();
+  });
+  function liga(id, fn){ var b = document.getElementById(id); if(b) b.addEventListener('click', function(ev){ ev.preventDefault(); fn(); }); }
+  liga('bval', function(){ var v = document.getElementById('mval').value; if(!v) return; selecionadas().forEach(function(tr){ tr.querySelector('input.val').value = v; }); });
+  liga('bobs', function(){ var v = document.getElementById('mobs').value; selecionadas().forEach(function(tr){ tr.querySelector('input.obs').value = v; }); });
+  liga('bsug', function(){ selecionadas().forEach(function(tr){ var s = tr.querySelector('.sugerir'); if(s) s.click(); }); });
+  liga('bok', function(){
+    var sel = selecionadas(); if(!sel.length) return;
+    var bt = document.getElementById('bok'); bt.disabled = true; bt.textContent = 'gravando ' + sel.length + '…';
+    var itens = sel.map(function(tr){ return {pedido: tr.getAttribute('data-ped'), valor: tr.querySelector('input.val').value, obs: tr.querySelector('input.obs').value}; });
+    fetch("{{ url_for('faltante_varios') }}", {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({itens: itens, comp: comp})})
+    .then(function(r){ return r.json(); })
+    .then(function(j){
+      bt.disabled = false; bt.textContent = 'OK nos selecionados';
+      if(!j.ok) return;
+      sel.forEach(function(tr){
+        var st = j.status[tr.getAttribute('data-ped')]; if(!st || st === 'erro') return;
+        var td = tr.querySelector('td.st');
+        td.innerHTML = st === 'preenchido' ? '<span class="tag ok2">preenchido</span>' : '<span class="tag pend">pendente</span>';
+        td.setAttribute('data-ord', st === 'preenchido' ? '2' : '1');
+        tr.classList.remove('pend','sug'); tr.classList.add(st === 'preenchido' ? 'feito' : 'pend');
+        var qq = tr.querySelector('td.qq'); if(qq && st === 'preenchido') qq.textContent = j.quem + ' · ' + j.quando;
+        var c = tr.querySelector('input.sel'); if(c) c.checked = false;
+      });
+      contar();
+    }).catch(function(){ bt.disabled = false; bt.textContent = 'erro'; });
   });
 })();
 </script>
