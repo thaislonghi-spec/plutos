@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PLUTOS · Rebates · {{ PARAM.empresa }}</title>
+<link rel="icon" href="{{ url_for('static', filename='icone.ico') }}" sizes="any">
+<link rel="apple-touch-icon" href="{{ url_for('static', filename='icone-192.png') }}">
+<meta name="theme-color" content="#0B0B0C">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}?v={{ VERSAO }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='plutos.css') }}?v={{ VERSAO }}">
+<style>
+  .pag{display:flex;gap:6px;align-items:center;margin-top:12px;font-size:12.5px;color:var(--tinta3)}
+  .pag a{color:var(--tinta);text-decoration:none;border:1px solid var(--linha2);padding:5px 11px;border-radius:2px}
+  .entrar{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0B0B0C;padding:24px}
+  .cartao{width:100%;max-width:420px;background:#131316;border:1px solid #2C2C2E;border-top:3px solid var(--marca);border-radius:2px;padding:34px 40px 26px;box-shadow:0 6px 30px rgba(0,0,0,.5);text-align:center}
+  .cartao .marca-entrar{height:64px;display:block;margin:4px auto 0}
+  .cartao .sub-marca{margin-top:14px;font:600 10px Archivo,sans-serif;letter-spacing:.22em;text-transform:uppercase;color:#8B8E91}
+  .cartao form{margin-top:28px;text-align:left}
+  .cartao label{display:block;font:700 9.5px Archivo,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:#8B8E91;margin:0 0 6px}
+  .cartao input{width:100%;background:#0B0B0C;border:1px solid #2C2C2E;color:#F2F2F0;padding:12px 14px;font:500 14.5px Archivo,sans-serif;border-radius:2px;margin-bottom:17px;outline:none}
+  .cartao button{width:100%;border:1px solid;padding:14px;font:700 15px Archivo,sans-serif;cursor:pointer;border-radius:2px;margin-top:2px}
+  .cartao .obs{color:#7A7D80;font-size:11.5px;margin-top:15px}
+  .cartao .flash{margin-top:20px;text-align:left;background:#2A1614;border:1px solid #5A2420;border-left:3px solid var(--crit);color:#E8938C}
+  .cartao input:-webkit-autofill,.cartao input:-webkit-autofill:focus{-webkit-text-fill-color:#F2F2F0;-webkit-box-shadow:0 0 0 40px #0B0B0C inset;caret-color:#F2F2F0}
+  a.bt{text-decoration:none;display:inline-block}
+</style>
+</head>
+<body>
+{% block corpo %}
+{% set paginas = {
+  'painel':   ['GERAL', 'Todos os rebates, canal a canal, na competência'],
+  'canal':    ['Canal', 'O box do canal'],
+  'pedidos':  ['Por pedido', 'Cada OC com o rebate aberto nas três formas'],
+  'faltante': ['Faltante campanha', 'Método manual · Mercado Livre — tarifa zero, valor pesquisado no portal'],
+  'arquivos': ['Arquivos', 'Um box por canal: o que subir e o histórico de rodadas'],
+  'parametros_tela': ['Parâmetros', 'O que é editável por empresa'],
+  'conta':    ['Conta', 'Sua senha e a equipe'],
+} %}
+{% set atual = request.endpoint %}
+{% set pagina = paginas.get(atual, ['PLUTOS', 'Rebates']) %}
+{% if atual == 'canal' and c is defined %}{% set pagina = [c.nome, 'Box do canal · como o rebate nasce aqui'] %}{% endif %}
+
+<div class="app">
+<aside class="lateral">
+  <a class="marca-lateral" href="{{ url_for('painel') }}">
+    <img class="logo-plutos" src="{{ url_for('static', filename='marca_plutos.png') }}" alt="PLUTOS">
+  </a>
+  <nav class="menu">
+    <a class="item {{ 'on' if atual == 'painel' }}" href="{{ url_for('painel') }}">GERAL</a>
+    <a class="item {{ 'on' if atual == 'pedidos' }}" href="{{ url_for('pedidos', mes=comp) }}">Por pedido</a>
+    <div class="grupo">Canais</div>
+    {% for cn in CANAIS %}
+      {% if cn.ativo %}
+      <a class="item {{ 'on' if atual == 'canal' and c is defined and c.chave == cn.chave }}" href="{{ url_for('canal', chave=cn.chave, mes=comp) }}">{{ cn.nome }}</a>
+      {% else %}
+      <span class="item em-obra" data-tip="Box em construção — ainda não desenhado">{{ cn.nome }}</span>
+      {% endif %}
+    {% endfor %}
+    <div class="divide"></div>
+    <a class="item {{ 'on' if atual == 'faltante' }}" href="{{ url_for('faltante', mes=comp) }}">Faltante campanha · Meli</a>
+  </nav>
+  <div class="pe-lateral">
+    {% if IRMAOS %}
+    <div class="irmaos">
+      {% for m in IRMAOS if m.arquivo %}
+      <a href="{{ m.url }}" target="_blank" rel="noopener" data-tip="Abrir o {{ m.rotulo }} numa aba nova"><img src="{{ url_for('static', filename=m.arquivo) }}" alt="{{ m.rotulo }}"></a>
+      {% endfor %}
+    </div>
+    {% endif %}
+    <div class="menu rodape-menu">
+      <div class="par">
+        <a class="item item-acao {{ 'on' if atual == 'arquivos' }}" href="{{ url_for('arquivos', mes=comp) }}">Arquivos</a>
+        <a class="item {{ 'on' if atual == 'parametros_tela' }}" href="{{ url_for('parametros_tela') }}">Parâmetros</a>
+      </div>
+      <div class="par">
+        <a class="item {{ 'on' if atual == 'conta' }}" href="{{ url_for('conta') }}">Conta</a>
+        <a class="item saindo" href="{{ url_for('sair') }}">Sair</a>
+      </div>
+      <div class="versao" data-tip="Versão que está no ar. Se esta letra não mudar depois do deploy, o deploy não pegou.">{{ usuario }} · {{ VERSAO }}</div>
+    </div>
+  </div>
+</aside>
+
+<main class="conteudo">
+<div class="topo-tela">
+  <div>
+    <h1>{{ pagina[0] }}</h1>
+    <div class="sub">{{ pagina[1] }}</div>
+  </div>
+  <div class="acoes-topo">
+    {% if COMPS %}
+    <div class="janelas jan-fech">
+      {% for cp in COMPS %}
+      <a class="janela {{ 'on' if cp == comp }}" href="{{ url_for(atual if atual in ('painel','pedidos','faltante','arquivos') else 'painel', mes=cp, **(dict(chave=c.chave) if atual == 'canal' and c is defined else {})) }}">{{ cp|mesano }}</a>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% block acoes_topo %}{% endblock %}
+    {% if PODE.exportar and COMPS %}
+    <div class="janelas baixar-topo">
+      <a class="janela baixar" href="{{ url_for('baixar', qual='rebates', mes=comp) }}" data-tip="Rebate por OC, nas três formas — é o que o Tropa de Elite e o ORION consomem">↓ Rebates por pedido</a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+<div class="wrap">
+  {% if ULT %}
+  <div class="ult-base" data-tip="A última rodada que entrou no PLUTOS">Última rodada: {{ ULT.canal|upper }} {{ ULT.comp|mesano }} em {{ ULT.quando|quando }} por {{ ULT.quem }}</div>
+  {% endif %}
+  {% with msgs = get_flashed_messages() %}{% for m in msgs %}<div class="flash">{{ m }}</div>{% endfor %}{% endwith %}
+  {% block conteudo %}{% endblock %}
+</div>
+</main>
+</div>
+{% endblock %}
+<div id="dica"></div>
+<script>
+(function(){
+  var dica=document.getElementById('dica');
+  document.addEventListener('mouseover',function(ev){var alvo=ev.target.closest('[data-tip]');if(!alvo){dica.style.opacity=0;return;}dica.textContent=alvo.getAttribute('data-tip');dica.style.opacity=1;});
+  document.addEventListener('mousemove',function(ev){if(dica.style.opacity!=='1')return;var x=ev.clientX+14,y=ev.clientY+14;if(x+dica.offsetWidth>window.innerWidth-10)x=ev.clientX-dica.offsetWidth-14;dica.style.left=x+'px';dica.style.top=y+'px';});
+})();
+(function(){
+  function valor(td){if(!td)return"";var t=(td.getAttribute("data-ord")||td.textContent||"").trim();var n=t.replace(/[R$\s%×]/g,"").replace(/\./g,"").replace(",",".");if(n&&!isNaN(n)&&/[\d]/.test(n))return parseFloat(n);return t.toLowerCase();}
+  document.querySelectorAll("table").forEach(function(tab){if(tab.closest("[data-sem-ordenar]"))return;var thead=tab.tHead,corpo=tab.tBodies[0];if(!thead||!corpo||corpo.rows.length<2)return;
+    Array.prototype.forEach.call(thead.rows[0].cells,function(th,i){if(!th.textContent.trim())return;th.classList.add("ord");th.addEventListener("click",function(){var desc=!th.classList.contains("desc");Array.prototype.forEach.call(thead.rows[0].cells,function(o){o.classList.remove("asc","desc");});th.classList.add(desc?"desc":"asc");var linhas=Array.prototype.slice.call(corpo.rows);linhas.sort(function(a,b){var x=valor(a.cells[i]),y=valor(b.cells[i]);if(x===y)return 0;if(typeof x==="number"&&typeof y==="number")return desc?y-x:x-y;return desc?String(y).localeCompare(String(x),"pt-BR"):String(x).localeCompare(String(y),"pt-BR");});linhas.forEach(function(l){corpo.appendChild(l);});});});});
+})();
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

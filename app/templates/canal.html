@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block conteudo %}
+{% if not c.ativo %}
+<div class="aviso"><b>{{ c.nome }} — box em construção.</b> Ainda não desenhamos a regra deste canal (como o rebate nasce, qual arquivo prova, chave e previsto).</div>
+{% elif not r %}
+<div class="aviso"><b>Sem rodada de {{ c.nome }} em {{ comp|mesano }}.</b> Suba a TABELA GERAL DE PEDIDOS em <a href="{{ url_for('arquivos', mes=comp) }}">Arquivos</a>.</div>
+{% else %}
+{% set s = r.resumo %}
+<div class="kpis cinco">
+  <div class="kpi ouro"><span class="l">Rebate total</span><span class="v">R$ {{ s.rebate_total|brl(0) }}</span><span class="o">{{ s.pct_sobre_venda|brl(2) }}% de R$ {{ s.venda|brl(0) }} de produto</span></div>
+  <div class="kpi bom"><span class="l">R$ · Cupom Meli</span><span class="v">R$ {{ s.cupom_meli|brl(0) }}</span><span class="o">cupom bancado pelo Meli (coluna do export)</span></div>
+  <div class="kpi bom"><span class="l">R$ · Faltante campanha</span><span class="v">R$ {{ s.faltante|brl(0) }}</span><span class="o">{{ s.faltante_preenchidos }} de {{ s.tarifa_zero }} pedidos de tarifa zero apurados</span></div>
+  <div class="kpi preto"><span class="l">Comissão · Diferença</span><span class="v">R$ {{ s.rebate_comissao|brl(0) }}</span><span class="o">{% if r.sistema %}sistema − cobrada · {{ s.dif_pos }} pedidos{% else %}aguardando a comissão do sistema (ADC002){% endif %}</span></div>
+  <div class="kpi {{ 'crit' if s.faltante_pendentes else 'bom' }}"><span class="l">A apurar</span><span class="v">{{ s.faltante_pendentes }}</span><span class="o">{% if s.faltante_pendentes %}<a href="{{ url_for('faltante', mes=comp) }}">abrir a tabela manual</a>{% else %}nada pendente{% endif %}</span></div>
+</div>
+
+{% if not r.sistema %}
+<div class="aviso"><b>Falta a comissão do sistema.</b> O rebate de COMISSÃO (diferença Promob − Meli) só nasce quando a planilha "rebate" do ADC002 sobe em <a href="{{ url_for('arquivos', mes=comp) }}">Arquivos</a>. Cupom Meli e Faltante campanha já estão calculados.</div>
+{% elif s.sem_sistema %}
+<div class="aviso"><b>{{ s.sem_sistema }} pedido(s) sem par na comissão do sistema</b> — nesses a diferença fica em branco (não conta como zero).</div>
+{% endif %}
+{% if r.arquivo.diag.nao_pago %}
+<div class="aviso"><b>{{ r.arquivo.diag.nao_pago }} pedido(s) com status diferente de Pago</b> entraram no export ({{ r.arquivo.diag.status }}). O método filtra Pago no BI — confira o filtro.</div>
+{% endif %}
+
+<div class="bloco">
+  <h2>Dia a dia · {{ comp|mesano }} <span style="font-weight:400;letter-spacing:0;text-transform:none">— o mesmo resumo da "Planilha1" da Gabi, sem mão</span></h2>
+  {% set maxd = s.por_dia.values()|map(attribute='total')|max if s.por_dia else 1 %}
+  <div class="barras">
+    {% for d, v in s.por_dia.items() %}
+    <div class="b" style="height:{{ (100 * v.total / maxd) if maxd else 0 }}%" data-tip="{{ d|dia }} · R$ {{ v.total|brl }} · {{ v.pedidos }} pedidos"><i>{{ d[8:10] }}</i></div>
+    {% endfor %}
+  </div>
+  <div class="rol" style="max-height:50vh;margin-top:18px"><table class="cols-8">
+    <thead><tr><th>Dia</th><th class="n">Pedidos</th><th class="n">Venda</th><th class="n">Cupom Meli (R$)</th><th class="n">Faltante campanha (R$)</th><th class="n">Diferença comissão</th><th class="n">SOMA</th><th class="n">Tarifa zero</th></tr></thead>
+    <tbody>
+    {% for d, v in s.por_dia.items() %}
+    <tr><td>{{ d|dia }}</td><td class="n">{{ v.pedidos }}</td><td class="n">{{ v.venda|brl(0) }}</td><td class="n">{{ v.cupom|brl }}</td><td class="n">{{ v.faltante|brl }}</td><td class="n">{{ v.comissao|brl }}</td><td class="n"><b>{{ v.total|brl }}</b></td><td class="n">{{ v.tz }}</td></tr>
+    {% endfor %}
+    <tr class="linha-total"><td><b>Total</b></td><td class="n"><b>{{ s.pedidos }}</b></td><td class="n"><b>{{ s.venda|brl(0) }}</b></td><td class="n"><b>{{ s.cupom_meli|brl }}</b></td><td class="n"><b>{{ s.faltante|brl }}</b></td><td class="n"><b>{{ s.rebate_comissao|brl }}</b></td><td class="n"><b>{{ s.rebate_total|brl }}</b></td><td class="n"><b>{{ s.tarifa_zero }}</b></td></tr>
+    </tbody></table></div>
+</div>
+
+<div class="dois-blocos">
+<div class="bloco">
+  <h2>O box · como o rebate nasce no {{ c.nome }}</h2>
+  <div class="rol fit"><table data-sem-ordenar>
+    <thead><tr><th>Rebate</th><th>Forma</th><th>Origem</th><th>Automático?</th></tr></thead>
+    <tbody>
+      <tr><td>Cupom Meli</td><td><span class="tag ok2">R$</span></td><td>coluna "Cupom Meli" do export</td><td>sim</td></tr>
+      <tr><td>Diferença de comissão</td><td><span class="tag ouro">Comissão</span></td><td>comissão do sistema (Promob/ADC002) − tarifa cobrada</td><td>sim, com o ADC002</td></tr>
+      <tr><td>Faltante campanha</td><td><span class="tag ok2">R$</span></td><td>tabela manual (portal do Meli), pedidos de tarifa zero</td><td>semi — com replicar</td></tr>
+      <tr><td>Frete</td><td><span class="tag mk-cinza">—</span></td><td>frete do Coletas é custo nosso, já no custo do produto</td><td>não existe</td></tr>
+    </tbody></table></div>
+  <div class="nota">Entrada: TABELA GERAL DE PEDIDOS (Power BI, Pago, 01–31). Chave: Pedido Marketplace (Any) = OC do ERP. Competência: data do pedido.</div>
+</div>
+<div class="bloco">
+  <h2>Sinais desta rodada</h2>
+  <div class="rol fit"><table data-sem-ordenar>
+    <tbody>
+      <tr><td>Arquivo</td><td class="n">{{ r.arquivo.nome }}</td></tr>
+      <tr><td>Período no arquivo</td><td class="n">{{ r.arquivo.diag.de|dia }} a {{ r.arquivo.diag.ate|dia }}</td></tr>
+      <tr><td>Linhas rejeitadas</td><td class="n">{{ r.arquivo.diag.n_rejeitadas }}</td></tr>
+      <tr><td>Pedidos duplicados no export</td><td class="n">{{ r.arquivo.diag.duplicados }}</td></tr>
+      <tr><td>Contas</td><td class="n">{% for k, v in s.contas.items() %}{{ k }} {{ v }}{% if not loop.last %} · {% endif %}{% endfor %}</td></tr>
+      <tr><td>Tipo de anúncio</td><td class="n">{% for k, v in s.tipos.items() %}{{ k }} {{ v }}{% if not loop.last %} · {% endif %}{% endfor %}</td></tr>
+      <tr><td>Diferença positiva (rebate)</td><td class="n">{{ s.dif_pos }} pedidos · R$ {{ s.dif_pos_rs|brl }}</td></tr>
+      <tr><td>Diferença negativa (cobrou mais que o sistema)</td><td class="n">{{ s.dif_neg }} pedidos · R$ {{ s.dif_neg_rs|brl }}</td></tr>
+      <tr><td>Comissão do sistema</td><td class="n">{% if r.sistema %}{{ r.sistema.nome }} · {{ r.sistema_diag.linhas }} pedidos ({{ r.sistema_diag.modo }}){% else %}<span class="tag pend">não subiu</span>{% endif %}</td></tr>
+      <tr><td>Cupom Seller (nosso, não é rebate)</td><td class="n">R$ {{ s.cupom_seller|brl }}</td></tr>
+    </tbody></table></div>
+  <div class="acoes" style="margin-top:10px"><a class="bt sec" href="{{ url_for('pedidos', mes=comp, canal=c.chave) }}">Ver por pedido →</a></div>
+</div>
+</div>
+{% endif %}
+{% endblock %}

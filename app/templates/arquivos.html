@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<div class="bloco">
+  <h2>Um box por canal</h2>
+  <div class="arqs">
+  {% for cn in CANAIS %}
+    {% if cn.ativo %}
+    <div class="arq">
+      <div class="arq-top"><b>{{ loop.index }} · {{ cn.nome|upper }}</b>{% if r_meli %}<span class="ok">rodado {{ comp|mesano }}</span>{% endif %}</div>
+      <div class="arq-tit" style="margin-top:8px">{{ cn.arquivo }}</div>
+      <div class="arq-sub">{{ cn.arquivo_sub }}</div>
+      {% if r_meli %}<span class="arq-n">{{ r_meli.arquivo.nome }} · {{ r_meli.quando|quando }} · {{ r_meli.resumo.pedidos }} pedidos</span>{% endif %}
+      {% if PODE.arquivos %}
+      <form method="post" action="{{ url_for('subir', chave=cn.chave) }}" enctype="multipart/form-data" class="upl">
+        <input type="hidden" name="tipo" value="base"><input type="file" name="arquivo" accept=".xlsx,.xls,.csv" required>
+        <button class="bt pri" type="submit" style="padding:7px 14px">Subir e rodar</button>
+      </form>
+      {% endif %}
+      <div class="arq-tit" style="margin-top:14px">{{ cn.extra }}</div>
+      <div class="arq-sub">{{ cn.extra_sub }}</div>
+      {% if r_meli and r_meli.sistema %}<span class="arq-n">{{ r_meli.sistema.nome }} · {{ r_meli.sistema.quando|quando }} · {{ r_meli.sistema.diag.linhas }} pedidos</span>{% elif r_meli %}<span class="arq-n"><span class="tag pend">não subiu</span> o rebate de comissão fica em branco até subir</span>{% endif %}
+      {% if PODE.arquivos %}
+      <form method="post" action="{{ url_for('subir', chave=cn.chave) }}" enctype="multipart/form-data" class="upl">
+        <input type="hidden" name="tipo" value="sistema"><input type="hidden" name="comp" value="{{ comp }}">
+        <input type="file" name="arquivo" accept=".xlsx,.xls,.csv" required>
+        <button class="bt sec" type="submit" style="padding:7px 14px">Subir p/ {{ comp|mesano }}</button>
+      </form>
+      {% endif %}
+      <details class="ajuda2"><summary>O que o PLUTOS faz com isso</summary>
+        <p>Da TABELA GERAL: separa por mês da data do pedido, calcula o % de comissão cobrada, marca os pedidos de <b>tarifa zero</b> (vão para a tabela Faltante campanha) e soma o <b>Cupom Meli</b> como rebate em R$.</p>
+        <p>Da comissão do sistema: casa cada pedido pela chave "Pedido Marketplace (Any)" e calcula a <b>diferença</b> comissão do sistema − tarifa cobrada = rebate de comissão. Aceita a planilha do ADC002 pelos nomes das colunas ou pelas posições do PROCV da Gabi (D → AB / AK).</p>
+      </details>
+    </div>
+    {% else %}
+    <div class="arq" style="opacity:.55;min-height:120px">
+      <div class="arq-top"><b>{{ loop.index }} · {{ cn.nome|upper }}</b><span class="tag mk-cinza">em construção</span></div>
+      <div class="arq-sub">O box entra quando a regra do canal for desenhada.</div>
+    </div>
+    {% endif %}
+  {% endfor %}
+  </div>
+</div>
+
+<div class="bloco">
+  <h2>Histórico de rodadas</h2>
+  <div class="rol" style="max-height:40vh"><table class="cols-8">
+    <thead><tr><th>Quando</th><th>Canal</th><th>Competência</th><th>Arquivo</th><th>Quem</th><th class="n">Pedidos</th><th class="n">Rebate total</th><th>Comissão sist.</th></tr></thead>
+    <tbody>
+    {% for h in hist %}
+    <tr data-abrir="{{ url_for('canal', chave=h.canal, mes=h.comp) }}"><td>{{ h.quando|quando }}</td><td>{{ h.canal|upper }}</td><td>{{ h.comp|mesano }}</td><td class="n">{{ h.arquivo }}</td><td>{{ h.quem }}</td><td class="n">{{ h.pedidos }}</td><td class="n">R$ {{ h.total|brl }}</td><td>{{ 'sim' if h.sistema else '—' }}</td></tr>
+    {% endfor %}
+    {% if not hist %}<tr><td colspan="8">Nenhuma rodada ainda.</td></tr>{% endif %}
+    </tbody></table></div>
+</div>
+
+<div class="bloco">
+  <h2>Saídas</h2>
+  <div class="janelas">
+    {% if COMPS %}<a class="janela" href="{{ url_for('baixar', qual='rebates', mes=comp) }}">↓ PLUTOS_Rebates_{{ comp.replace('-','') }}.xlsx</a>
+    <a class="janela" href="{{ url_for('baixar', qual='faltante', mes=comp) }}">↓ Faltante campanha (Meli)</a>
+    <a class="janela" href="{{ url_for('api_rebates', comp=comp) }}" target="_blank">{ } JSON por OC para o Tropa / ORION</a>{% endif %}
+  </div>
+  <div class="nota">O JSON é o "Enviar para…" dos outros apps: <code>/api/rebates/{{ comp }}.json</code> — rebate por OC nas três formas. Protegido por token (variável PLUTOS_TOKEN no Render).</div>
+</div>
+{% endblock %}

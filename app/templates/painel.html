@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block conteudo %}
+{% if not COMPS %}
+<div class="aviso"><b>Nenhuma rodada ainda.</b> Vá em <a href="{{ url_for('arquivos') }}">Arquivos</a> e suba a TABELA GERAL DE PEDIDOS do Mercado Livre.</div>
+{% endif %}
+<div class="kpis cinco">
+  <div class="kpi ouro"><span class="l">Rebate total · {{ comp|mesano }}</span><span class="v">R$ {{ tot.total|brl(0) }}</span><span class="o">{{ tot.pct|brl(2) }}% da venda de produto · {{ tot.pedidos|brl(0) }} pedidos</span></div>
+  <div class="kpi bom"><span class="l">1 · Rebate em R$</span><span class="v">R$ {{ tot.rs|brl(0) }}</span><span class="o">volta em dinheiro na conta</span></div>
+  <div class="kpi preto"><span class="l">2 · Rebate em comissão</span><span class="v">R$ {{ tot.com|brl(0) }}</span><span class="o">paga-se menos — não volta dinheiro</span></div>
+  <div class="kpi preto"><span class="l">3 · Rebate em frete</span><span class="v">R$ {{ tot.frete|brl(0) }}</span><span class="o">nenhum canal ativo pratica ainda</span></div>
+  <div class="kpi {{ 'crit' if tot.pend else 'bom' }}"><span class="l">A apurar (faltante campanha)</span><span class="v">{{ tot.pend }}</span><span class="o">{% if tot.pend %}pedidos de tarifa zero sem valor — <a href="{{ url_for('faltante', mes=comp) }}">preencher</a>{% else %}tudo apurado{% endif %}</span></div>
+</div>
+
+<div class="bloco">
+  <h2>Canal a canal · {{ comp|mesano }}</h2>
+  <div class="boxes">
+  {% for c in por_canal %}
+    {% if c.res %}
+    <a class="box-canal" href="{{ url_for('canal', chave=c.chave, mes=comp) }}" style="text-decoration:none;color:inherit">
+      <h3>{{ c.nome }} <span class="tag ok2">rodado</span></h3>
+      <div class="g">R$ {{ c.res.rebate_total|brl(0) }}</div>
+      <div class="m">{{ c.res.pct_sobre_venda|brl(2) }}% da venda · {{ c.res.pedidos|brl(0) }} pedidos</div>
+      <div class="m">R$ {{ c.res.rebate_rs|brl(0) }} em dinheiro · R$ {{ c.res.rebate_comissao|brl(0) }} em comissão</div>
+      {% if c.res.faltante_pendentes %}<div class="m"><span class="tag pend">{{ c.res.faltante_pendentes }} a apurar</span></div>{% endif %}
+      {% if c.res.sem_sistema == c.res.pedidos %}<div class="m"><span class="tag aten">sem comissão do sistema (ADC002)</span></div>{% endif %}
+      <div class="m" style="margin-top:auto">rodada {{ c.quando|quando }}</div>
+    </a>
+    {% elif c.ativo %}
+    <div class="box-canal"><h3>{{ c.nome }}</h3><div class="m">sem rodada em {{ comp|mesano }} — <a href="{{ url_for('arquivos', mes=comp) }}">subir arquivo</a></div></div>
+    {% else %}
+    <div class="box-canal obra"><h3>{{ c.nome }} <span class="tag mk-cinza">em construção</span></h3><div class="m">O box deste canal ainda vai ser desenhado com a Thaís — regra, arquivo que prova, chave e previsto.</div></div>
+    {% endif %}
+  {% endfor %}
+  </div>
+</div>
+
+<div class="bloco">
+  <h2>Como ler</h2>
+  <p style="font-size:13px;color:var(--tinta2);margin:0">
+    <b>Rebate</b> é a forma como os canais ajudam a recompor a margem para rentabilizar a venda. Cada canal tem a sua particularidade, mas no fim são três formas: <b>R$</b> (volta em dinheiro), <b>comissão</b> (paga-se menos) e <b>frete</b> (o canal ajuda a pagar o envio). O PLUTOS concentra tudo aqui, por OC, e entrega o resumo para o Tropa de Elite e o ORION — a competência é o mês da data do pedido.
+  </p>
+</div>
+{% endblock %}

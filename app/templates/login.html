@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block corpo %}
+<div class="entrar"><div class="cartao">
+  <img class="marca-entrar" src="{{ url_for('static', filename='marca_plutos.png') }}" alt="PLUTOS">
+  <div class="sub-marca">Rebates · {{ PARAM.empresa }}</div>
+  <form method="post">
+    <label>Usuário</label><input name="usuario" autocomplete="username" autofocus>
+    <label>Senha</label><input name="senha" type="password" autocomplete="current-password">
+    <button type="submit">Entrar</button>
+  </form>
+  {% with msgs = get_flashed_messages() %}{% for m in msgs %}<div class="flash">{{ m }}</div>{% endfor %}{% endwith %}
+  <div class="obs">Acesso restrito à equipe. No 1º acesso a troca de senha é obrigatória.</div>
+</div></div>
+{% endblock %}

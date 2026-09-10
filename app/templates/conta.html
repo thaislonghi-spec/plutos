@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<div class="conta-grid">
+<div>
+  <div class="bloco">
+    <h2 class="tit">Sua conta</h2>
+    <div class="quem"><b>{{ usuario }}</b> · {{ PAPEIS[papel] }}</div>
+    <form method="post" class="form-v">
+      <input type="hidden" name="acao" value="minha_senha">
+      <label>Senha atual<input name="atual" type="password" autocomplete="current-password"></label>
+      <label>Nova senha<input name="s1" type="password" autocomplete="new-password"></label>
+      <label>Repetir nova senha<input name="s2" type="password" autocomplete="new-password"></label>
+      <button class="bt pri" type="submit">Trocar minha senha</button>
+    </form>
+  </div>
+  {% if PODE.usuarios %}
+  <div class="bloco">
+    <h2 class="tit">Criar usuário</h2>
+    <form method="post" class="form-v">
+      <input type="hidden" name="acao" value="novo">
+      <label>Nome (vira o login, em maiúsculas)<input name="login" placeholder="ex.: GABI" style="text-transform:uppercase"></label>
+      <label>Papel<select name="papel">{% for k, v in PAPEIS.items() %}<option value="{{ k }}" {{ 'selected' if k == 'operador' }}>{{ v }} — {{ PAPEL_DESC[k] }}</option>{% endfor %}</select></label>
+      <button class="bt pri" type="submit">Criar</button>
+      <div class="nota">A senha inicial aparece aqui uma única vez. Quem recebe troca no primeiro acesso.</div>
+    </form>
+  </div>
+  {% endif %}
+</div>
+<div class="bloco">
+  <h2>Quem tem acesso <span class="qtd">{{ equipe|length }}</span></h2>
+  <div class="rol fit"><table class="acesso" data-sem-ordenar>
+    <thead><tr><th>Usuário</th><th>Papel</th><th>Situação</th><th>Ações</th></tr></thead>
+    <tbody>
+    {% for login, u in equipe.items() %}
+    <tr>
+      <td><b>{{ login }}</b></td>
+      <td>{% if PODE.usuarios and login != usuario %}<form method="post"><input type="hidden" name="acao" value="papel"><input type="hidden" name="login" value="{{ login }}"><select name="papel" onchange="this.form.submit()">{% for k, v in PAPEIS.items() %}<option value="{{ k }}" {{ 'selected' if u.papel == k }}>{{ v }}</option>{% endfor %}</select></form>{% else %}{{ PAPEIS[u.papel] }}{% endif %}</td>
+      <td class="sit">{% if u.ativo is sameas false %}<span class="off">desativado</span>{% elif u.trocar %}<span class="ini">senha inicial · deve trocar</span>{% else %}<span class="ok3">senha própria</span>{% endif %}</td>
+      <td class="acoes-td">{% if PODE.usuarios %}
+        <form method="post"><input type="hidden" name="acao" value="reset"><input type="hidden" name="login" value="{{ login }}"><button class="mini">Resetar senha</button></form>
+        {% if login != usuario %}
+        <form method="post"><input type="hidden" name="acao" value="desativar"><input type="hidden" name="login" value="{{ login }}"><button class="mini">{{ 'Reativar' if u.ativo is sameas false else 'Desativar' }}</button></form>
+        <form method="post" onsubmit="return confirm('Excluir {{ login }}?')"><input type="hidden" name="acao" value="excluir"><input type="hidden" name="login" value="{{ login }}"><button class="mini perigo">Excluir</button></form>
+        {% endif %}{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody></table></div>
+  <div class="nota">{% for k, v in PAPEIS.items() %}<b>{{ v }}</b> {{ PAPEL_DESC[k] }}.{% if not loop.last %} {% endif %}{% endfor %} Trocar de papel vale no próximo clique da pessoa.</div>
+</div>
+</div>
+{% endblock %}

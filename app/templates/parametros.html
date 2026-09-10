@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<div class="bloco">
+  <h2>Empresa e regras editáveis</h2>
+  <form method="post" class="filtros" style="gap:14px;align-items:flex-end">
+    <label style="font-size:12px;color:var(--tinta3)">Empresa<br><input name="empresa" value="{{ PARAM.empresa }}" class="obs" {{ '' if PODE.parametros else 'disabled' }}></label>
+    <label style="font-size:12px;color:var(--tinta3)" data-tip="Diferença de comissão (sistema − cobrada) abaixo disso é arredondamento, não rebate">Tolerância da diferença de comissão (R$)<br><input name="tolerancia" value="{{ PARAM.tolerancia_comissao|brl }}" class="val" {{ '' if PODE.parametros else 'disabled' }}></label>
+    {% if PODE.parametros %}<button class="bt pri" type="submit">Gravar e recalcular</button>{% endif %}
+  </form>
+  <div class="nota">As REGRAS ficam dentro do PLUTOS; aqui só o que muda de empresa para empresa. Canais ativos hoje: {% for cn in CANAIS if cn.ativo %}<b>{{ cn.nome }}</b>{% if not loop.last %}, {% endif %}{% endfor %}. Os demais entram conforme cada box for desenhado.</div>
+</div>
+<div class="bloco">
+  <h2>As três formas de rebate (regra da casa)</h2>
+  <div class="rol fit"><table>
+    <thead><tr><th>Forma</th><th>O que é</th><th>Prova</th></tr></thead>
+    <tbody>
+      <tr class="linha-forma"><td>1 · R$</td><td>volta em dinheiro na conta</td><td>extrato / export do canal</td></tr>
+      <tr class="linha-forma"><td>2 · Comissão</td><td>desconto no % de comissão — não volta dinheiro, paga-se menos</td><td>comissão do sistema × comissão cobrada</td></tr>
+      <tr class="linha-forma"><td>3 · Frete</td><td>o canal ajuda a pagar o frete: devolve, não cobra, ou encontro de contas</td><td>extrato / ausência de cobrança / conciliação</td></tr>
+    </tbody></table></div>
+</div>
+{% endblock %}

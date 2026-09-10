@@ -1,0 +1,105 @@
+/* PLUTOS — a mesma casa do Tropa de Elite (estilo.css), nas cores do PLUTOS.
+   Preto e branco continuam; o OURO entra onde o Tropa usa o vermelho de marca
+   (linha do topo, botão de ação, tela ativa) e o VERMELHO fica só para alerta. */
+:root{--marca:#D4A017;--ouro:#D4A017;--ouro2:#F2C94C;--ouro3:#8A6508;--crit:#C8102E}
+.menu .item.on{background:var(--ouro);color:#0B0B0C}
+.menu .item.on:hover{background:var(--ouro)}
+.menu .item-acao{background:var(--ouro);color:#0B0B0C}
+.menu .item-acao:hover{background:var(--ouro2);color:#0B0B0C}
+.menu .item-acao.on{background:#8A6508;color:#fff;box-shadow:inset 0 0 0 1px #fff}
+.topo-tela .janela.on{background:var(--ouro);border-color:var(--ouro);color:#0B0B0C}
+.bt.pri{background:var(--ouro);color:#0B0B0C}
+.bt.pri:hover{background:var(--ouro2)}
+.marca-lateral{min-height:120px;padding:0 16px;justify-content:center}
+.marca-lateral .logo-plutos{height:78px;width:auto;max-width:100%}
+.topo-tela{min-height:120px}
+/* a coluna preta vai até o fim da página, mesmo quando o conteúdo é mais alto
+   que a tela: o menu fica fixo (sticky) e o fundo continua por baixo */
+.app{background:linear-gradient(to right,#0A0A0B 255px,var(--fundo) 255px)}
+@media (max-width:900px){.app{background:var(--fundo)}}
+.irmaos{gap:12px;padding-bottom:12px}
+.irmaos a{width:56px;height:56px;border-radius:12px;opacity:.9}
+.irmaos img{height:40px;width:40px;border-radius:9px}
+.ult-base{color:var(--ouro3)}
+.aviso{background:#FFF9E8;border-color:rgba(212,160,23,.35);border-left-color:var(--ouro)}
+.flash{background:#FFF9E8;border:1px solid rgba(212,160,23,.35);border-left:3px solid var(--ouro);
+  padding:11px 15px;font-size:13.5px;margin-bottom:12px}
+.cartao{border-top-color:var(--ouro)!important}
+.cartao button{background:var(--ouro)!important;border-color:var(--ouro)!important;color:#0B0B0C!important}
+.cartao button:hover{background:var(--ouro2)!important;border-color:var(--ouro2)!important}
+.cartao input:focus{border-color:var(--ouro)!important;box-shadow:0 0 0 3px rgba(212,160,23,.2)!important}
+.menu .item.em-obra{opacity:.45;cursor:default}
+.menu .grupo{font:700 9px Archivo,sans-serif;letter-spacing:.18em;text-transform:uppercase;
+  color:#7A7D80;padding:10px 13px 2px}
+.par{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+.versao{font:500 10px "IBM Plex Mono",monospace;color:#6B6E71;text-align:center;padding:10px 0 0}
+.pe-lateral{margin-top:auto}
+/* KPIs em ouro */
+.kpi.ouro{--c:#8A6508} .kpi.preto{--c:#131315} .kpi.bom{--c:#15794F} .kpi.crit{--c:#C8102E} .kpi.aten{--c:#7A5507}
+/* tabela de dias em barras simples */
+.barras{display:grid;grid-template-columns:repeat(auto-fit,minmax(28px,1fr));gap:4px;align-items:end;height:120px;margin:8px 0 4px}
+.barras .b{background:var(--ouro);border-radius:2px 2px 0 0;position:relative;min-height:2px}
+.barras .b.cinza{background:#C4C4C0}
+.barras .b i{position:absolute;bottom:-16px;left:0;right:0;text-align:center;font:500 9px "IBM Plex Mono",monospace;color:var(--tinta3);font-style:normal}
+.box-canal{background:var(--sup);border:1px solid var(--linha);padding:14px 16px;display:flex;flex-direction:column;gap:8px;min-height:190px}
+.box-canal.obra{background:var(--sup2);color:var(--tinta3)}
+.box-canal h3{margin:0;font-size:14px;display:flex;justify-content:space-between;align-items:center}
+.box-canal .g{font:600 22px "IBM Plex Mono",monospace;color:var(--ouro3)}
+.box-canal .m{font-size:11.5px;color:var(--tinta3)}
+.boxes{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
+.tag.ouro{background:rgba(212,160,23,.18);color:#8A6508}
+.tag.pend{background:rgba(200,16,46,.12);color:var(--crit)}
+.tag.ok2{background:rgba(21,121,79,.12);color:var(--bom)}
+input.val{width:110px;text-align:right;font:500 12.5px "IBM Plex Mono",monospace;border:1px solid var(--linha2);padding:4px 6px;border-radius:2px}
+input.obs{width:220px;font:500 12px Archivo,sans-serif;border:1px solid var(--linha2);padding:4px 6px;border-radius:2px}
+tr.pend td{background:#FFF6F5}
+tr.sug td{background:#FFF9E8}
+.sugerir{font:600 11px Archivo,sans-serif;color:#8A6508;cursor:pointer;text-decoration:underline dotted}
+.upl{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}
+.upl input[type=file]{font-size:12px;max-width:230px}
+.arq-tit{font:700 10px Archivo,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:var(--ouro3)}
+.arq-n{display:block}
+details.ajuda2{margin-top:8px}
+details.ajuda2 summary{cursor:pointer;font:600 11px Archivo,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:var(--ouro3)}
+details.ajuda2 p{font-size:12.5px;color:var(--tinta2);margin:6px 0}
+.linha-forma td{font-weight:600}
+.pill-canal{display:inline-block;font:700 9px Archivo,sans-serif;letter-spacing:.1em;text-transform:uppercase;padding:2px 7px;border-radius:2px;background:#0B0B0C;color:var(--ouro2)}
+
+.cab-acoes{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+.rol.fit{max-height:none;overflow:visible} .rol.fit table{min-width:0} .rol.fit td{white-space:normal}
+input.val{width:120px}
+
+/* COLUNAS SEMPRE IGUAIS. Toda tabela usa layout fixo: cada coluna tem a MESMA
+   largura, os títulos ficam na mesma altura e os números alinham à direita,
+   os textos à esquerda — em todas as telas, sem exceção. */
+table{table-layout:fixed;width:100%}
+th,td{overflow:hidden;text-overflow:ellipsis;vertical-align:middle}
+thead th{height:36px;line-height:1.2}
+th.n,td.n{text-align:right}
+td.n input.val{width:100%;max-width:120px}
+tbody tr{height:38px}
+.rol.fit table{table-layout:fixed}
+.rol.fit td{white-space:normal;line-height:1.35}
+.rol.fit td:first-child{font-weight:600;width:40%}
+table.cols-16{min-width:2080px} table.cols-11{min-width:1320px} table.cols-8{min-width:960px} table.cols-7{min-width:840px}
+/* CONTA — o mesmo desenho dos outros apps (ARGOS): sua conta e criar usuário
+   à esquerda, quem tem acesso à direita. */
+.conta-grid{display:grid;grid-template-columns:minmax(300px,560px) 1fr;gap:12px;align-items:start}
+@media (max-width:1000px){.conta-grid{grid-template-columns:1fr}}
+.bloco h2.tit{font:700 20px Archivo,sans-serif;letter-spacing:-.01em;text-transform:none;color:var(--tinta);margin:0 0 4px}
+.quem{font-size:13px;color:var(--tinta3);margin-bottom:14px} .quem b{color:var(--tinta)}
+.form-v{display:flex;flex-direction:column;gap:12px}
+.form-v label{display:flex;flex-direction:column;gap:5px;font:700 10px Archivo,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:var(--tinta2)}
+.form-v input,.form-v select{width:100%;min-width:0;border:1px solid var(--linha2);padding:10px 12px;font:500 14px Archivo,sans-serif;border-radius:2px;background:var(--sup);color:var(--tinta);text-transform:none;letter-spacing:0}
+.form-v .bt{align-self:flex-start}
+.qtd{font:500 12px "IBM Plex Mono",monospace;color:var(--tinta3);margin-left:6px}
+table.acesso th:nth-child(1){width:18%} table.acesso th:nth-child(2){width:18%} table.acesso th:nth-child(3){width:24%} table.acesso th:nth-child(4){width:40%}
+table.acesso td{white-space:nowrap} table.acesso td:first-child{width:auto;font-weight:700}
+table.acesso select{min-width:120px;font-family:"IBM Plex Mono",monospace}
+.sit .ok3{color:var(--bom);font-size:12px} .sit .ini{color:var(--ouro3);font-size:12px} .sit .off{color:var(--tinta3);font-size:12px}
+.acoes-td{display:flex;gap:6px;flex-wrap:wrap}
+.mini{background:var(--sup);border:1px solid var(--linha2);padding:5px 10px;font:600 12px "IBM Plex Mono",monospace;border-radius:2px;cursor:pointer;color:var(--tinta)}
+.mini:hover{border-color:var(--tinta3)} .mini.perigo{color:var(--crit)}
+table.acesso{table-layout:auto} table.acesso th:nth-child(4){width:46%}
+table.acesso select{min-width:140px;width:140px}
+.acoes-td{flex-wrap:nowrap}
