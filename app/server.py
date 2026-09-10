@@ -22,7 +22,7 @@ from werkzeug.utils import secure_filename
 from motor import meli
 import planilhas
 
-VERSAO = "2026-09-10f"
+VERSAO = "2026-09-10j"
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(RAIZ), "dados")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -65,9 +65,10 @@ PODE = {
 }
 
 IRMAOS = [
-    ("tropa",    "TROPA DE ELITE", os.environ.get("URL_TROPA", "https://tropa-de-elite.onrender.com/")),
+    ("tropa",    "TROPA DE ELITE", os.environ.get("URL_TROPA", "https://tropadeelite.onrender.com/")),
     ("orion",    "ORION",          os.environ.get("URL_ORION", "https://orion-flash.onrender.com/")),
     ("hercules", "HÉRCULES",       os.environ.get("URL_HERCULES", "https://radar-hercules.onrender.com/")),
+    ("atlas",    "ATLAS",          os.environ.get("URL_ATLAS", "https://atlas-pcp.onrender.com/")),
 ]
 
 

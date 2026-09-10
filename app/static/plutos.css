@@ -103,3 +103,6 @@ table.acesso select{min-width:120px;font-family:"IBM Plex Mono",monospace}
 table.acesso{table-layout:auto} table.acesso th:nth-child(4){width:46%}
 table.acesso select{min-width:140px;width:140px}
 .acoes-td{flex-wrap:nowrap}
+
+/* quatro irmãos na coluna de 255px: 4 × 48 + 3 × 8 = 216 */
+.irmaos{gap:8px} .irmaos a{width:48px;height:48px;border-radius:11px} .irmaos img{height:36px;width:36px;border-radius:8px}
