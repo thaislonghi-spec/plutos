@@ -146,3 +146,33 @@ def faltante_xlsx(r, tab: dict, comp: str) -> io.BytesIO:
             c.number_format = "DD/MM/YYYY"
     bio = io.BytesIO(); wb.save(bio); bio.seek(0)
     return bio
+
+
+def linha_xlsx(r, cols, nome_canal: str, comp: str) -> io.BytesIO:
+    wb = Workbook()
+    wb.remove(wb.active)
+    cab = [rot for rot, _, _ in cols]
+    linhas = []
+    for l in r["linhas"]:
+        lin = []
+        for _, k, t in cols:
+            v = l.get(k)
+            if t == "d" and v:
+                v = datetime.fromisoformat(v)
+            elif t == "b":
+                v = "SIM" if v else ""
+            lin.append(v)
+        linhas.append(lin)
+    moeda = tuple(i + 1 for i, (_, _, t) in enumerate(cols) if t == "n")
+    ws = _aba(wb, f"Linha_a_linha_{nome_canal[:20]}", cab, linhas, [14] * len(cols), moeda=moeda)
+    for i, (_, _, t) in enumerate(cols, 1):
+        if t == "d":
+            for row in ws.iter_rows(min_row=2, min_col=i, max_col=i):
+                for c in row:
+                    c.number_format = "DD/MM/YYYY"
+        if t == "p":
+            for row in ws.iter_rows(min_row=2, min_col=i, max_col=i):
+                for c in row:
+                    c.number_format = "0.00%"
+    bio = io.BytesIO(); wb.save(bio); bio.seek(0)
+    return bio

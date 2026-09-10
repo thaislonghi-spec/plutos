@@ -43,6 +43,7 @@
 {% set atual = request.endpoint %}
 {% set pagina = paginas.get(atual, ['PLUTOS', 'Rebates']) %}
 {% if atual == 'canal' and c is defined %}{% set pagina = [c.nome, 'Box do canal · como o rebate nasce aqui'] %}{% endif %}
+{% if atual == 'linha' and c is defined %}{% set pagina = ['Linha a linha ' ~ c.nome, 'A base do canal, OC por OC, com tudo que os relatórios trouxeram'] %}{% endif %}
 
 <div class="app">
 <aside class="lateral">
@@ -56,12 +57,14 @@
     {% for cn in CANAIS %}
       {% if cn.ativo %}
       <a class="item {{ 'on' if atual == 'canal' and c is defined and c.chave == cn.chave }}" href="{{ url_for('canal', chave=cn.chave, mes=comp) }}">{{ cn.nome }}</a>
+      <a class="item sub {{ 'on' if atual == 'linha' and c is defined and c.chave == cn.chave }}" href="{{ url_for('linha', chave=cn.chave, mes=comp) }}">Linha a linha {{ cn.nome }}</a>
+      {% if cn.chave == 'meli' %}
+      <a class="item sub {{ 'on' if atual == 'faltante' }}" href="{{ url_for('faltante', mes=comp) }}">Faltante campanha</a>
+      {% endif %}
       {% else %}
       <span class="item em-obra" data-tip="Box em construção — ainda não desenhado">{{ cn.nome }}</span>
       {% endif %}
     {% endfor %}
-    <div class="divide"></div>
-    <a class="item {{ 'on' if atual == 'faltante' }}" href="{{ url_for('faltante', mes=comp) }}">Faltante campanha · Meli</a>
   </nav>
   <div class="pe-lateral">
     {% if IRMAOS %}
@@ -95,7 +98,7 @@
     {% if COMPS %}
     <div class="janelas jan-fech">
       {% for cp in COMPS %}
-      <a class="janela {{ 'on' if cp == comp }}" href="{{ url_for(atual if atual in ('painel','pedidos','faltante','arquivos') else 'painel', mes=cp, **(dict(chave=c.chave) if atual == 'canal' and c is defined else {})) }}">{{ cp|mesano }}</a>
+      <a class="janela {{ 'on' if cp == comp }}" href="{{ url_for(atual if atual in ('painel','pedidos','faltante','arquivos','canal','linha') else 'painel', mes=cp, **(dict(chave=c.chave) if atual in ('canal','linha') and c is defined else {})) }}">{{ cp|mesano }}</a>
       {% endfor %}
     </div>
     {% endif %}

@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block acoes_topo %}
+{% if PODE.exportar and r %}<div class="janelas"><a class="janela baixar" href="{{ url_for('baixar', qual='linha_' ~ c.chave, mes=comp) }}">↓ Linha a linha {{ c.nome }}</a></div>{% endif %}
+{% endblock %}
+{% block conteudo %}
+{% if not r %}
+<div class="aviso"><b>Sem rodada de {{ c.nome }} em {{ comp|mesano }}.</b></div>
+{% else %}
+<form class="filtros" method="get">
+  <input type="hidden" name="mes" value="{{ comp }}">
+  <input type="search" name="q" value="{{ q }}" placeholder="OC, pedido, SKU, anúncio, conta…">
+  <button class="bt sec" type="submit">Filtrar</button>
+  <span class="nota" style="margin:0">{{ total|brl(0) }} de {{ r.linhas|length|brl(0) }} pedidos · {{ cols|length }} colunas · arquivo {{ r.arquivo.nome }}</span>
+</form>
+<div class="bloco">
+<div class="rol" style="max-height:74vh"><table class="cols-{{ cols|length }} linha-base" data-sem-ordenar style="min-width:{{ cols|length * 150 }}px">
+  <thead><tr>{% for rot, k, t in cols %}<th class="{{ 'n' if t in ('n','p') }} ord {{ ('desc' if desc else 'asc') if ordem == k }}"><a href="{{ url_for('linha', chave=c.chave, mes=comp, q=q, ord=k, desc=('0' if (ordem == k and desc) else '1')) }}">{{ rot }}</a></th>{% endfor %}</tr></thead>
+  <tbody>
+  {% for l in linhas %}
+  <tr class="{{ 'pend' if l.faltante_status == 'pendente' }}">
+    {% for rot, k, t in cols %}{% set v = l[k] %}
+    <td class="{{ 'n' if t in ('n','p','t') and k not in ('conta','status','tipo','faltante_status') }}">
+      {%- if v is none or v == '' %}—
+      {%- elif t == 'd' %}{{ v|dia }}
+      {%- elif t == 'n' %}{{ v|brl }}
+      {%- elif t == 'p' %}{{ v|pct(2) }}
+      {%- elif t == 'b' %}{{ 'SIM' if v else '' }}
+      {%- else %}{{ v }}{% endif -%}
+    </td>
+    {% endfor %}
+  </tr>
+  {% endfor %}
+  </tbody></table></div>
+{% if paginas > 1 %}
+<div class="pag">{% for pg in range(1, paginas + 1) %}{% if pg == pag %}<span class="atual">{{ pg }}</span>{% else %}<a href="{{ url_for('linha', chave=c.chave, mes=comp, q=q, ord=ordem, desc=('1' if desc else '0'), p=pg) }}">{{ pg }}</a>{% endif %}{% endfor %}</div>
+{% endif %}
+<div class="nota">Tudo que o PLUTOS sabe de cada OC neste canal: as colunas do relatório que subiu + o que ele calculou (comissões, diferença, tarifa zero, faltante, os três rebates). Clique no cabeçalho para ordenar; a ordenação vale para todas as páginas.</div>
+</div>
+{% endif %}
+{% endblock %}

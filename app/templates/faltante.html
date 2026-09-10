@@ -2,6 +2,7 @@
 {% block acoes_topo %}
 {% if PODE.exportar and r %}<div class="janelas"><a class="janela baixar" href="{{ url_for('baixar', qual='faltante', mes=comp) }}">↓ Esta tabela</a></div>{% endif %}
 {% endblock %}
+
 {% block conteudo %}
 {% if not r %}
 <div class="aviso"><b>Sem rodada do Mercado Livre em {{ comp|mesano }}.</b></div>
@@ -23,23 +24,60 @@
       {% if sug %}<button class="bt sec" name="acao" value="aceitar_todas" type="submit" data-tip="Aceita todas as sugestões pendentes de uma vez">Aceitar {{ sug }} sugestão(ões)</button>{% endif %}
       <button class="bt pri" name="acao" value="gravar" type="submit">Gravar valores</button></span>{% endif %}
   </div>
-  <div class="rol" style="max-height:70vh"><table class="cols-11" data-sem-ordenar>
-    <thead><tr><th>Status</th><th>Data</th><th>OC / Pedido mkt</th><th>SKU</th><th>Anúncio</th><th class="n">Produto</th><th class="n">Comissão sist.</th><th class="n">Valor devolvido (R$)</th><th>Obs</th><th>Sugestão</th><th>Quem / quando</th></tr></thead>
+  <div class="rol" style="max-height:70vh"><table class="cols-12">
+    <thead><tr><th>Status</th><th>Data</th><th>OC / Pedido mkt</th><th>SKU</th><th>Anúncio</th><th class="n">Produto</th><th class="n">Comissão sist.</th><th class="n">Valor devolvido (R$)</th><th>OK</th><th>Obs</th><th>Sugestão</th><th>Quem / quando</th></tr></thead>
     <tbody>
     {% for i in itens %}
     {% set ped = i.pedido_mkt %}
-    <tr class="{{ 'pend' if i.faltante_status == 'pendente' and not i.sugestao }}{{ 'sug' if i.sugestao is not none and i.faltante_status == 'pendente' }}">
-      <td>{% if i.faltante_status == 'pendente' %}<span class="tag pend">pendente</span>{% else %}<span class="tag ok2">preenchido</span>{% endif %}</td>
-      <td>{{ i.data|dia }}</td><td class="n">{{ ped }}</td><td class="n">{{ i.sku }}</td><td class="n">{{ i.anuncio }}</td>
+    <tr data-ped="{{ ped }}" class="{{ 'pend' if i.faltante_status == 'pendente' and not i.sugestao }}{{ 'sug' if i.sugestao is not none and i.faltante_status == 'pendente' }}">
+      <td data-ord="{{ '1' if i.faltante_status == 'pendente' else '2' }}" class="st">{% if i.faltante_status == 'pendente' %}<span class="tag pend">pendente</span>{% else %}<span class="tag ok2">preenchido</span>{% endif %}</td>
+      <td data-ord="{{ i.data }}">{{ i.data|dia }}</td><td class="n">{{ ped }}</td><td class="n">{{ i.sku }}</td><td class="n">{{ i.anuncio }}</td>
       <td class="n">{{ i.valor_prod|brl }}</td><td class="n">{% if i.sis_rs is not none %}{{ i.sis_rs|brl }}{% else %}—{% endif %}</td>
-      <td class="n">{% if PODE.faltante %}<input class="val" name="val_{{ ped }}" id="v_{{ ped }}" value="{{ i.manual.valor|brl if i.manual else '' }}" placeholder="0,00">{% if i.manual %}<label style="font-size:10px;color:var(--tinta3)"><input type="checkbox" name="limpar_{{ ped }}" value="1"> limpar</label>{% endif %}{% else %}{{ i.manual.valor|brl if i.manual else '—' }}{% endif %}</td>
-      <td>{% if PODE.faltante %}<input class="obs" name="obs_{{ ped }}" value="{{ i.manual.obs or '' }}" placeholder="campanha / observação">{% else %}{{ i.manual.obs or '' }}{% endif %}</td>
-      <td>{% if i.sugestao is not none and i.faltante_status == 'pendente' %}<span class="sugerir" data-tip="{{ i.sugestao_origem }}" onclick="document.getElementById('v_{{ ped }}').value='{{ i.sugestao|brl }}'">usar R$ {{ i.sugestao|brl }}</span><input type="hidden" name="sug_{{ ped }}" value="{{ i.sugestao }}">{% if 'valores diferentes' in i.sugestao_origem %} <span class="tag mk-aten" data-tip="{{ i.sugestao_origem }}">conferir</span>{% endif %}{% elif i.manual and i.manual.replicado %}<span class="tag mk-cinza">replicado</span>{% endif %}</td>
-      <td style="font-size:11px;color:var(--tinta3)">{% if i.manual %}{{ i.manual.quem }} · {{ i.manual.quando|quando }}{% endif %}</td>
+      <td class="n" data-ord="{{ i.manual.valor if i.manual else 0 }}">{% if PODE.faltante %}<input class="val" name="val_{{ ped }}" id="v_{{ ped }}" value="{{ i.manual.valor|brl if i.manual else '' }}" placeholder="0,00">{% if i.manual %}<label style="font-size:10px;color:var(--tinta3)"><input type="checkbox" name="limpar_{{ ped }}" value="1"> limpar</label>{% endif %}{% else %}{{ i.manual.valor|brl if i.manual else '—' }}{% endif %}</td>
+      <td>{% if PODE.faltante %}<button type="button" class="okum" data-tip="Grava só este pedido">OK</button>{% endif %}</td>
+      <td data-ord="{{ i.manual.obs or '' }}">{% if PODE.faltante %}<input class="obs" name="obs_{{ ped }}" value="{{ i.manual.obs or '' }}" placeholder="campanha / observação">{% else %}{{ i.manual.obs or '' }}{% endif %}</td>
+      <td data-ord="{{ i.sugestao or 0 }}">{% if i.sugestao is not none and i.faltante_status == 'pendente' %}<span class="sugerir" data-tip="{{ i.sugestao_origem }}" onclick="document.getElementById('v_{{ ped }}').value='{{ i.sugestao|brl }}'">usar R$ {{ i.sugestao|brl }}</span><input type="hidden" name="sug_{{ ped }}" value="{{ i.sugestao }}">{% if 'valores diferentes' in i.sugestao_origem %} <span class="tag mk-aten" data-tip="{{ i.sugestao_origem }}">conferir</span>{% endif %}{% elif i.manual and i.manual.replicado %}<span class="tag mk-cinza">replicado</span>{% endif %}</td>
+      <td class="qq" data-ord="{{ i.manual.quando if i.manual else '' }}" style="font-size:11px;color:var(--tinta3)">{% if i.manual %}{{ i.manual.quem }} · {{ i.manual.quando|quando }}{% endif %}</td>
     </tr>
     {% endfor %}
-    {% if not itens %}<tr><td colspan="11">Nenhum pedido de tarifa zero nesta competência.</td></tr>{% endif %}
+    {% if not itens %}<tr><td colspan="12">Nenhum pedido de tarifa zero nesta competência.</td></tr>{% endif %}
     </tbody></table></div>
 </form>
 {% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+// OK individual: grava um pedido sem sair da tela. Enter no campo de valor também grava.
+(function(){
+  var comp = "{{ comp }}";
+  function gravar(tr){
+    var ped = tr.getAttribute('data-ped');
+    var val = tr.querySelector('input.val'), obs = tr.querySelector('input.obs'), bt = tr.querySelector('.okum');
+    if(!val) return;
+    bt.disabled = true; bt.textContent = '…';
+    fetch("{{ url_for('faltante_um') }}", {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({pedido: ped, valor: val.value, obs: obs ? obs.value : '', comp: comp})})
+    .then(function(r){ return r.json(); })
+    .then(function(j){
+      bt.disabled = false; bt.textContent = 'OK';
+      if(!j.ok){ bt.textContent = 'erro'; return; }
+      var st = tr.querySelector('td.st');
+      st.innerHTML = j.status === 'preenchido' ? '<span class="tag ok2">preenchido</span>' : '<span class="tag pend">pendente</span>';
+      st.setAttribute('data-ord', j.status === 'preenchido' ? '2' : '1');
+      tr.classList.remove('pend','sug'); tr.classList.add(j.status === 'preenchido' ? 'feito' : 'pend');
+      var qq = tr.querySelector('td.qq'); if(qq && j.status === 'preenchido') qq.textContent = j.quem + ' · ' + j.quando;
+      bt.classList.add('feito'); setTimeout(function(){ bt.classList.remove('feito'); }, 1200);
+    }).catch(function(){ bt.disabled = false; bt.textContent = 'erro'; });
+  }
+  document.addEventListener('click', function(ev){
+    var bt = ev.target.closest('.okum'); if(!bt) return;
+    ev.preventDefault(); gravar(bt.closest('tr'));
+  });
+  document.addEventListener('keydown', function(ev){
+    if(ev.key !== 'Enter') return;
+    var inp = ev.target.closest('input.val, input.obs'); if(!inp) return;
+    ev.preventDefault(); gravar(inp.closest('tr'));
+  });
+})();
+</script>
 {% endblock %}

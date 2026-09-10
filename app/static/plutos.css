@@ -106,3 +106,35 @@ table.acesso select{min-width:140px;width:140px}
 
 /* quatro irmãos na coluna de 255px: 4 × 48 + 3 × 8 = 216 */
 .irmaos{gap:8px} .irmaos a{width:48px;height:48px;border-radius:11px} .irmaos img{height:36px;width:36px;border-radius:8px}
+
+/* sub-botão de um canal: recuado, menor, com o risco de "filho" */
+.menu .item.sub{margin-left:18px;font-size:12px;padding:8px 12px 8px 22px;position:relative;background:#141416;color:#C9CBCD}
+.menu .item.sub::before{content:"";position:absolute;left:9px;top:50%;width:7px;height:1px;background:#4A4A4E}
+.menu .item.sub:hover{background:#2C2C2E;color:#fff}
+.menu .item.sub.on{background:var(--ouro);color:#0B0B0C}
+
+thead th.ord a{color:inherit;text-decoration:none}
+table.linha-base td{white-space:nowrap}
+
+/* tabela de comissões editável: célula = campo, sem borda até o foco */
+table.comis{table-layout:fixed} table.comis th:nth-child(1){width:8%} table.comis th:nth-child(2){width:30%} table.comis th:nth-child(3){width:20%}
+table.comis th:nth-child(4){width:12%} table.comis th:nth-child(5){width:12%} table.comis th:nth-child(6){width:11%} table.comis th:nth-child(7){width:7%}
+table.comis td{padding:3px 6px} table.comis td:first-child{font-weight:400;width:auto}
+input.cel,select.cel{width:100%;border:1px solid transparent;background:transparent;padding:6px 6px;font:500 12.5px Archivo,sans-serif;border-radius:2px;color:var(--tinta)}
+input.cel.n{font-family:"IBM Plex Mono",monospace;text-align:right}
+input.cel:hover,select.cel:hover{border-color:var(--linha2)} input.cel:focus,select.cel:focus{border-color:var(--ouro);background:#FFF9E8;outline:none}
+tr.nova td{background:var(--sup2)}
+
+table.cols-12{min-width:1560px}
+.okum{background:var(--sup);border:1px solid var(--linha2);color:var(--tinta);font:700 11px Archivo,sans-serif;padding:5px 10px;border-radius:2px;cursor:pointer}
+.okum:hover{border-color:var(--ouro);color:#8A6508} .okum.feito{background:var(--bom);border-color:var(--bom);color:#fff}
+tr.feito td{background:#F1F8F4}
+thead th.ord{cursor:pointer}
+
+/* Faltante: colunas com larguras próprias — Obs inteira, valor e OK compactos */
+table.cols-12{table-layout:fixed;min-width:1700px}
+table.cols-12 th:nth-child(1){width:118px} table.cols-12 th:nth-child(2){width:95px} table.cols-12 th:nth-child(3){width:170px}
+table.cols-12 th:nth-child(4){width:120px} table.cols-12 th:nth-child(5){width:130px} table.cols-12 th:nth-child(6){width:95px}
+table.cols-12 th:nth-child(7){width:110px} table.cols-12 th:nth-child(8){width:150px} table.cols-12 th:nth-child(9){width:60px}
+table.cols-12 th:nth-child(10){width:300px} table.cols-12 th:nth-child(11){width:170px} table.cols-12 th:nth-child(12){width:190px}
+table.cols-12 td input.obs{width:100%;box-sizing:border-box} table.cols-12 td input.val{width:100%;max-width:none;box-sizing:border-box}

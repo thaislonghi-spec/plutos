@@ -3,15 +3,57 @@
 <div class="bloco">
   <h2>Empresa e regras editáveis</h2>
   <form method="post" class="filtros" style="gap:14px;align-items:flex-end">
+    <input type="hidden" name="acao" value="geral">
     <label style="font-size:12px;color:var(--tinta3)">Empresa<br><input name="empresa" value="{{ PARAM.empresa }}" class="obs" {{ '' if PODE.parametros else 'disabled' }}></label>
     <label style="font-size:12px;color:var(--tinta3)" data-tip="Diferença de comissão (sistema − cobrada) abaixo disso é arredondamento, não rebate">Tolerância da diferença de comissão (R$)<br><input name="tolerancia" value="{{ PARAM.tolerancia_comissao|brl }}" class="val" {{ '' if PODE.parametros else 'disabled' }}></label>
     {% if PODE.parametros %}<button class="bt pri" type="submit">Gravar e recalcular</button>{% endif %}
   </form>
-  <div class="nota">As REGRAS ficam dentro do PLUTOS; aqui só o que muda de empresa para empresa. Canais ativos hoje: {% for cn in CANAIS if cn.ativo %}<b>{{ cn.nome }}</b>{% if not loop.last %}, {% endif %}{% endfor %}. Os demais entram conforme cada box for desenhado.</div>
+  <div class="nota">As REGRAS ficam dentro do PLUTOS; aqui só o que muda de empresa para empresa.</div>
 </div>
+
+<form method="post" class="bloco" id="comissoes">
+  <input type="hidden" name="acao" value="comissoes"><input type="hidden" name="n" value="{{ PARAM.comissoes|length }}">
+  <div class="cab-acoes"><h2 style="margin:0">Comissão cadastrada por canal <span class="qtd">{{ PARAM.comissoes|length }}</span></h2>
+    {% if PODE.parametros %}<button class="bt pri" type="submit">Gravar tabela</button>{% endif %}</div>
+  <div class="rol fit"><table class="acesso comis" data-sem-ordenar>
+    <thead><tr><th>Código</th><th>Canal</th><th>Gestor</th><th class="n">Comissão %</th><th class="n">Taxa extra R$</th><th>Tipo</th>{% if PODE.parametros %}<th>Tirar</th>{% endif %}</tr></thead>
+    <tbody>
+    {% for l in PARAM.comissoes %}{% set i = loop.index0 %}
+    <tr>
+      {% if PODE.parametros %}
+      <td><input class="cel n" name="codigo_{{ i }}" value="{{ l.codigo }}"></td>
+      <td><input class="cel" name="canal_{{ i }}" value="{{ l.canal }}"></td>
+      <td><input class="cel" name="gestor_{{ i }}" value="{{ l.gestor }}"></td>
+      <td class="n"><input class="cel n" name="comissao_{{ i }}" value="{{ l.comissao }}" data-tip="Em %. Dupla como no Meli: 16,5/11,5 (Premium/Clássico)"></td>
+      <td class="n"><input class="cel n" name="taxa_{{ i }}" value="{{ l.taxa }}" data-tip="R$ por item, quando existir"></td>
+      <td><select name="tipo_{{ i }}" class="cel">{% for t in ['GMV','Produto','-'] %}<option {{ 'selected' if l.tipo == t }}>{{ t }}</option>{% endfor %}</select></td>
+      <td><input type="checkbox" name="del_{{ i }}" value="1"></td>
+      {% else %}
+      <td class="n">{{ l.codigo }}</td><td>{{ l.canal }}</td><td>{{ l.gestor }}</td><td class="n">{{ l.comissao }}%</td><td class="n">{{ l.taxa or '—' }}</td><td>{{ l.tipo }}</td>
+      {% endif %}
+    </tr>
+    {% endfor %}
+    {% if PODE.parametros %}
+    <tr class="nova"><td><input class="cel n" name="codigo_novo" placeholder="cód."></td><td><input class="cel" name="canal_novo" placeholder="novo canal"></td><td><input class="cel" name="gestor_novo"></td><td><input class="cel n" name="comissao_novo" placeholder="%"></td><td><input class="cel n" name="taxa_novo" placeholder="R$"></td><td><select name="tipo_novo" class="cel"><option>GMV</option><option>Produto</option><option>-</option></select></td><td></td></tr>
+    {% endif %}
+    </tbody></table></div>
+  <div class="nota">Comissão em %, sobre <b>GMV</b> (produto + frete) ou sobre <b>Produto</b>; taxa extra em R$ por item. No Mercado Livre a comissão é dupla: Premium / Clássico. {% if PARAM.comissoes_quando %}Última gravação {{ PARAM.comissoes_quando|quando }} por {{ PARAM.comissoes_quem }}.{% endif %}</div>
+</form>
+{% if PODE.parametros %}
+<div class="bloco">
+  <h2>Subir a tabela por planilha</h2>
+  <form method="post" enctype="multipart/form-data" class="upl" style="margin:0">
+    <input type="hidden" name="acao" value="comissoes_arquivo">
+    <input type="file" name="arquivo" accept=".xlsx,.xls,.csv" required>
+    <button class="bt sec" type="submit">Substituir a tabela pela planilha</button>
+    <span class="nota" style="margin:0">colunas: Código · Canal · Gestor · Comissão · Taxa Extra · Tipo (a mesma da casa)</span>
+  </form>
+</div>
+{% endif %}
+
 <div class="bloco">
   <h2>As três formas de rebate (regra da casa)</h2>
-  <div class="rol fit"><table>
+  <div class="rol fit"><table data-sem-ordenar>
     <thead><tr><th>Forma</th><th>O que é</th><th>Prova</th></tr></thead>
     <tbody>
       <tr class="linha-forma"><td>1 · R$</td><td>volta em dinheiro na conta</td><td>extrato / export do canal</td></tr>

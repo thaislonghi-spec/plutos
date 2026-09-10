@@ -22,7 +22,7 @@ from werkzeug.utils import secure_filename
 from motor import meli
 import planilhas
 
-VERSAO = "2026-09-10j"
+VERSAO = "2026-09-10n"
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(RAIZ), "dados")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -105,11 +105,57 @@ def pasta(*p) -> str:
     return c
 
 
+# COMISSÃO CADASTRADA POR CANAL — a tabela da casa (enviada em 10/09/2026).
+# Comissão em %, taxa extra em R$ por item, tipo = base da comissão (Produto / GMV).
+# No Meli a comissão é dupla: Premium 16,5% / Clássico 11,5%.
+COMISSAO_PADRAO = [
+    {"codigo": "9100", "canal": "CRC - MULTIMOVEIS", "gestor": "Marcão", "comissao": "0", "taxa": "0", "tipo": "-"},
+    {"codigo": "9000", "canal": "E-COMMERCE MULTIMOVEIS", "gestor": "Geverton Hemsing", "comissao": "6", "taxa": "0", "tipo": "-"},
+    {"codigo": "9997", "canal": "MARKETPLACE", "gestor": "Marketplace", "comissao": "0", "taxa": "0", "tipo": "-"},
+    {"codigo": "762", "canal": "MP - ALI EXPRESS", "gestor": "Renan Stroeher", "comissao": "6", "taxa": "0", "tipo": "Produto"},
+    {"codigo": "716", "canal": "MP - AMAZON.COM.BR", "gestor": "Renan Stroeher", "comissao": "9", "taxa": "0", "tipo": "GMV"},
+    {"codigo": "788", "canal": "MP - BANCO DO BRASIL", "gestor": "Bruna Colares", "comissao": "17", "taxa": "0", "tipo": "GMV"},
+    {"codigo": "754", "canal": "MP - BRADESCO - NEXT SHOP", "gestor": "Renan Stroeher", "comissao": "12", "taxa": "0", "tipo": "GMV"},
+    {"codigo": "749", "canal": "MP - BANCO INTER", "gestor": "William Henzel", "comissao": "18,5", "taxa": "0", "tipo": "GMV"},
+    {"codigo": "713", "canal": "MP - CARREFOUR", "gestor": "Bruna Colares", "comissao": "16", "taxa": "0", "tipo": "GMV"},
+    {"codigo": "712", "canal": "MP - CASAS BAHIA", "gestor": "William Henzel", "comissao": "13", "taxa": "0", "tipo": "GMV"},
+    {"codigo": "705", "canal": "MP - COLOMBO", "gestor": "Bruna Colares", "comissao": "9", "taxa": "0", "tipo": "GMV"},
+    {"codigo": "776", "canal": "MP - IMPERIO", "gestor": "William Henzel", "comissao": "20", "taxa": "0", "tipo": "GMV"},
+    {"codigo": "711", "canal": "MP - LEROY MERLIN", "gestor": "William Henzel", "comissao": "16", "taxa": "", "tipo": "GMV"},
+    {"codigo": "795", "canal": "MP - LOJAS KOERICH", "gestor": "", "comissao": "5", "taxa": "", "tipo": "Produto"},
+    {"codigo": "704", "canal": "MP - MADEIRA MADEIRA", "gestor": "Bruna Colares", "comissao": "17", "taxa": "", "tipo": "GMV"},
+    {"codigo": "702", "canal": "MP - MAGAZINE LUIZA", "gestor": "William Henzel", "comissao": "11", "taxa": "5", "tipo": "GMV"},
+    {"codigo": "700", "canal": "MP - MERCADO LIVRE", "gestor": "Eduardo Tomazi", "comissao": "16,5/11,5", "taxa": "", "tipo": "Produto"},
+    {"codigo": "1002", "canal": "MP - MERCADO LIVRE - FULL", "gestor": "Full", "comissao": "16,5/11,5", "taxa": "", "tipo": "Produto"},
+    {"codigo": "767", "canal": "MP - QUERO QUERO", "gestor": "Bruna Colares", "comissao": "18", "taxa": "0", "tipo": "GMV"},
+    {"codigo": "792", "canal": "MP - SENFF SHOPPING", "gestor": "Bruna Colares", "comissao": "14,5", "taxa": "", "tipo": "Produto"},
+    {"codigo": "752", "canal": "MP - SHOPEE", "gestor": "Renan Stroeher", "comissao": "12", "taxa": "12", "tipo": "Produto"},
+    {"codigo": "782", "canal": "MP - SHOPEE XPRESS", "gestor": "Full", "comissao": "14", "taxa": "", "tipo": "Produto"},
+    {"codigo": "770", "canal": "MP - SICREDI", "gestor": "Bruna Colares", "comissao": "15", "taxa": "", "tipo": "GMV"},
+    {"codigo": "790", "canal": "MP - TIKTOK", "gestor": "Marketplace", "comissao": "12", "taxa": "", "tipo": "GMV"},
+    {"codigo": "789", "canal": "MP - VALE BONUS", "gestor": "Bruna Colares", "comissao": "12", "taxa": "", "tipo": "GMV"},
+    {"codigo": "728", "canal": "MP - WEBCONTINENTAL", "gestor": "Bruna Colares", "comissao": "19", "taxa": "", "tipo": "GMV"},
+]
+COMISSAO_CAMPOS = ["codigo", "canal", "gestor", "comissao", "taxa", "tipo"]
+
+
 def parametros() -> dict:
     padrao = {"empresa": "Multimóveis", "tolerancia_comissao": 0.50,
-              "canais_ativos": [c["chave"] for c in CANAIS if c["ativo"]]}
+              "canais_ativos": [c["chave"] for c in CANAIS if c["ativo"]],
+              "comissoes": COMISSAO_PADRAO}
     p = _json_ler(pasta("parametros.json"), {})
     return {**padrao, **p}
+
+
+def _num_br(v) -> float:
+    s = str(v or "").strip().replace("R$", "").replace("%", "").replace(" ", "")
+    if not s or s in ("-", "—"):
+        return 0.0
+    s = s.replace(".", "").replace(",", ".") if "," in s else s
+    try:
+        return float(s)
+    except ValueError:
+        return 0.0
 
 
 # --------------------------------------------------------------------------
@@ -422,6 +468,45 @@ def canal(chave):
     return render_template("canal.html", c=c, r=r)
 
 
+# colunas da BASE LINHA A LINHA de cada canal: (rótulo, chave, tipo) — tipo: t texto, n número, p percentual, d data
+LINHA_COLS = {
+    "meli": [
+        ("Data", "data", "d"), ("OC / Pedido mkt", "pedido_mkt", "t"), ("Pedido canal", "pedido_canal", "t"),
+        ("ID mkt (Any)", "id_mkt", "t"), ("Pedido Any", "pedido_any", "t"), ("Conta", "conta", "t"),
+        ("Status", "status", "t"), ("SKU", "sku", "t"), ("Anúncio", "anuncio", "t"), ("Tipo anúncio", "tipo", "t"),
+        ("Valor produtos", "valor_prod", "n"), ("Tarifa venda", "tarifa", "n"), ("Frete pedido", "frete", "n"),
+        ("Cupom seller", "cupom_seller", "n"), ("Cupom Meli", "cupom_meli", "n"),
+        ("% comissão cobrada", "pct_comissao", "p"), ("% comissão sistema", "sis_pct", "p"),
+        ("Comissão sistema R$", "sis_rs", "n"), ("Diferença comissão", "diferenca", "n"),
+        ("Tarifa zero?", "tarifa_zero", "b"), ("Faltante campanha", "faltante", "n"), ("Status faltante", "faltante_status", "t"),
+        ("Rebate R$", "rebate_rs", "n"), ("Rebate comissão", "rebate_comissao", "n"), ("Rebate frete", "rebate_frete", "n"),
+        ("REBATE TOTAL", "rebate_total", "n"),
+    ],
+}
+
+
+@app.route("/linha/<chave>")
+@logado
+def linha(chave):
+    c = CANAL_POR_CHAVE.get(chave) or abort(404)
+    comp = comp_atual()
+    r = rodada(chave, comp) if c["ativo"] else None
+    cols = LINHA_COLS.get(chave, [])
+    q = (request.args.get("q") or "").strip().lower()
+    linhas = list(r["linhas"]) if r else []
+    if q:
+        linhas = [l for l in linhas if q in " ".join(str(l.get(k) or "") for _, k, _ in cols).lower()]
+    ordem = request.args.get("ord") or "data"
+    desc = request.args.get("desc") == "1"
+    if any(k == ordem for _, k, _ in cols):
+        linhas.sort(key=lambda l: (l.get(ordem) is None, l.get(ordem) if l.get(ordem) is not None else 0), reverse=desc)
+    pag = max(1, int(request.args.get("p", 1) or 1))
+    por = 200
+    total = len(linhas)
+    return render_template("linha.html", c=c, r=r, cols=cols, linhas=linhas[(pag - 1) * por: pag * por],
+                           total=total, pag=pag, paginas=max(1, -(-total // por)), q=q, ordem=ordem, desc=desc)
+
+
 @app.route("/pedidos")
 @logado
 def pedidos():
@@ -500,6 +585,36 @@ def faltante():
     pend = sum(1 for i in itens if i["faltante_status"] == "pendente")
     sug = sum(1 for i in itens if i["sugestao"] is not None and i["faltante_status"] == "pendente")
     return render_template("faltante.html", itens=itens, r=r, pend=pend, sug=sug)
+
+
+@app.route("/faltante/um", methods=["POST"])
+@logado
+@exige("faltante")
+def faltante_um():
+    """OK individual: grava um pedido só e recalcula o Meli da competência."""
+    d = request.get_json(silent=True) or {}
+    ped = str(d.get("pedido") or "").strip()
+    comp = d.get("comp") or comp_atual()
+    if not ped:
+        return jsonify({"ok": False, "erro": "pedido vazio"}), 400
+    tab = faltante_ler("meli")
+    v = str(d.get("valor") or "").strip()
+    v = v.replace(".", "").replace(",", ".") if "," in v else v
+    if v == "":
+        tab.pop(ped, None); status = "pendente"
+    else:
+        try:
+            val = float(v)
+        except ValueError:
+            return jsonify({"ok": False, "erro": "valor inválido"}), 400
+        tab[ped] = {"valor": val, "obs": (d.get("obs") or "").strip(), "quem": session["usuario"],
+                    "quando": agora().isoformat()}
+        status = "preenchido"
+    faltante_gravar(tab, "meli")
+    r = recalcular_meli(comp)
+    return jsonify({"ok": True, "status": status, "quem": session["usuario"], "quando": f_quando(agora().isoformat()),
+                    "faltante_total": r["resumo"]["faltante"] if r else 0,
+                    "pendentes": r["resumo"]["faltante_pendentes"] if r else 0})
 
 
 @app.route("/arquivos", methods=["GET"])
@@ -589,6 +704,56 @@ def parametros_tela():
         if session.get("papel") not in PODE["parametros"]:
             abort(403)
         p = parametros()
+        acao = request.form.get("acao") or "geral"
+        if acao == "comissoes":
+            linhas = []
+            n = int(request.form.get("n") or 0)
+            for i in range(n):
+                lin = {k: (request.form.get(f"{k}_{i}") or "").strip() for k in COMISSAO_CAMPOS}
+                if request.form.get(f"del_{i}") or not (lin["canal"] or lin["codigo"]):
+                    continue
+                linhas.append(lin)
+            novo = {k: (request.form.get(f"{k}_novo") or "").strip() for k in COMISSAO_CAMPOS}
+            if novo["canal"]:
+                linhas.append(novo)
+            p["comissoes"] = linhas
+            p["comissoes_quando"] = agora().isoformat(); p["comissoes_quem"] = session["usuario"]
+            _json_gravar(pasta("parametros.json"), p)
+            flash(f"Tabela de comissões gravada: {len(linhas)} canais.")
+            return redirect(url_for("parametros_tela"))
+        if acao == "comissoes_arquivo":
+            f = request.files.get("arquivo")
+            if not f or not f.filename:
+                flash("Escolha a planilha.")
+                return redirect(url_for("parametros_tela"))
+            import pandas as pd
+            try:
+                d = pd.read_excel(f, dtype=str).fillna("")
+                cols = {re.sub(r"[^a-z]", "", str(c).lower().replace("ã", "a").replace("ç", "c").replace("ó", "o")): c for c in d.columns}
+                def col(*nomes):
+                    for nm in nomes:
+                        if nm in cols:
+                            return cols[nm]
+                    return None
+                cc, cn, cg, cm, ct, cti = col("codigo", "cod"), col("canal"), col("gestor"), col("comissao"), col("taxaextra", "taxa"), col("tipo")
+                if not (cn and cm):
+                    raise ValueError("preciso pelo menos das colunas Canal e Comissão")
+                linhas = []
+                for _, r in d.iterrows():
+                    if not str(r[cn]).strip():
+                        continue
+                    linhas.append({"codigo": str(r[cc]).strip() if cc else "", "canal": str(r[cn]).strip(),
+                                   "gestor": str(r[cg]).strip() if cg else "",
+                                   "comissao": str(r[cm]).strip().replace("%", "").replace(".", ",") if "," not in str(r[cm]) else str(r[cm]).strip().replace("%", ""),
+                                   "taxa": str(r[ct]).strip().replace("R$", "").strip() if ct else "",
+                                   "tipo": str(r[cti]).strip() if cti else ""})
+                p["comissoes"] = linhas
+                p["comissoes_quando"] = agora().isoformat(); p["comissoes_quem"] = session["usuario"]
+                _json_gravar(pasta("parametros.json"), p)
+                flash(f"Tabela de comissões lida da planilha: {len(linhas)} canais.")
+            except Exception as e:  # noqa: BLE001
+                flash(f"Não consegui ler a planilha: {e}")
+            return redirect(url_for("parametros_tela"))
         p["empresa"] = (request.form.get("empresa") or p["empresa"]).strip()
         try:
             p["tolerancia_comissao"] = float((request.form.get("tolerancia") or "0.5").replace(",", "."))
@@ -619,6 +784,15 @@ def baixar(qual):
         bio = planilhas.rebates_xlsx(rods, comp, CANAL_POR_CHAVE, parametros())
         return send_file(bio, as_attachment=True,
                          download_name=f"PLUTOS_Rebates_{comp.replace('-', '')}.xlsx",
+                         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    if qual.startswith("linha_"):
+        chave = qual[6:]
+        r = rods.get(chave)
+        if not r:
+            abort(404)
+        bio = planilhas.linha_xlsx(r, LINHA_COLS.get(chave, []), CANAL_POR_CHAVE[chave]["nome"], comp)
+        return send_file(bio, as_attachment=True,
+                         download_name=f"PLUTOS_LinhaALinha_{chave.upper()}_{comp.replace('-', '')}.xlsx",
                          mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     if qual == "faltante":
         bio = planilhas.faltante_xlsx(rods.get("meli"), faltante_ler("meli"), comp)
