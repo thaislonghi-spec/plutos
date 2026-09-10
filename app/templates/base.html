@@ -72,6 +72,11 @@
     {% endfor %}
   </nav>
   <div class="pe-lateral">
+    {% if PODE.exportar %}
+    <div class="export-box">
+      <a class="export-rebates" href="{{ url_for('export_rebates') }}" data-tip="O apanhado de TUDO que o PLUTOS gerou — OC, data, canal, rebate R$, comissão e frete — para importar nos outros apps">EXPORT<br>REBATES</a>
+    </div>
+    {% endif %}
     {% if IRMAOS %}
     <div class="irmaos">
       {% for m in IRMAOS if m.arquivo %}

@@ -148,3 +148,14 @@ table.cols-12 td input.obs{width:100%;box-sizing:border-box} table.cols-12 td in
 .grupo-canal.aberto .item.canal .seta{transform:rotate(90deg)}
 .menu .item.canal.on .seta{color:#0B0B0C}
 .menu .item.em-obra{cursor:pointer;opacity:.6}
+
+/* pílulas do estado do box, uma por cor: cinza-âmbar = em construção, azul = linha a linha ok, verde = box ok */
+.pils{display:inline-flex;gap:5px;margin-left:8px;vertical-align:middle;white-space:nowrap}
+.tag.obra{background:rgba(122,85,7,.14);color:#7A5507}
+.tag.lal{background:rgba(37,99,235,.12);color:#1D4ED8}
+
+/* EXPORT REBATES — o botão que alimenta os outros apps, acima dos irmãos */
+.export-box{padding:0 10px 12px}
+.export-rebates{display:block;text-align:center;text-decoration:none;font:800 13px Archivo,sans-serif;letter-spacing:.12em;
+  color:var(--ouro2);background:#141416;border:2px solid var(--ouro);border-radius:2px;padding:10px 8px;line-height:1.3}
+.export-rebates:hover{background:var(--ouro);color:#0B0B0C}

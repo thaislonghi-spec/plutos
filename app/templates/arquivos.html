@@ -20,7 +20,7 @@
       <div class="rol fit" style="margin-top:10px"><table data-sem-ordenar>
         <thead><tr><th>Box</th><th>Canal no ERP</th><th class="n">Pedidos</th><th class="n">Venda (produtos)</th><th class="n">Frete</th><th class="n">Comissão ERP R$</th></tr></thead>
         <tbody>{% for cn in CANAIS %}{% set e = erp_res.get(cn.chave) %}{% if e %}
-          <tr><td><b>{{ cn.nome }}</b> {% if not cn.ativo %}<span class="tag mk-cinza">box em construção · linha a linha já disponível</span>{% endif %}</td><td>{{ e.nomes|join(', ') }}</td><td class="n">{{ e.pedidos }}</td><td class="n">{{ e.venda|brl }}</td><td class="n">{{ e.frete|brl }}</td><td class="n">{{ e.comissao_erp|brl }}</td></tr>
+          <tr><td><b>{{ cn.nome }}</b><span class="pils">{% if cn.ativo %}<span class="tag ok2">box ok</span>{% else %}<span class="tag obra">box em construção</span>{% endif %}<span class="tag lal">linha a linha ok</span></span></td><td>{{ e.nomes|join(', ') }}</td><td class="n">{{ e.pedidos }}</td><td class="n">{{ e.venda|brl }}</td><td class="n">{{ e.frete|brl }}</td><td class="n">{{ e.comissao_erp|brl }}</td></tr>
         {% endif %}{% endfor %}
         {% if erp_res.outros %}<tr><td><span class="tag mk-aten">sem box</span></td><td>{{ erp_res.outros.nomes|join(', ') }}</td><td class="n">{{ erp_res.outros.pedidos }}</td><td class="n">{{ erp_res.outros.venda|brl }}</td><td class="n">{{ erp_res.outros.frete|brl }}</td><td class="n">{{ erp_res.outros.comissao_erp|brl }}</td></tr>{% endif %}
         </tbody></table></div>

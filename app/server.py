@@ -22,7 +22,7 @@ from werkzeug.utils import secure_filename
 from motor import meli, erp
 import planilhas
 
-VERSAO = "2026-09-10q"
+VERSAO = "2026-09-10s"
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(RAIZ), "dados")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -1000,6 +1000,35 @@ def baixar(qual):
                          download_name=f"PLUTOS_FaltanteCampanha_Meli_{comp.replace('-', '')}.xlsx",
                          mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     abort(404)
+
+
+@app.route("/export-rebates")
+@logado
+@exige("exportar")
+def export_rebates():
+    """EXPORT REBATES — o apanhado de TUDO que o PLUTOS gerou, em todos os canais
+    e competências, no formato que os outros apps importam:
+    OC · Data · Canal · Rebate R$ · Rebate comissão · Rebate frete · Total."""
+    linhas = []
+    for comp in competencias():
+        for c in canais():
+            r = rodada(c["chave"], comp)
+            if not r:
+                continue
+            for l in r["linhas"]:
+                linhas.append({"oc": l["pedido_mkt"], "data": l["data"], "canal": c["nome"],
+                               "rebate_rs": l["rebate_rs"], "rebate_comissao": l["rebate_comissao"],
+                               "rebate_frete": l["rebate_frete"], "rebate_total": l["rebate_total"],
+                               "competencia": comp, "sku": l.get("sku", ""), "pedido_canal": l.get("pedido_canal", ""),
+                               "faltante_status": l.get("faltante_status", "")})
+    if not linhas:
+        flash("Nada gerado ainda para exportar.")
+        return redirect(url_for("arquivos"))
+    linhas.sort(key=lambda x: (x["data"], x["canal"], x["oc"]))
+    bio = planilhas.export_rebates_xlsx(linhas, agora())
+    return send_file(bio, as_attachment=True,
+                     download_name=f"PLUTOS_EXPORT_REBATES_{agora().strftime('%d%m%Y_%H%M')}.xlsx",
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
 @app.route("/api/rebates/<comp>.json")
