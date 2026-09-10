@@ -22,15 +22,17 @@
       <div class="m">{{ c.res.pct_sobre_venda|brl(2) }}% da venda · {{ c.res.pedidos|brl(0) }} pedidos</div>
       <div class="m">R$ {{ c.res.rebate_rs|brl(0) }} em dinheiro · R$ {{ c.res.rebate_comissao|brl(0) }} em comissão</div>
       {% if c.res.faltante_pendentes %}<div class="m"><span class="tag pend">{{ c.res.faltante_pendentes }} a apurar</span></div>{% endif %}
-      {% if c.res.sem_sistema == c.res.pedidos %}<div class="m"><span class="tag aten">sem comissão do sistema (ADC002)</span></div>{% endif %}
+      {% if c.res.sem_sistema == c.res.pedidos %}<div class="m"><span class="tag aten">sem comissão do ERP</span></div>{% endif %}
       <div class="m" style="margin-top:auto">rodada {{ c.quando|quando }}</div>
     </a>
     {% elif c.ativo %}
-    <div class="box-canal"><h3>{{ c.nome }}</h3><div class="m">sem rodada em {{ comp|mesano }} — <a href="{{ url_for('arquivos', mes=comp) }}">subir arquivo</a></div></div>
+    <div class="box-canal"><h3>{{ c.nome }}</h3><div class="m">sem rodada em {{ comp|mesano }} — <a href="{{ url_for('arquivos', mes=comp) }}">subir arquivo</a></div>{% if c.erp %}<div class="m">ERP: {{ c.erp.pedidos }} pedidos · R$ {{ c.erp.venda|brl(0) }}</div>{% endif %}</div>
     {% else %}
-    <div class="box-canal obra"><h3>{{ c.nome }} <span class="tag mk-cinza">em construção</span></h3><div class="m">O box deste canal ainda vai ser desenhado com a Thaís — regra, arquivo que prova, chave e previsto.</div></div>
+    <div class="box-canal obra"><h3>{{ c.nome }} <span class="tag mk-cinza">em construção</span></h3>
+      {% if c.erp %}<div class="g" style="color:var(--tinta2)">{{ c.erp.pedidos }} <span style="font-size:12px;font-family:Archivo">pedidos no ERP</span></div><div class="m">R$ {{ c.erp.venda|brl(0) }} de produtos · comissão ERP R$ {{ c.erp.comissao_erp|brl(0) }}</div><div class="m"><a href="{{ url_for('linha', chave=c.chave, mes=comp) }}">Linha a linha {{ c.nome }} →</a></div>{% else %}<div class="m">O box deste canal ainda vai ser desenhado — regra, arquivo que prova, chave e previsto.</div>{% endif %}</div>
     {% endif %}
   {% endfor %}
+  {% if erp_outros %}<div class="box-canal obra"><h3>Outros canais do ERP <span class="tag mk-aten">sem box</span></h3><div class="m">{{ erp_outros.nomes|join(', ') }}</div><div class="m">{{ erp_outros.pedidos }} pedidos · R$ {{ erp_outros.venda|brl(0) }}</div></div>{% endif %}
   </div>
 </div>
 

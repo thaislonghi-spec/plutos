@@ -248,7 +248,11 @@ def calcular(df: pd.DataFrame, comissao_sistema: dict | None, faltante: dict,
         pct = (tarifa / vp) if vp else 0.0
         sis = (comissao_sistema or {}).get(r.pedido_mkt) or (comissao_sistema or {}).get(r.pedido_canal)
         if sis:
-            sis_rs = sis["rs"]
+            if sis.get("rs") is None and sis.get("pct") is not None:
+                # ERP: só o % (coluna AB); o R$ é sobre o VALOR DE PRODUTOS do export do canal
+                sis_rs = round(vp * sis["pct"], 2)
+            else:
+                sis_rs = sis["rs"]
             sis_pct = sis["pct"] if sis.get("pct") is not None else ((sis_rs / vp) if vp else None)
             dif = sis_rs - tarifa
         else:

@@ -3,14 +3,15 @@
 {% if PODE.exportar and r %}<div class="janelas"><a class="janela baixar" href="{{ url_for('baixar', qual='linha_' ~ c.chave, mes=comp) }}">↓ Linha a linha {{ c.nome }}</a></div>{% endif %}
 {% endblock %}
 {% block conteudo %}
-{% if not r %}
-<div class="aviso"><b>Sem rodada de {{ c.nome }} em {{ comp|mesano }}.</b></div>
+{% if not r and not linhas and not q %}
+<div class="aviso"><b>Sem pedidos de {{ c.nome }} em {{ comp|mesano }}.</b> {% if c.ativo %}Suba o export do canal em Arquivos.{% else %}Suba o arquivo ERP · Pedidos Marketplace no box 0 em <a href="{{ url_for('arquivos', mes=comp) }}">Arquivos</a> — os pedidos deste canal aparecem aqui.{% endif %}</div>
 {% else %}
+{% if not r %}<div class="aviso"><b>Base do ERP.</b> O box {{ c.nome }} ainda não tem motor de rebate; esta é a base linha a linha vinda do ERP · Pedidos Marketplace (coluna T = {{ c.nome|upper }}), pronta para tratar quando o box for desenhado.</div>{% endif %}
 <form class="filtros" method="get">
   <input type="hidden" name="mes" value="{{ comp }}">
   <input type="search" name="q" value="{{ q }}" placeholder="OC, pedido, SKU, anúncio, conta…">
   <button class="bt sec" type="submit">Filtrar</button>
-  <span class="nota" style="margin:0">{{ total|brl(0) }} de {{ r.linhas|length|brl(0) }} pedidos · {{ cols|length }} colunas · arquivo {{ r.arquivo.nome }}</span>
+  <span class="nota" style="margin:0">{{ total|brl(0) }} pedidos · {{ cols|length }} colunas · {{ origem }}{% if r %} · {{ r.arquivo.nome }}{% endif %}</span>
 </form>
 <div class="bloco">
 <div class="rol" style="max-height:74vh"><table class="cols-{{ cols|length }} linha-base" data-sem-ordenar style="min-width:{{ cols|length * 150 }}px">

@@ -1,6 +1,33 @@
 {% extends "base.html" %}
 {% block conteudo %}
 <div class="bloco">
+  <h2>0 · ERP · Pedidos Marketplace <span style="font-weight:400;letter-spacing:0;text-transform:none">— um arquivo do mês com as vendas de TODOS os canais</span></h2>
+  <div class="arqs">
+    <div class="arq" style="min-height:0;grid-column:1 / -1">
+      <div class="arq-top"><b>PEDIDOS MARKETPLACE (ERP / Promob)</b>{% if erp_idx.uploads %}<span class="ok">{{ erp_idx.ocs|length }} OCs no índice</span>{% endif %}</div>
+      <div class="arq-sub">Export "Pedidos_Marketplace_DDMMateDDMMAAAA_HHMM" em <b>.csv</b> (tab) ou .xlsx. A OC é texto e é a chave de tudo; a coluna T diz o canal (sem o "MP - "); a coluna AB é o % de comissão do ERP.</div>
+      {% if erp_idx.uploads %}{% set u = erp_idx.uploads[-1] %}<span class="arq-n">último: {{ u.nome }} · {{ u.quando|quando }} por {{ u.quem }} · {{ u.linhas }} pedidos de {{ u.de|dia }} a {{ u.ate|dia }} · {{ u.novas }} OCs novas{% if u.sem_box %} · <span class="tag mk-aten">sem box: {% for k, v in u.sem_box.items() %}{{ k }} ({{ v }}){% if not loop.last %}, {% endif %}{% endfor %}</span>{% endif %}</span>{% endif %}
+      {% if PODE.arquivos %}
+      <form method="post" action="{{ url_for('subir_erp') }}" enctype="multipart/form-data" class="upl">
+        <input type="file" name="arquivo" accept=".xlsx,.xls,.csv,.txt" required>
+        <button class="bt pri" type="submit" style="padding:7px 14px">Subir o ERP e distribuir pelos boxes</button>
+      </form>
+      {% endif %}
+      {% if erp_res %}
+      <div class="rol fit" style="margin-top:10px"><table data-sem-ordenar>
+        <thead><tr><th>Box</th><th>Canal no ERP</th><th class="n">Pedidos</th><th class="n">Venda (produtos)</th><th class="n">Frete</th><th class="n">Comissão ERP R$</th></tr></thead>
+        <tbody>{% for cn in CANAIS %}{% set e = erp_res.get(cn.chave) %}{% if e %}
+          <tr><td><b>{{ cn.nome }}</b> {% if not cn.ativo %}<span class="tag mk-cinza">box em construção · linha a linha já disponível</span>{% endif %}</td><td>{{ e.nomes|join(', ') }}</td><td class="n">{{ e.pedidos }}</td><td class="n">{{ e.venda|brl }}</td><td class="n">{{ e.frete|brl }}</td><td class="n">{{ e.comissao_erp|brl }}</td></tr>
+        {% endif %}{% endfor %}
+        {% if erp_res.outros %}<tr><td><span class="tag mk-aten">sem box</span></td><td>{{ erp_res.outros.nomes|join(', ') }}</td><td class="n">{{ erp_res.outros.pedidos }}</td><td class="n">{{ erp_res.outros.venda|brl }}</td><td class="n">{{ erp_res.outros.frete|brl }}</td><td class="n">{{ erp_res.outros.comissao_erp|brl }}</td></tr>{% endif %}
+        </tbody></table></div>
+      <div class="nota">Competência {{ comp|mesano }}. Cada canal ganha a sua base "Linha a linha" com estes pedidos; nos canais com motor (Mercado Livre) o % do ERP vira a comissão do sistema e gera o rebate de comissão.</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="bloco">
   <h2>Um box por canal</h2>
   <div class="arqs">
   {% for cn in CANAIS %}
@@ -9,26 +36,17 @@
       <div class="arq-top"><b>{{ loop.index }} · {{ cn.nome|upper }}</b>{% if r_meli %}<span class="ok">rodado {{ comp|mesano }}</span>{% endif %}</div>
       <div class="arq-tit" style="margin-top:8px">{{ cn.arquivo }}</div>
       <div class="arq-sub">{{ cn.arquivo_sub }}</div>
-      {% if r_meli %}<span class="arq-n">{{ r_meli.arquivo.nome }} · {{ r_meli.quando|quando }} · {{ r_meli.resumo.pedidos }} pedidos</span>{% endif %}
+      {% if r_meli %}<span class="arq-n">{{ r_meli.arquivo.nome }} · {{ r_meli.quando|quando }} · {{ r_meli.resumo.pedidos }} pedidos</span>
+      <span class="arq-n">comissão do sistema: {% if r_meli.sistema %}<span class="ok">ERP</span> {{ r_meli.sistema_diag.linhas }} OCs{% else %}<span class="tag pend">suba o ERP (box 0)</span>{% endif %}</span>{% endif %}
       {% if PODE.arquivos %}
       <form method="post" action="{{ url_for('subir', chave=cn.chave) }}" enctype="multipart/form-data" class="upl">
         <input type="hidden" name="tipo" value="base"><input type="file" name="arquivo" accept=".xlsx,.xls,.csv" required>
         <button class="bt pri" type="submit" style="padding:7px 14px">Subir e rodar</button>
       </form>
       {% endif %}
-      <div class="arq-tit" style="margin-top:14px">{{ cn.extra }}</div>
-      <div class="arq-sub">{{ cn.extra_sub }}</div>
-      {% if r_meli and r_meli.sistema %}<span class="arq-n">{{ r_meli.sistema.nome }} · {{ r_meli.sistema.quando|quando }} · {{ r_meli.sistema.diag.linhas }} pedidos</span>{% elif r_meli %}<span class="arq-n"><span class="tag pend">não subiu</span> o rebate de comissão fica em branco até subir</span>{% endif %}
-      {% if PODE.arquivos %}
-      <form method="post" action="{{ url_for('subir', chave=cn.chave) }}" enctype="multipart/form-data" class="upl">
-        <input type="hidden" name="tipo" value="sistema"><input type="hidden" name="comp" value="{{ comp }}">
-        <input type="file" name="arquivo" accept=".xlsx,.xls,.csv" required>
-        <button class="bt sec" type="submit" style="padding:7px 14px">Subir p/ {{ comp|mesano }}</button>
-      </form>
-      {% endif %}
       <details class="ajuda2"><summary>O que o PLUTOS faz com isso</summary>
         <p>Da TABELA GERAL: separa por mês da data do pedido, calcula o % de comissão cobrada, marca os pedidos de <b>tarifa zero</b> (vão para a tabela Faltante campanha) e soma o <b>Cupom Meli</b> como rebate em R$.</p>
-        <p>Da comissão do sistema: casa cada pedido pela chave "Pedido Marketplace (Any)" e calcula a <b>diferença</b> comissão do sistema − tarifa cobrada = rebate de comissão. Aceita a planilha do ADC002 pelos nomes das colunas ou pelas posições do PROCV da Gabi (D → AB / AK).</p>
+        <p>Da comissão do sistema (box 0 · ERP): casa cada pedido pela OC = "Pedido Marketplace (Any)", aplica o % do ERP (coluna AB) sobre o valor de produtos do export e calcula a <b>diferença</b> comissão do sistema − tarifa cobrada = rebate de comissão.</p>
       </details>
     </div>
     {% else %}

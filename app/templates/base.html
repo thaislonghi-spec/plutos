@@ -63,6 +63,7 @@
       {% endif %}
       {% else %}
       <span class="item em-obra" data-tip="Box em construção — ainda não desenhado">{{ cn.nome }}</span>
+      <a class="item sub {{ 'on' if atual == 'linha' and c is defined and c.chave == cn.chave }}" href="{{ url_for('linha', chave=cn.chave, mes=comp) }}">Linha a linha {{ cn.nome }}</a>
       {% endif %}
     {% endfor %}
   </nav>
