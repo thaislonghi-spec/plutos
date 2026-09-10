@@ -55,16 +55,20 @@
     <a class="item {{ 'on' if atual == 'pedidos' }}" href="{{ url_for('pedidos', mes=comp) }}">Por pedido</a>
     <div class="grupo">Canais</div>
     {% for cn in CANAIS %}
-      {% if cn.ativo %}
-      <a class="item {{ 'on' if atual == 'canal' and c is defined and c.chave == cn.chave }}" href="{{ url_for('canal', chave=cn.chave, mes=comp) }}">{{ cn.nome }}</a>
-      <a class="item sub {{ 'on' if atual == 'linha' and c is defined and c.chave == cn.chave }}" href="{{ url_for('linha', chave=cn.chave, mes=comp) }}">Linha a linha {{ cn.nome }}</a>
-      {% if cn.chave == 'meli' %}
-      <a class="item sub {{ 'on' if atual == 'faltante' }}" href="{{ url_for('faltante', mes=comp) }}">Faltante campanha</a>
-      {% endif %}
-      {% else %}
-      <span class="item em-obra" data-tip="Box em construção — ainda não desenhado">{{ cn.nome }}</span>
-      <a class="item sub {{ 'on' if atual == 'linha' and c is defined and c.chave == cn.chave }}" href="{{ url_for('linha', chave=cn.chave, mes=comp) }}">Linha a linha {{ cn.nome }}</a>
-      {% endif %}
+      {% set aberto = (c is defined and c.chave == cn.chave) or (atual == 'faltante' and cn.chave == 'meli') %}
+      <div class="grupo-canal {{ 'aberto' if aberto }}" data-canal="{{ cn.chave }}">
+        {% if cn.ativo %}
+        <a class="item canal {{ 'on' if atual == 'canal' and c is defined and c.chave == cn.chave }}" href="{{ url_for('canal', chave=cn.chave, mes=comp) }}">{{ cn.nome }}<i class="seta" data-toggle="{{ cn.chave }}" title="abrir / fechar">›</i></a>
+        {% else %}
+        <span class="item canal em-obra" data-toggle="{{ cn.chave }}" data-tip="Box em construção — clique para abrir os sub-botões">{{ cn.nome }}<i class="seta">›</i></span>
+        {% endif %}
+        <div class="subs">
+          <a class="item sub {{ 'on' if atual == 'linha' and c is defined and c.chave == cn.chave }}" href="{{ url_for('linha', chave=cn.chave, mes=comp) }}">Linha a linha {{ cn.nome }}</a>
+          {% if cn.chave == 'meli' %}
+          <a class="item sub {{ 'on' if atual == 'faltante' }}" href="{{ url_for('faltante', mes=comp) }}">Faltante campanha</a>
+          {% endif %}
+        </div>
+      </div>
     {% endfor %}
   </nav>
   <div class="pe-lateral">
@@ -132,6 +136,19 @@
   function valor(td){if(!td)return"";var t=(td.getAttribute("data-ord")||td.textContent||"").trim();var n=t.replace(/[R$\s%×]/g,"").replace(/\./g,"").replace(",",".");if(n&&!isNaN(n)&&/[\d]/.test(n))return parseFloat(n);return t.toLowerCase();}
   document.querySelectorAll("table").forEach(function(tab){if(tab.closest("[data-sem-ordenar]"))return;var thead=tab.tHead,corpo=tab.tBodies[0];if(!thead||!corpo||corpo.rows.length<2)return;
     Array.prototype.forEach.call(thead.rows[0].cells,function(th,i){if(!th.textContent.trim())return;th.classList.add("ord");th.addEventListener("click",function(){var desc=!th.classList.contains("desc");Array.prototype.forEach.call(thead.rows[0].cells,function(o){o.classList.remove("asc","desc");});th.classList.add(desc?"desc":"asc");var linhas=Array.prototype.slice.call(corpo.rows);linhas.sort(function(a,b){var x=valor(a.cells[i]),y=valor(b.cells[i]);if(x===y)return 0;if(typeof x==="number"&&typeof y==="number")return desc?y-x:x-y;return desc?String(y).localeCompare(String(x),"pt-BR"):String(x).localeCompare(String(y),"pt-BR");});linhas.forEach(function(l){corpo.appendChild(l);});});});});
+})();
+</script>
+<script>
+// Menu por marketplace: fechado; abre o do canal da tela atual. A seta (ou o nome
+// de um canal em construção) abre/fecha sem sair da tela; só um grupo fica aberto.
+(function(){
+  document.addEventListener('click', function(ev){
+    var t = ev.target.closest('[data-toggle]'); if(!t) return;
+    ev.preventDefault(); ev.stopPropagation();
+    var g = t.closest('.grupo-canal'); var abrir = !g.classList.contains('aberto');
+    document.querySelectorAll('.grupo-canal.aberto').forEach(function(x){ x.classList.remove('aberto'); });
+    if(abrir) g.classList.add('aberto');
+  });
 })();
 </script>
 {% block scripts %}{% endblock %}

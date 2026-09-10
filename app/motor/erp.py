@@ -93,13 +93,13 @@ def _data(v):
     return None
 
 
-def canal_de(fantasia: str) -> tuple[str, str]:
+def canal_de(fantasia: str, mapa: dict | None = None) -> tuple[str, str]:
     """('MP - MAGAZINE LUIZA') → ('MAGAZINE LUIZA', 'magalu'); sem box → chave 'outros'."""
     nome = re.sub(r"^\s*MP\s*-\s*", "", str(fantasia or "").strip(), flags=re.I).strip().upper()
-    return nome, CANAL_BOX.get(nome, "outros")
+    return nome, (mapa or CANAL_BOX).get(nome, "outros")
 
 
-def ler(caminho: str) -> tuple[list[dict], dict]:
+def ler(caminho: str, mapa: dict | None = None) -> tuple[list[dict], dict]:
     """Lê o export (csv tab latin-1 ou xlsx). Devolve (linhas normalizadas, diagnóstico)."""
     if caminho.lower().endswith((".csv", ".txt")):
         df = None
@@ -116,18 +116,18 @@ def ler(caminho: str) -> tuple[list[dict], dict]:
     else:
         xl = pd.ExcelFile(caminho)
         df = xl.parse(xl.sheet_names[0], dtype=str)
-    mapa = {}
+    colmap = {}
     for c in df.columns:
         n = _norm(c)
         for k, v in COLS.items():
-            if n.startswith(k) and v not in mapa.values():
-                mapa[c] = v
+            if n.startswith(k) and v not in colmap.values():
+                colmap[c] = v
                 break
-    faltam = [k for k in OBRIGATORIAS if k not in mapa.values()]
+    faltam = [k for k in OBRIGATORIAS if k not in colmap.values()]
     if faltam:
         raise ValueError(f"O arquivo não tem as colunas do ERP: faltam {', '.join(faltam)} "
                          f"(li {df.shape[1]} colunas). O .xlsx do ERP às vezes sai incompleto — use o .csv.")
-    df = df.rename(columns=mapa)
+    df = df.rename(columns=colmap)
 
     linhas, diag = [], {"linhas_brutas": int(len(df)), "rejeitadas": 0, "canais": {}, "sem_box": {},
                         "status": {}, "competencias": {}}
@@ -137,7 +137,7 @@ def ler(caminho: str) -> tuple[list[dict], dict]:
         if not oc or not d:
             diag["rejeitadas"] += 1
             continue
-        nome, box = canal_de(r.get("canal_erp"))
+        nome, box = canal_de(r.get("canal_erp"), mapa)
         comp = f"{d.year}-{d.month:02d}"
         lin = {
             "oc": oc, "pedido_erp": _txt(r.get("pedido_erp")), "natureza": _txt(r.get("natureza")),

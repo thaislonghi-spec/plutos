@@ -1,4 +1,7 @@
 {% extends "base.html" %}
+{% block acoes_topo %}
+{% if PODE.arquivos %}<form method="post" action="{{ url_for('rodar_tudo') }}" style="margin:0"><button class="janela on" type="submit" style="cursor:pointer" data-tip="Recalcula tudo com os arquivos, tabelas e boxes atuais — use depois de atualizar qualquer coisa">▶ Rodar o PLUTOS</button></form>{% endif %}
+{% endblock %}
 {% block conteudo %}
 <div class="bloco">
   <h2>0 · ERP · Pedidos Marketplace <span style="font-weight:400;letter-spacing:0;text-transform:none">— um arquivo do mês com as vendas de TODOS os canais</span></h2>
@@ -58,6 +61,28 @@
   {% endfor %}
   </div>
 </div>
+
+{% if PODE.parametros %}
+<div class="bloco">
+  <h2>Criar um box</h2>
+  <form method="post" action="{{ url_for('box_criar') }}" class="filtros" style="align-items:flex-end;gap:12px">
+    <input type="hidden" name="acao" value="criar">
+    <label style="font-size:11px;color:var(--tinta3)">Nome do box<br><input name="nome" class="obs" placeholder="ex.: Leroy Merlin" required></label>
+    <label style="font-size:11px;color:var(--tinta3)">Canais do ERP que caem nele{% if sem_box %} <span class="tag mk-aten">{{ sem_box|length }} sem box</span>{% endif %}<br>
+      <select name="nomes_erp" multiple size="4" style="min-width:260px">{% for n in nomes_erp %}<option value="{{ n }}" {{ 'selected' if n in sem_box and loop.first }}>{{ n }}{% if n not in sem_box %} · já em {{ mapa_erp[n] }}{% endif %}</option>{% endfor %}</select></label>
+    <label style="font-size:11px;color:var(--tinta3)">ou digite o nome como sai no ERP<br><input name="nome_erp_livre" class="obs" placeholder="ex.: LEROY MERLIN"></label>
+    <button class="bt pri" type="submit">Criar box</button>
+  </form>
+  <div class="nota">O box nasce <b>em construção</b> (sem motor de rebate), mas já entra no menu, no GERAL e ganha o seu "Linha a linha" com os pedidos do ERP. O motor entra quando desenharmos a regra do canal. Segure Ctrl para marcar mais de um canal do ERP.</div>
+  {% set extras = PARAM.boxes_extra or [] %}
+  {% if extras %}
+  <div class="rol fit" style="margin-top:10px"><table data-sem-ordenar>
+    <thead><tr><th>Box</th><th>Recebe do ERP</th><th>Tirar</th></tr></thead>
+    <tbody>{% for e in extras %}<tr><td><b>{{ e.nome }}</b> <span class="tag mk-cinza">{{ e.chave }}</span></td><td>{{ e.nomes_erp|join(', ') or '—' }}</td>
+      <td><form method="post" action="{{ url_for('box_criar') }}" onsubmit="return confirm('Remover o box {{ e.nome }}?')"><input type="hidden" name="acao" value="excluir"><input type="hidden" name="chave" value="{{ e.chave }}"><button class="mini perigo">Remover</button></form></td></tr>{% endfor %}</tbody></table></div>
+  {% endif %}
+</div>
+{% endif %}
 
 <div class="bloco">
   <h2>Histórico de rodadas</h2>

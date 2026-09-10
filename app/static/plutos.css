@@ -138,3 +138,13 @@ table.cols-12 th:nth-child(4){width:120px} table.cols-12 th:nth-child(5){width:1
 table.cols-12 th:nth-child(7){width:110px} table.cols-12 th:nth-child(8){width:150px} table.cols-12 th:nth-child(9){width:60px}
 table.cols-12 th:nth-child(10){width:300px} table.cols-12 th:nth-child(11){width:170px} table.cols-12 th:nth-child(12){width:190px}
 table.cols-12 td input.obs{width:100%;box-sizing:border-box} table.cols-12 td input.val{width:100%;max-width:none;box-sizing:border-box}
+
+/* grupos do menu por marketplace: fechados; o aberto mostra os sub-botões */
+.grupo-canal{display:flex;flex-direction:column;gap:4px}
+.grupo-canal .subs{display:none;flex-direction:column;gap:4px}
+.grupo-canal.aberto .subs{display:flex}
+.menu .item.canal{display:flex;justify-content:space-between;align-items:center}
+.menu .item.canal .seta{font-style:normal;font-size:16px;line-height:1;color:#8B8E91;transition:transform .15s;padding:0 2px;cursor:pointer}
+.grupo-canal.aberto .item.canal .seta{transform:rotate(90deg)}
+.menu .item.canal.on .seta{color:#0B0B0C}
+.menu .item.em-obra{cursor:pointer;opacity:.6}

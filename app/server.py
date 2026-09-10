@@ -22,7 +22,7 @@ from werkzeug.utils import secure_filename
 from motor import meli, erp
 import planilhas
 
-VERSAO = "2026-09-10o"
+VERSAO = "2026-09-10q"
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(RAIZ), "dados")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -49,7 +49,42 @@ CANAIS = [
     {"chave": "webcont",  "nome": "Webcontinental",  "ativo": False},
     {"chave": "shopee",   "nome": "Shopee",          "ativo": False},
 ]
-CANAL_POR_CHAVE = {c["chave"]: c for c in CANAIS}
+CANAIS_BASE = CANAIS
+
+
+def canais() -> list[dict]:
+    """Os 8 boxes da casa + os criados pela tela Arquivos (parametros.json → boxes_extra)."""
+    extra = parametros().get("boxes_extra") or []
+    out = [dict(c) for c in CANAIS_BASE]
+    mapa = {c["chave"]: c for c in out}
+    for e in extra:
+        if e.get("chave") in mapa:
+            mapa[e["chave"]]["nomes_erp"] = e.get("nomes_erp") or []
+            continue
+        out.append({"chave": e["chave"], "nome": e["nome"], "ativo": False, "extra": None,
+                    "nomes_erp": e.get("nomes_erp") or [], "criado": True})
+    return out
+
+
+def canal_por_chave() -> dict:
+    return {c["chave"]: c for c in canais()}
+
+
+def mapa_erp_box() -> dict:
+    """nome no ERP (sem 'MP - ') → chave do box. Base do motor + o que foi criado na tela."""
+    m = dict(erp.CANAL_BOX)
+    for c in canais():
+        for n in c.get("nomes_erp") or []:
+            m[n.strip().upper()] = c["chave"]
+    return m
+
+
+def reclassificar_erp():
+    idx = erp_ler()
+    m = mapa_erp_box()
+    for l in idx["ocs"].values():
+        l["box"] = m.get(l["canal_nome"], "outros")
+    erp_gravar(idx)
 
 PAPEIS = {"admin": "Admin", "gestor": "Gestor", "operador": "Operador", "equipe": "Equipe"}
 PAPEL_DESC = {"admin": "faz tudo, inclusive criar, resetar, desativar e apagar usuário", "gestor": "tudo menos usuários",
@@ -140,7 +175,7 @@ COMISSAO_CAMPOS = ["codigo", "canal", "gestor", "comissao", "taxa", "tipo"]
 
 def parametros() -> dict:
     padrao = {"empresa": "Multimóveis", "tolerancia_comissao": 0.50,
-              "canais_ativos": [c["chave"] for c in CANAIS if c["ativo"]],
+              "canais_ativos": [c["chave"] for c in CANAIS_BASE if c["ativo"]],
               "comissoes": COMISSAO_PADRAO}
     p = _json_ler(pasta("parametros.json"), {})
     return {**padrao, **p}
@@ -260,7 +295,7 @@ def f_quando(s):
 def contexto():
     papel = session.get("papel", "")
     return {
-        "VERSAO": VERSAO, "CANAIS": CANAIS, "papel": papel, "PAPEIS": PAPEIS,
+        "VERSAO": VERSAO, "CANAIS": canais(), "papel": papel, "PAPEIS": PAPEIS,
         "usuario": session.get("usuario"), "PODE": {k: (papel in v) for k, v in PODE.items()},
         "IRMAOS": [{"chave": c, "rotulo": r, "url": u, "arquivo": _icone_irmao(c)} for c, r, u in IRMAOS],
         "PARAM": parametros(), "COMPS": competencias(), "comp": comp_atual(),
@@ -474,7 +509,7 @@ def painel():
     comp = comp_atual()
     por_canal = []
     tot = {"rs": 0.0, "com": 0.0, "frete": 0.0, "total": 0.0, "venda": 0.0, "pedidos": 0, "pend": 0}
-    for c in CANAIS:
+    for c in canais():
         r = rodada(c["chave"], comp) if c["ativo"] else None
         if r:
             s = r["resumo"]
@@ -494,7 +529,7 @@ def painel():
 @app.route("/canal/<chave>")
 @logado
 def canal(chave):
-    c = CANAL_POR_CHAVE.get(chave) or abort(404)
+    c = canal_por_chave().get(chave) or abort(404)
     comp = comp_atual()
     r = rodada(chave, comp) if c["ativo"] else None
     return render_template("canal.html", c=c, r=r)
@@ -533,7 +568,7 @@ ERP_SO_COLS = [("Data", "data", "d"), ("OC", "oc", "t"), ("Canal (ERP)", "canal_
 @app.route("/linha/<chave>")
 @logado
 def linha(chave):
-    c = CANAL_POR_CHAVE.get(chave) or abort(404)
+    c = canal_por_chave().get(chave) or abort(404)
     comp = comp_atual()
     r = rodada(chave, comp) if c["ativo"] else None
     q = (request.args.get("q") or "").strip().lower()
@@ -574,7 +609,7 @@ def pedidos():
     so = request.args.get("so") or ""
     canal_f = request.args.get("canal") or ""
     linhas = []
-    for c in CANAIS:
+    for c in canais():
         if canal_f and c["chave"] != canal_f:
             continue
         r = rodada(c["chave"], comp)
@@ -691,14 +726,18 @@ def arquivos():
     hist.sort(key=lambda h: h["quando"], reverse=True)
     idx = erp_ler()
     erp_res = erp.resumo_por_box([l for l in idx["ocs"].values() if l["competencia"] == comp])
-    return render_template("arquivos.html", hist=hist, r_meli=rodada("meli", comp), erp_idx=idx, erp_res=erp_res)
+    nomes_erp = sorted({l["canal_nome"] for l in idx["ocs"].values()})
+    m = mapa_erp_box()
+    sem_box = [n for n in nomes_erp if m.get(n, "outros") == "outros"]
+    return render_template("arquivos.html", hist=hist, r_meli=rodada("meli", comp), erp_idx=idx, erp_res=erp_res,
+                           nomes_erp=nomes_erp, sem_box=sem_box, mapa_erp=m)
 
 
 @app.route("/arquivos/subir/<chave>", methods=["POST"])
 @logado
 @exige("arquivos")
 def subir(chave):
-    c = CANAL_POR_CHAVE.get(chave) or abort(404)
+    c = canal_por_chave().get(chave) or abort(404)
     if not c["ativo"]:
         flash(f"O box {c['nome']} ainda está em construção.")
         return redirect(url_for("arquivos"))
@@ -758,6 +797,26 @@ def subir(chave):
     return redirect(url_for("arquivos"))
 
 
+@app.route("/arquivos/rodar", methods=["POST"])
+@logado
+@exige("arquivos")
+def rodar_tudo():
+    """RODAR: reclassifica o ERP pelos boxes atuais e recalcula todos os canais
+    em todas as competências com os arquivos já guardados. Para depois de
+    atualizar arquivos, tabelas manuais, comissões ou boxes."""
+    t0 = agora()
+    reclassificar_erp()
+    feitos = []
+    for comp in competencias():
+        r = recalcular_meli(comp)
+        if r:
+            feitos.append(f"Mercado Livre {f_mesano(comp)}: R$ {f_brl(r['resumo']['rebate_total'])}")
+    seg = (agora() - t0).total_seconds()
+    flash(f"Rodado em {seg:.0f} s. ERP reclassificado ({len(erp_ler()['ocs'])} OCs)."
+          + (" " + " · ".join(feitos) if feitos else " Nenhum canal com rodada ainda."))
+    return redirect(url_for("arquivos"))
+
+
 @app.route("/arquivos/subir-erp", methods=["POST"])
 @logado
 @exige("arquivos")
@@ -770,7 +829,7 @@ def subir_erp():
     destino = pasta("arquivos", "erp", f"{agora().strftime('%Y%m%d_%H%M%S')}_{nome}")
     f.save(destino)
     try:
-        linhas, diag = erp.ler(destino)
+        linhas, diag = erp.ler(destino, mapa_erp_box())
     except Exception as e:  # noqa: BLE001
         flash(f"Não consegui ler o arquivo do ERP: {e}")
         return redirect(url_for("arquivos"))
@@ -793,6 +852,42 @@ def subir_erp():
     extra = (" Sem box ainda: " + ", ".join(f"{k} ({v})" for k, v in diag["sem_box"].items()) + ".") if diag["sem_box"] else ""
     flash(f"ERP lido: {diag['linhas']} pedidos de {f_dia(diag['de'])} a {f_dia(diag['ate'])} ({novas} OCs novas). {canais_txt}.{extra}"
           + (f" Mercado Livre recalculado ({', '.join(f_mesano(c) for c in recalc)})." if recalc else ""))
+    return redirect(url_for("arquivos"))
+
+
+@app.route("/arquivos/box", methods=["POST"])
+@logado
+@exige("parametros")
+def box_criar():
+    """Cria (ou ajusta) um box de canal pela tela Arquivos: nome + quais nomes do
+    ERP caem nele. O box nasce sem motor (em construção), mas já com Linha a linha."""
+    p = parametros()
+    extra = p.get("boxes_extra") or []
+    acao = request.form.get("acao") or "criar"
+    if acao == "excluir":
+        chave = request.form.get("chave")
+        extra = [e for e in extra if e["chave"] != chave]
+        flash("Box removido. Os pedidos dele voltam para 'sem box'.")
+    else:
+        nome = (request.form.get("nome") or "").strip()
+        nomes_erp = [n.strip().upper() for n in request.form.getlist("nomes_erp") if n.strip()]
+        livre = (request.form.get("nome_erp_livre") or "").strip().upper()
+        if livre:
+            nomes_erp.append(livre)
+        chave = (request.form.get("chave") or "").strip() or re.sub(r"[^a-z0-9]", "", nome.lower())[:16]
+        if not nome or not chave:
+            flash("Dê um nome ao box.")
+            return redirect(url_for("arquivos"))
+        base = {c["chave"]: c for c in CANAIS_BASE}
+        if chave in base:
+            # box da casa: só ajusta os nomes do ERP que caem nele
+            extra = [e for e in extra if e["chave"] != chave] + [{"chave": chave, "nome": base[chave]["nome"], "nomes_erp": nomes_erp}]
+        else:
+            extra = [e for e in extra if e["chave"] != chave] + [{"chave": chave, "nome": nome, "nomes_erp": nomes_erp}]
+        flash(f"Box {nome} gravado" + (f" — recebe do ERP: {', '.join(nomes_erp)}." if nomes_erp else "."))
+    p["boxes_extra"] = extra
+    _json_gravar(pasta("parametros.json"), p)
+    reclassificar_erp()
     return redirect(url_for("arquivos"))
 
 
@@ -874,13 +969,13 @@ def parametros_tela():
 @exige("exportar")
 def baixar(qual):
     comp = comp_atual()
-    rods = {c["chave"]: rodada(c["chave"], comp) for c in CANAIS}
+    rods = {c["chave"]: rodada(c["chave"], comp) for c in canais()}
     rods = {k: v for k, v in rods.items() if v}
     if not rods and not qual.startswith("linha_"):
         flash("Não há rodada nesta competência.")
         return redirect(url_for("arquivos"))
     if qual == "rebates":
-        bio = planilhas.rebates_xlsx(rods, comp, CANAL_POR_CHAVE, parametros())
+        bio = planilhas.rebates_xlsx(rods, comp, canal_por_chave(), parametros())
         return send_file(bio, as_attachment=True,
                          download_name=f"PLUTOS_Rebates_{comp.replace('-', '')}.xlsx",
                          mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
@@ -893,9 +988,9 @@ def baixar(qual):
             for l in r["linhas"]:
                 e = idx.get(l["pedido_mkt"]) or idx.get(l["pedido_canal"]) or {}
                 m = dict(l); m.update({k: (e.get(k[4:]) if e else None) for _, k, _ in ERP_COLS}); linhas.append(m)
-            bio = planilhas.linha_xlsx({"linhas": linhas}, LINHA_COLS.get(chave, []) + ERP_COLS, CANAL_POR_CHAVE[chave]["nome"], comp)
+            bio = planilhas.linha_xlsx({"linhas": linhas}, LINHA_COLS.get(chave, []) + ERP_COLS, canal_por_chave()[chave]["nome"], comp)
         else:
-            bio = planilhas.linha_xlsx({"linhas": erp_linhas(chave, comp)}, ERP_SO_COLS, CANAL_POR_CHAVE[chave]["nome"], comp)
+            bio = planilhas.linha_xlsx({"linhas": erp_linhas(chave, comp)}, ERP_SO_COLS, canal_por_chave()[chave]["nome"], comp)
         return send_file(bio, as_attachment=True,
                          download_name=f"PLUTOS_LinhaALinha_{chave.upper()}_{comp.replace('-', '')}.xlsx",
                          mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
@@ -915,7 +1010,7 @@ def api_rebates(comp):
     if token and request.args.get("token") != token and not session.get("usuario"):
         abort(403)
     saida = []
-    for c in CANAIS:
+    for c in canais():
         r = rodada(c["chave"], comp)
         if not r:
             continue
