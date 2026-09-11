@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block acoes_topo %}
+{% if PODE.exportar %}
+<div class="janelas baixar-topo">
+  <a class="janela baixar" id="bexp" href="{{ url_for('baixar_custo_coletas', q=q, tipo=tipo) }}" data-tip="Baixa a lista do jeito que está filtrada na tela">↓ Exportar lista</a>
+</div>
+{% endif %}
+{% endblock %}
+{% block conteudo %}
+<div class="kpis quatro">
+  <div class="kpi preto"><span class="l">MLB's com coletas</span><span class="v">{{ contagem.todos }}</span><span class="o">anúncios que tiveram ao menos um pedido de coletas</span></div>
+  <div class="kpi ouro"><span class="l">Premium</span><span class="v">{{ contagem.get('Premium', 0) }}</span><span class="o">comissão 16,5%</span></div>
+  <div class="kpi bom"><span class="l">Clássico</span><span class="v">{{ contagem.get('Clássico', 0) }}</span><span class="o">comissão 11,5%</span></div>
+  <div class="kpi {{ 'crit' if sem_peso else 'preto' }}"><span class="l">Sem peso</span><span class="v">{{ sem_peso }}</span><span class="o">{% if sem_peso %}SKUs fora do cadastro — suba em Parâmetros{% else %}todos com peso do cadastro{% endif %}</span></div>
+</div>
+<div class="bloco">
+  <form method="get" class="barra-massa filtro-mlb" id="ffiltro">
+    <input type="hidden" name="tipo" id="ftipo" value="{{ tipo }}">
+    <input type="search" name="q" id="fq" value="{{ q }}" placeholder="Buscar qualquer parte: MLB, SKU, descrição…" autocomplete="off">
+    <div class="chips">
+      {% for t, rot in [('todos', 'Todos'), ('Premium', 'Premium'), ('Clássico', 'Clássico')] %}
+      <button type="button" class="chip {{ 'on' if tipo == t }}" data-tipo="{{ t }}">{{ rot }} · {{ contagem.todos if t == 'todos' else contagem.get(t, 0) }}</button>
+      {% endfor %}
+    </div>
+    <span class="nota" style="margin:0">{{ itens|length }} de {{ contagem.todos }}</span>
+  </form>
+  <div class="nota" style="margin:8px 0 0">Custo Coletas = frete coletas do <b>último pedido válido</b> do MLB (Planilha 2). Peso e descrição vêm do cadastro de SKUs (Parâmetros).</div>
+  <div class="rol"><table class="cols-cc">
+    <thead><tr><th>MLB</th><th>SKU</th><th>Descrição</th><th>Tipo</th><th class="n">Custo</th><th class="n">Peso</th><th class="n">R$ / kg</th><th class="n">Pedidos</th><th>Último</th></tr></thead>
+    <tbody>
+    {% for m in itens %}
+    <tr><td class="n" style="text-align:left">{{ m.mlb }}</td><td class="n" style="text-align:left">{{ m.sku }}</td><td>{{ m.descricao or '—' }}</td>
+      <td><span class="tag {{ 'prem' if m.tipo == 'Premium' else 'clas' }}">{{ m.tipo }}</span></td>
+      <td class="n"><b>R$ {{ m.custo|brl }}</b></td>
+      <td class="n" data-ord="{{ m.peso or 0 }}">{% if m.peso %}{{ m.peso|brl(1) }} kg{% else %}<span class="tag pend">sem peso</span>{% endif %}</td>
+      <td class="n" data-ord="{{ m.custo_kg or 0 }}">{{ m.custo_kg|brl if m.custo_kg else '—' }}</td>
+      <td class="n">{{ m.pedidos }}</td>
+      <td data-ord="{{ m.data }}">{{ m.data|dia }}</td></tr>
+    {% else %}
+    <tr><td colspan="9" class="vazio">{% if contagem.todos %}Nada com esse filtro.{% else %}Nasce da Planilha 2 (Resumo de Rebates) — suba em Arquivos, box Mercado Livre.{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function(){
+  var f=document.getElementById('ffiltro'),q=document.getElementById('fq'),ft=document.getElementById('ftipo'),t;
+  document.querySelectorAll('.chip').forEach(function(b){b.addEventListener('click',function(){ft.value=b.getAttribute('data-tipo');f.submit();});});
+  q.addEventListener('input',function(){clearTimeout(t);t=setTimeout(function(){f.submit();},450);});
+  q.focus(); q.setSelectionRange(q.value.length,q.value.length);
+})();
+</script>
+{% endblock %}

@@ -3,13 +3,15 @@
 {% if PODE.arquivos %}<form method="post" action="{{ url_for('rodar_tudo') }}" style="margin:0"><button class="janela on" type="submit" style="cursor:pointer" data-tip="Recalcula tudo com os arquivos, tabelas e boxes atuais — use depois de atualizar qualquer coisa">▶ Rodar o PLUTOS</button></form>{% endif %}
 {% endblock %}
 {% block conteudo %}
-<div class="bloco">
-  <h2>0 · ERP · Pedidos Marketplace <span style="font-weight:400;letter-spacing:0;text-transform:none">— um arquivo do mês com as vendas de TODOS os canais</span></h2>
-  <div class="arqs">
-    <div class="arq" style="min-height:0;grid-column:1 / -1">
-      <div class="arq-top"><b>PEDIDOS MARKETPLACE (ERP / Promob)</b>{% if erp_idx.uploads %}<span class="ok">{{ erp_idx.ocs|length }} OCs no índice</span>{% endif %}</div>
-      <div class="arq-sub">Export "Pedidos_Marketplace_DDMMateDDMMAAAA_HHMM" em <b>.csv</b> (tab) ou .xlsx. A OC é texto e é a chave de tudo; a coluna T diz o canal (sem o "MP - "); a coluna AB é o % de comissão do ERP.</div>
-      {% if erp_idx.uploads %}{% set u = erp_idx.uploads[-1] %}<span class="arq-n">último: {{ u.nome }} · {{ u.quando|quando }} por {{ u.quem }} · {{ u.linhas }} pedidos de {{ u.de|dia }} a {{ u.ate|dia }} · {{ u.novas }} OCs novas{% if u.sem_box %} · <span class="tag mk-aten">sem box: {% for k, v in u.sem_box.items() %}{{ k }} ({{ v }}){% if not loop.last %}, {% endif %}{% endfor %}</span>{% endif %}</span>{% endif %}
+<div class="box-principal">
+  <div class="bp-topo">
+    <div><span class="bp-eyebrow">Arquivo principal</span><h2 class="bp-tit">ERP · Pedidos Marketplace</h2><div class="bp-sub">um arquivo do mês com as vendas de TODOS os canais — é dele que nasce a base de cada box</div></div>
+    {% if erp_idx.uploads %}<div class="bp-num"><b>{{ erp_idx.ocs|length|brl(0) }}</b><span>OCs no índice · sem duplicar</span></div>{% endif %}
+  </div>
+  <div class="bp-corpo">
+    <div>
+      <div class="arq-sub">Export "Pedidos_Marketplace_DDMMateDDMMAAAA_HHMM" em <b>.csv</b> ou <b>.xlsx</b> — tanto faz, o app lê os dois igual. A OC é texto e é a chave de tudo; a coluna T diz o canal (sem o "MP - "); a coluna AB é o % de comissão do ERP. <b>Nunca soma duas vezes:</b> pode subir o mês inteiro de novo — OC que já existe é ignorada (ou atualizada se mudou), só as novas entram.</div>
+      {% if erp_idx.uploads %}{% set u = erp_idx.uploads[-1] %}<span class="arq-n">último: {{ u.nome }} · {{ u.quando|quando }} por {{ u.quem }} · {{ u.linhas }} pedidos de {{ u.de|dia }} a {{ u.ate|dia }} · <b>{{ u.novas }} novas</b> · {{ u.atualizadas or 0 }} atualizadas · {{ u.iguais or 0 }} iguais (ignoradas){% if u.sem_box %} · <span class="tag mk-aten">sem box: {% for k, v in u.sem_box.items() %}{{ k }} ({{ v }}){% if not loop.last %}, {% endif %}{% endfor %}</span>{% endif %}</span>{% endif %}
       {% if PODE.arquivos %}
       <form method="post" action="{{ url_for('subir_erp') }}" enctype="multipart/form-data" class="upl">
         <input type="file" name="arquivo" accept=".xlsx,.xls,.csv,.txt" required>
@@ -35,20 +37,39 @@
   <div class="arqs">
   {% for cn in CANAIS %}
     {% if cn.ativo %}
-    <div class="arq">
+    <div class="arq arq-largo">
       <div class="arq-top"><b>{{ loop.index }} · {{ cn.nome|upper }}</b>{% if r_meli %}<span class="ok">rodado {{ comp|mesano }}</span>{% endif %}</div>
-      <div class="arq-tit" style="margin-top:8px">{{ cn.arquivo }}</div>
-      <div class="arq-sub">{{ cn.arquivo_sub }}</div>
-      {% if r_meli %}<span class="arq-n">{{ r_meli.arquivo.nome }} · {{ r_meli.quando|quando }} · {{ r_meli.resumo.pedidos }} pedidos</span>
-      <span class="arq-n">comissão do sistema: {% if r_meli.sistema %}<span class="ok">ERP</span> {{ r_meli.sistema_diag.linhas }} OCs{% else %}<span class="tag pend">suba o ERP (box 0)</span>{% endif %}</span>{% endif %}
-      {% if PODE.arquivos %}
-      <form method="post" action="{{ url_for('subir', chave=cn.chave) }}" enctype="multipart/form-data" class="upl">
-        <input type="hidden" name="tipo" value="base"><input type="file" name="arquivo" accept=".xlsx,.xls,.csv" required>
-        <button class="bt pri" type="submit" style="padding:7px 14px">Subir e rodar</button>
-      </form>
-      {% endif %}
+      <div class="dois-upl">
+        <div class="upl-box">
+          <div class="upl-eyebrow">Planilha 1 · Completo</div>
+          <div class="arq-tit">{{ cn.arquivo }}</div>
+          <div class="arq-sub">{{ cn.arquivo_sub }}</div>
+          {% if r_meli %}<span class="arq-n">{{ r_meli.arquivo.nome }} · {{ r_meli.quando|quando }} · {{ r_meli.resumo.pedidos }} pedidos</span>
+          <span class="arq-n">comissão do sistema: {% if r_meli.sistema %}<span class="ok">ERP</span> {{ r_meli.sistema_diag.linhas }} OCs{% else %}<span class="tag pend">suba o ERP (arquivo principal)</span>{% endif %}</span>{% else %}<span class="arq-n">ainda não subiu nesta competência</span>{% endif %}
+          {% if PODE.arquivos %}
+          <form method="post" action="{{ url_for('subir', chave=cn.chave) }}" enctype="multipart/form-data" class="upl">
+            <input type="hidden" name="tipo" value="base"><input type="file" name="arquivo" accept=".xlsx,.xls,.csv" required>
+            <button class="bt pri" type="submit" style="padding:7px 14px">Subir e rodar</button>
+          </form>
+          {% endif %}
+        </div>
+        <div class="upl-box">
+          <div class="upl-eyebrow">Planilha 2 · Resumo</div>
+          <div class="arq-tit">RESUMO DE REBATES</div>
+          <div class="arq-sub">export do Power BI · Relatorios_PedidosxRebates · MLB × tipo de anúncio</div>
+          {% if mlbs_ult %}<span class="arq-n">{{ mlbs_ult.nome }} · {{ mlbs_ult.quando|quando }} · {{ mlbs_ult.diag.linhas }} pedidos · {{ mlbs_ult.diag.mlbs }} MLB's</span>
+          <span class="arq-n">Lista de MLB's: <b>{{ mlbs_total }}</b> anúncios — <a href="{{ url_for('mlbs') }}">abrir</a></span>{% else %}<span class="arq-n">ainda não subiu — a Lista de MLB's nasce daqui</span>{% endif %}
+          {% if PODE.arquivos %}
+          <form method="post" action="{{ url_for('subir', chave=cn.chave) }}" enctype="multipart/form-data" class="upl">
+            <input type="hidden" name="tipo" value="rebates"><input type="file" name="arquivo" accept=".xlsx,.xls" required>
+            <button class="bt pri" type="submit" style="padding:7px 14px">Subir a Planilha 2</button>
+          </form>
+          {% endif %}
+        </div>
+      </div>
       <details class="ajuda2"><summary>O que o PLUTOS faz com isso</summary>
         <p>Da TABELA GERAL: separa por mês da data do pedido, calcula o % de comissão cobrada, marca os pedidos de <b>tarifa zero</b> (vão para a tabela Faltante campanha) e soma o <b>Cupom Meli</b> como rebate em R$.</p>
+        <p>Do RESUMO DE REBATES (Planilha 2): monta a <b>Lista de MLB's</b> — cada anúncio com SKU e tipo (Premium 16,5% · Clássico 11,5%); sobe quantas vezes quiser, o MLB que já existe é atualizado, nunca duplicado.</p>
         <p>Da comissão do sistema (box 0 · ERP): casa cada pedido pela OC = "Pedido Marketplace (Any)", aplica o % do ERP (coluna AB) sobre o valor de produtos do export e calcula a <b>diferença</b> comissão do sistema − tarifa cobrada = rebate de comissão.</p>
       </details>
     </div>

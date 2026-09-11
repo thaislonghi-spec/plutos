@@ -47,10 +47,13 @@ CANAL_BOX = {
 
 def _norm(s) -> str:
     s = "" if s is None else str(s)
+    # acentos quebrados do export .xlsx do ERP (cp850 lido como latin-1), tratados
+    # ANTES de baixar a caixa — o "Ú" quebrado (= é) não é o "ú" verdadeiro:
+    #   Ò = ã · Ú = é · Ì = í · · = ú · ¾ = ó · þ = ç
+    s = s.replace("Ò", "a").replace("Ú", "e").replace("Ì", "i").replace("·", "u").replace("¾", "o").replace("þ", "c")
     s = s.lower()
-    # o export vem em latin-1 e às vezes com acentos quebrados (N·mero, C¾digo, SituaþÒo)
-    s = re.sub(r"[áàâãäªº·]", "a", s); s = re.sub(r"[éèêë]", "e", s); s = re.sub(r"[íìîï]", "i", s)
-    s = re.sub(r"[óòôõö¾]", "o", s); s = re.sub(r"[úùûü]", "u", s); s = s.replace("ç", "c").replace("þ", "c")
+    s = re.sub(r"[áàâãä]", "a", s); s = re.sub(r"[éèêë]", "e", s); s = re.sub(r"[íìîï]", "i", s)
+    s = re.sub(r"[óòôõö]", "o", s); s = re.sub(r"[úùûü]", "u", s); s = s.replace("ç", "c")
     return re.sub(r"[^a-z]", "", s)
 
 
@@ -75,7 +78,7 @@ def _txt(v) -> str:
         return ""
     if isinstance(v, float) and v.is_integer():
         return str(int(v))
-    s = str(v).strip()
+    s = str(v).strip().replace("\x91", "'").replace("\x92", "'").replace("\x93", '"').replace("\x94", '"')
     return s[:-2] if s.endswith(".0") and s[:-2].isdigit() else s
 
 
@@ -114,8 +117,19 @@ def ler(caminho: str, mapa: dict | None = None) -> tuple[list[dict], dict]:
         if df is None:
             raise ValueError("Não consegui ler o CSV (esperado: separado por TAB, latin-1).")
     else:
-        xl = pd.ExcelFile(caminho)
-        df = xl.parse(xl.sheet_names[0], dtype=str)
+        # O .xlsx do ERP sai com a "dimensão" da planilha errada (diz 24 linhas × 6
+        # colunas quando tem 12 mil × 34). O leitor rápido (read_only) acredita
+        # nisso e lê quase nada; por isso abre no modo normal, célula a célula.
+        import openpyxl
+        wb = openpyxl.load_workbook(caminho, read_only=False, data_only=True)
+        ws = wb.worksheets[0]
+        rows = list(ws.iter_rows(values_only=True))
+        wb.close()
+        if not rows:
+            raise ValueError("Planilha vazia.")
+        cab = [("" if c is None else str(c)) for c in rows[0]]
+        df = pd.DataFrame([[("" if c is None else c) for c in r] for r in rows[1:]], columns=cab)
+        df = df.astype(str).replace({"None": ""})
     colmap = {}
     for c in df.columns:
         n = _norm(c)
@@ -126,7 +140,7 @@ def ler(caminho: str, mapa: dict | None = None) -> tuple[list[dict], dict]:
     faltam = [k for k in OBRIGATORIAS if k not in colmap.values()]
     if faltam:
         raise ValueError(f"O arquivo não tem as colunas do ERP: faltam {', '.join(faltam)} "
-                         f"(li {df.shape[1]} colunas). O .xlsx do ERP às vezes sai incompleto — use o .csv.")
+                         f"(li {df.shape[1]} colunas). Confira se é o export Pedidos Marketplace do ERP.")
     df = df.rename(columns=colmap)
 
     linhas, diag = [], {"linhas_brutas": int(len(df)), "rejeitadas": 0, "canais": {}, "sem_box": {},

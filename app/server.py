@@ -22,7 +22,7 @@ from werkzeug.utils import secure_filename
 from motor import meli, erp
 import planilhas
 
-VERSAO = "2026-09-10w"
+VERSAO = "2026-09-11a"
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(RAIZ), "dados")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -298,7 +298,7 @@ def contexto():
         "VERSAO": VERSAO, "CANAIS": canais(), "papel": papel, "PAPEIS": PAPEIS,
         "usuario": session.get("usuario"), "PODE": {k: (papel in v) for k, v in PODE.items()},
         "IRMAOS": [{"chave": c, "rotulo": r, "url": u, "arquivo": _icone_irmao(c)} for c, r, u in IRMAOS],
-        "PARAM": parametros(), "COMPS": competencias(), "comp": comp_atual(),
+        "PARAM": parametros(), "COMPS": competencias(), "comp": comp_atual(), "HOJE_COMP": agora().strftime("%Y-%m"),
         "ULT": ultima_rodada_info(),
     }
 
@@ -328,6 +328,7 @@ def competencias() -> list[str]:
         m = re.match(r"(\w+)_(\d{4}-\d{2})\.json$", n)
         if m:
             comps.add(m.group(2))
+    comps |= {p["competencia"] for p in _json_ler(pasta("meli", "resumo_pedidos.json"), {"pedidos": {}})["pedidos"].values()}
     return sorted(comps)
 
 
@@ -336,7 +337,7 @@ def comp_atual() -> str:
     comps = competencias()
     if c and re.match(r"^\d{4}-\d{2}$", c):
         return c
-    return comps[-1] if comps else agora().strftime("%Y-%m")
+    return agora().strftime("%Y-%m")  # sempre o mês atual (Brasília)
 
 
 def ultima_rodada_info():
@@ -383,6 +384,34 @@ def faltante_gravar(d, canal="meli"):
     _json_gravar(pasta("manual", f"faltante_{canal}.json"), d)
 
 
+def mlbs_ler() -> dict:
+    """Lista de MLB's do Mercado Livre (nasce da Planilha 2 · Resumo de Rebates)."""
+    return _json_ler(pasta("meli", "mlbs.json"), {"mlbs": {}, "uploads": []})
+
+
+def mlbs_gravar(d):
+    _json_gravar(pasta("meli", "mlbs.json"), d)
+
+
+def resumo_meli_ler() -> dict:
+    """Pedidos da Planilha 2 (Resumo de Rebates), pedido a pedido. Daqui saem
+    as telas de Coletas (frete coletas > 0 = pedido de coletas)."""
+    return _json_ler(pasta("meli", "resumo_pedidos.json"), {"pedidos": {}})
+
+
+def resumo_meli_gravar(d):
+    _json_gravar(pasta("meli", "resumo_pedidos.json"), d)
+
+
+RESUMO_CAMPOS = ("pedido_canal", "data", "competencia", "sku", "anuncio", "tipo", "qtd", "valor_prod", "frete",
+                 "frete_coletas", "cupom_canal", "cupom_seller", "valor_meli", "pct_bruta", "com_bruta", "rebate_bi", "com_liq")
+
+
+def descricoes_ler() -> dict:
+    """SKU → descrição (cadastro subido em Parâmetros). Vale para todos os canais."""
+    return _json_ler(pasta("cadastro", "descricoes.json"), {"skus": {}, "quando": None, "quem": None, "arquivo": None})
+
+
 def recalcular_meli(comp: str):
     """Recalcula a rodada do Meli daquela competência a partir dos arquivos
     guardados (usado quando a tabela manual muda ou o ADC002 chega)."""
@@ -426,7 +455,7 @@ def entrar():
             session["usuario"] = login
             session["papel"] = u["papel"] if u else "admin"
             session["empresa"] = (u or {}).get("empresa", "multimoveis")
-            return redirect(request.args.get("proximo") or url_for("painel"))
+            return redirect(url_for("painel"))  # sempre abre no GERAL, mês atual
         flash("Usuário ou senha não conferem.")
     return render_template("login.html")
 
@@ -761,8 +790,10 @@ def arquivos():
     nomes_erp = sorted({l["canal_nome"] for l in idx["ocs"].values()})
     m = mapa_erp_box()
     sem_box = [n for n in nomes_erp if m.get(n, "outros") == "outros"]
+    ml = mlbs_ler()
     return render_template("arquivos.html", hist=hist, r_meli=rodada("meli", comp), erp_idx=idx, erp_res=erp_res,
-                           nomes_erp=nomes_erp, sem_box=sem_box, mapa_erp=m)
+                           nomes_erp=nomes_erp, sem_box=sem_box, mapa_erp=m,
+                           mlbs_ult=(ml["uploads"][-1] if ml["uploads"] else None), mlbs_total=len(ml["mlbs"]))
 
 
 @app.route("/arquivos/subir/<chave>", methods=["POST"])
@@ -784,6 +815,36 @@ def subir(chave):
     tipo = request.form.get("tipo", "base")
     try:
         if chave == "meli":
+            if tipo == "rebates":
+                df, diag = meli.ler_resumo_rebates(destino)
+                novos = meli.lista_mlbs(df)
+                d = mlbs_ler()
+                n_novos = n_mud = 0
+                for k, v in novos.items():
+                    a = d["mlbs"].get(k)
+                    if a is None:
+                        n_novos += 1
+                        d["mlbs"][k] = v
+                    else:
+                        if a["tipo"] != v["tipo"] or a["sku"] != v["sku"]:
+                            n_mud += 1
+                        v["primeira"] = min(a["primeira"], v["primeira"])
+                        v["pedidos"] = a["pedidos"] + v["pedidos"] if v["primeira"] > a["ultima"] else max(a["pedidos"], v["pedidos"])
+                        d["mlbs"][k] = v
+                d["uploads"].append({"nome": nome, "caminho": destino, "quando": agora().isoformat(),
+                                     "quem": session["usuario"], "diag": diag})
+                d["uploads"] = d["uploads"][-30:]
+                mlbs_gravar(d)
+                rp = resumo_meli_ler()
+                for r_ in df.itertuples(index=False):
+                    rp["pedidos"][r_.pedido_mkt] = {k: (str(getattr(r_, k)) if k == "data" else getattr(r_, k)) for k in RESUMO_CAMPOS}
+                    for k in ("qtd", "valor_prod", "frete", "frete_coletas", "cupom_canal", "cupom_seller", "valor_meli", "pct_bruta", "com_bruta", "rebate_bi", "com_liq"):
+                        rp["pedidos"][r_.pedido_mkt][k] = float(rp["pedidos"][r_.pedido_mkt][k] or 0)
+                resumo_meli_gravar(rp)
+                flash(f"Resumo de Rebates lido: {diag['linhas']} pedidos de {f_dia(diag['de'])} a {f_dia(diag['ate'])} · "
+                      f"{diag['mlbs']} MLB's no arquivo — {n_novos} novos · {n_mud} mudaram de tipo/SKU. "
+                      f"Lista de MLB's: {len(d['mlbs'])} anúncios.")
+                return redirect(url_for("mlbs"))
             if tipo == "sistema":
                 comp = request.form.get("comp") or comp_atual()
                 r = rodada("meli", comp)
@@ -865,12 +926,30 @@ def subir_erp():
     except Exception as e:  # noqa: BLE001
         flash(f"Não consegui ler o arquivo do ERP: {e}")
         return redirect(url_for("arquivos"))
+    # NUNCA soma duas vezes: a OC é a chave. OC que já existe e veio igual é
+    # ignorada; OC que já existe e veio diferente (NF emitida, status, valor) é
+    # atualizada — continua sendo UMA linha; OC nova entra.
     idx = erp_ler()
-    novas = sum(1 for l in linhas if l["oc"] not in idx["ocs"])
+    novas = atualizadas = iguais = 0
+    # dentro do próprio arquivo a OC pode vir repetida (o ERP repete a linha em
+    # alguns casos): vale a ÚLTIMA ocorrência, uma vez só
+    unicas = {}
     for l in linhas:
-        idx["ocs"][l["oc"]] = l
+        unicas[l["oc"]] = l
+    linhas = list(unicas.values())
+    for l in linhas:
+        atual = idx["ocs"].get(l["oc"])
+        if atual is None:
+            novas += 1
+            idx["ocs"][l["oc"]] = l
+        elif {k: v for k, v in atual.items() if k != "box"} == {k: v for k, v in l.items() if k != "box"}:
+            iguais += 1
+        else:
+            atualizadas += 1
+            idx["ocs"][l["oc"]] = l
     idx["uploads"].append({"nome": nome, "caminho": destino, "quando": agora().isoformat(), "quem": session["usuario"],
-                           "linhas": diag["linhas"], "novas": novas, "de": diag["de"], "ate": diag["ate"],
+                           "linhas": diag["linhas"], "novas": novas, "atualizadas": atualizadas, "iguais": iguais,
+                           "de": diag["de"], "ate": diag["ate"],
                            "canais": diag["canais"], "sem_box": diag["sem_box"], "rejeitadas": diag["rejeitadas"],
                            "ocs_duplicadas": diag["ocs_duplicadas"]})
     idx["uploads"] = idx["uploads"][-50:]
@@ -882,7 +961,9 @@ def subir_erp():
             recalc.append(comp)
     canais_txt = " · ".join(f"{k} {v}" for k, v in sorted(diag["canais"].items(), key=lambda x: -x[1]))
     extra = (" Sem box ainda: " + ", ".join(f"{k} ({v})" for k, v in diag["sem_box"].items()) + ".") if diag["sem_box"] else ""
-    flash(f"ERP lido: {diag['linhas']} pedidos de {f_dia(diag['de'])} a {f_dia(diag['ate'])} ({novas} OCs novas). {canais_txt}.{extra}"
+    flash(f"ERP lido: {diag['linhas']} pedidos de {f_dia(diag['de'])} a {f_dia(diag['ate'])} — "
+          f"{novas} OCs novas · {atualizadas} atualizadas · {iguais} já estavam iguais (ignoradas). "
+          f"Índice: {len(idx['ocs'])} OCs, sem duplicar. {canais_txt}.{extra}"
           + (f" Mercado Livre recalculado ({', '.join(f_mesano(c) for c in recalc)})." if recalc else ""))
     return redirect(url_for("arquivos"))
 
@@ -947,6 +1028,57 @@ def parametros_tela():
             _json_gravar(pasta("parametros.json"), p)
             flash(f"Tabela de comissões gravada: {len(linhas)} canais.")
             return redirect(url_for("parametros_tela"))
+        if acao == "descricoes_arquivo":
+            f = request.files.get("arquivo")
+            if not f or not f.filename:
+                flash("Escolha a planilha de cadastro (SKU · Descrição).")
+                return redirect(url_for("parametros_tela"))
+            import pandas as pd
+            try:
+                nome = secure_filename(f.filename)
+                if nome.lower().endswith(".csv"):
+                    d = pd.read_csv(f, sep=None, engine="python", dtype=str, encoding="latin-1").fillna("")
+                else:
+                    d = pd.read_excel(f, dtype=str).fillna("")
+                cols = {unidecode_lower(c).replace(" ", ""): c for c in d.columns}
+                def col(*cands):  # prioridade = ordem dos candidatos, não a ordem do arquivo
+                    return next((cols[k] for k in cands if k in cols), None)
+                csku = col("codigofornecedor/skuinterno", "skuinterno", "sku", "modelo", "codigo", "cod", "produto", "codigoproduto", "referencia")
+                cdes = col("titulosku", "descricao", "desc", "nomeproduto", "descricaoproduto", "titulo", "nome")
+                cpeso = col("peso", "pesoproduto", "pesobruto", "pesokg", "peso(kg)", "pesoliquido")
+                ccub = col("cubagem", "m3", "cubagemm3")
+                ccus = col("custototal")  # "CUSTO" do Anymarket é preço, não custo
+                ccat = col("categoria")
+                if not csku or not (cdes or cpeso):
+                    raise ValueError("preciso de uma coluna SKU (ou Código) e uma Descrição (ou Nome) e/ou Peso")
+                skus = {}
+                for _, r in d.iterrows():
+                    k = str(r[csku]).strip()
+                    if not k:
+                        continue
+                    e = {}
+                    if cdes and str(r[cdes]).strip():
+                        e["descricao"] = str(r[cdes]).strip()
+                    if ccat and str(r[ccat]).strip():
+                        e["categoria"] = str(r[ccat]).strip()
+                    for cc, kk in ((cpeso, "peso"), (ccub, "cubagem"), (ccus, "custo")):
+                        if cc and str(r[cc]).strip():
+                            try:
+                                e[kk] = float(str(r[cc]).replace("kg", "").replace(",", ".").strip())
+                            except ValueError:
+                                pass
+                    if e:
+                        skus[k] = e
+                cad = descricoes_ler()
+                antes = len(cad["skus"])
+                for k, e in skus.items():
+                    cad["skus"].setdefault(k, {}).update(e)
+                cad.update({"quando": agora().isoformat(), "quem": session["usuario"], "arquivo": nome})
+                _json_gravar(pasta("cadastro", "descricoes.json"), cad)
+                flash(f"Cadastro lido: {len(skus)} SKUs no arquivo · {len(cad['skus']) - antes} novos · cadastro com {len(cad['skus'])} SKUs.")
+            except Exception as e:  # noqa: BLE001
+                flash(f"Não consegui ler o cadastro: {e}")
+            return redirect(url_for("parametros_tela"))
         if acao == "comissoes_arquivo":
             f = request.files.get("arquivo")
             if not f or not f.filename:
@@ -990,12 +1122,207 @@ def parametros_tela():
             recalcular_meli(comp)
         flash("Parâmetros gravados e rebates recalculados.")
         return redirect(url_for("parametros_tela"))
-    return render_template("parametros.html")
+    return render_template("parametros.html", DESC=descricoes_ler())
 
 
 # --------------------------------------------------------------------------
 # saídas — planilha e JSON para o Tropa de Elite / ORION
 # --------------------------------------------------------------------------
+def _mlbs_filtrados(q: str, tipo: str) -> list[dict]:
+    d = mlbs_ler()
+    desc = descricoes_ler()["skus"]
+    itens = []
+    for m in d["mlbs"].values():
+        m = dict(m)
+        e = desc.get(m["sku"]) or desc.get(m["sku"].upper()) or {}
+        m["descricao"] = e.get("descricao") or ""
+        m["peso"] = e.get("peso")
+        itens.append(m)
+    if tipo and tipo != "todos":
+        itens = [m for m in itens if unidecode_lower(m["tipo"]) == unidecode_lower(tipo)]
+    if q:
+        qs = [t for t in unidecode_lower(q).split() if t]
+        itens = [m for m in itens if all(t in unidecode_lower(f"{m['mlb']} {m['sku']} {m['descricao']} {m['tipo']}") for t in qs)]
+    itens.sort(key=lambda m: (m["sku"], m["mlb"]))
+    return itens
+
+
+def unidecode_lower(s) -> str:
+    import unicodedata
+    return "".join(ch for ch in unicodedata.normalize("NFKD", str(s or "")) if not unicodedata.combining(ch)).lower()
+
+
+@app.route("/canal/meli/mlbs")
+@logado
+def mlbs():
+    """Lista de MLB's — cada anúncio do Mercado Livre com o SKU, a descrição e o
+    tipo de anúncio (Premium 16,5% · Clássico 11,5%). Nasce da Planilha 2."""
+    q = (request.args.get("q") or "").strip()
+    tipo = (request.args.get("tipo") or "todos").strip()
+    d = mlbs_ler()
+    todos = list(d["mlbs"].values())
+    contagem = {"todos": len(todos)}
+    for m in todos:
+        contagem[m["tipo"]] = contagem.get(m["tipo"], 0) + 1
+    itens = _mlbs_filtrados(q, tipo)
+    tem_desc = bool(descricoes_ler()["skus"])
+    return render_template("mlbs.html", c=canal_por_chave()["meli"], itens=itens, q=q, tipo=tipo,
+                           contagem=contagem, ult=(d["uploads"][-1] if d["uploads"] else None), tem_desc=tem_desc,
+                           desc_meta=descricoes_ler())
+
+
+def _status_meli() -> dict:
+    """pedido_mkt → (status, conta) vindos da Planilha 1 (rodadas do Mercado Livre)."""
+    out = {}
+    for cp in competencias():
+        r = rodada("meli", cp)
+        if r:
+            for l in r["linhas"]:
+                out[l["pedido_mkt"]] = (l.get("status") or "", l.get("conta") or "")
+    return out
+
+
+def _coletas_pedidos(so_validos: bool = True) -> list[dict]:
+    """Pedidos de coletas = Frete Coletas > 0 na Planilha 2. 'Válido' = status
+    Pago na Planilha 1; cancelado / devolvido fica fora. Sem Planilha 1 do mês,
+    o status é desconhecido e o pedido entra (com aviso na tela)."""
+    st = _status_meli()
+    out = []
+    for k, p in resumo_meli_ler()["pedidos"].items():
+        if (p.get("frete_coletas") or 0) <= 0:
+            continue
+        s_, conta = st.get(k, ("", ""))
+        p = dict(p, pedido_mkt=k, status=s_ or "?", conta=conta)
+        if so_validos and s_ and unidecode_lower(s_) != "pago":
+            continue
+        out.append(p)
+    return out
+
+
+def _soma(ps, k):
+    return float(sum((p.get(k) or 0) for p in ps))
+
+
+@app.route("/canal/meli/coletas")
+@logado
+def coletas():
+    """Coletas · total — os pedidos do Mercado Livre entregues pelo Coletas
+    (frete coletas > 0 na Planilha 2), por competência."""
+    comp = comp_atual()
+    todos = resumo_meli_ler()["pedidos"]
+    col = _coletas_pedidos()
+    brutos = _coletas_pedidos(so_validos=False)
+    fora = {}
+    for p in brutos:
+        if p["status"] != "?" and unidecode_lower(p["status"]) != "pago":
+            fora[p["competencia"]] = fora.get(p["competencia"], 0) + 1
+    sem_status = sum(1 for p in brutos if p["status"] == "?" and p["competencia"] == comp)
+    comps = sorted({p["competencia"] for p in col} | {p["competencia"] for p in todos.values()})
+    por_comp = []
+    st = _status_meli()
+    for cp in comps:
+        pc = [p for p in col if p["competencia"] == cp]
+        tm = [p for k, p in todos.items() if p["competencia"] == cp and unidecode_lower(st.get(k, ("", ""))[0] or "pago") == "pago"]
+        por_comp.append({"comp": cp, "pedidos": len(pc), "meli": len(tm), "share": (len(pc) / len(tm) if tm else 0),
+                         "venda": _soma(pc, "valor_prod"), "frete": _soma(pc, "frete"), "coletas": _soma(pc, "frete_coletas"),
+                         "cupom": _soma(pc, "cupom_canal"), "rebate_com": _soma(pc, "rebate_bi"), "com_liq": _soma(pc, "com_liq")})
+    atual = next((x for x in por_comp if x["comp"] == comp), None) or {"comp": comp, "pedidos": 0, "meli": 0, "share": 0, "venda": 0, "frete": 0, "coletas": 0, "cupom": 0, "rebate_com": 0, "com_liq": 0}
+    desc = descricoes_ler()["skus"]
+    por_mlb: dict[str, dict] = {}
+    for p in col:
+        if p["competencia"] != comp:
+            continue
+        m = por_mlb.setdefault(p["anuncio"], {"mlb": p["anuncio"], "sku": p["sku"], "tipo": p["tipo"], "pedidos": 0, "venda": 0.0, "coletas": 0.0, "cupom": 0.0, "rebate_com": 0.0})
+        m["pedidos"] += 1; m["venda"] += p["valor_prod"]; m["coletas"] += p["frete_coletas"]; m["cupom"] += p["cupom_canal"]; m["rebate_com"] += p["rebate_bi"]
+    linhas = sorted(por_mlb.values(), key=lambda m: -m["coletas"])
+    for m in linhas:
+        e = desc.get(m["sku"]) or {}
+        m["descricao"] = e.get("descricao") or ""
+        m["custo_medio"] = m["coletas"] / m["pedidos"] if m["pedidos"] else 0
+    return render_template("coletas.html", c=canal_por_chave()["meli"], comp=comp, atual=atual, por_comp=por_comp, linhas=linhas,
+                           COMPS_COLETAS=comps, fora=fora.get(comp, 0), sem_status=sem_status)
+
+
+def _custo_coletas(q: str, tipo: str) -> list[dict]:
+    """Custo coletas por MLB: o último pedido válido (frete coletas > 0) de cada
+    anúncio dá o custo; descrição e peso vêm do cadastro de SKUs."""
+    desc = descricoes_ler()["skus"]
+    ult: dict[str, dict] = {}
+    for p in sorted(_coletas_pedidos(), key=lambda p: p["data"]):
+        m = ult.get(p["anuncio"])
+        if m is None:
+            m = ult[p["anuncio"]] = {"mlb": p["anuncio"], "pedidos": 0}
+        m.update({"sku": p["sku"], "tipo": p["tipo"], "custo": p["frete_coletas"], "data": p["data"], "pedido": p["pedido_mkt"],
+                  "valor_prod": p["valor_prod"]})
+        m["pedidos"] += 1
+    itens = []
+    for m in ult.values():
+        e = desc.get(m["sku"]) or desc.get(m["sku"].upper()) or {}
+        m["descricao"] = e.get("descricao") or ""
+        m["peso"] = e.get("peso")
+        m["custo_kg"] = (m["custo"] / m["peso"]) if m.get("peso") else None
+        itens.append(m)
+    if tipo and tipo != "todos":
+        itens = [m for m in itens if unidecode_lower(m["tipo"]) == unidecode_lower(tipo)]
+    if q:
+        qs = [t for t in unidecode_lower(q).split() if t]
+        itens = [m for m in itens if all(t in unidecode_lower(f"{m['mlb']} {m['sku']} {m['descricao']} {m['tipo']}") for t in qs)]
+    itens.sort(key=lambda m: (m["sku"], m["mlb"]))
+    return itens
+
+
+@app.route("/canal/meli/custo-coletas")
+@logado
+def custo_coletas():
+    q = (request.args.get("q") or "").strip()
+    tipo = (request.args.get("tipo") or "todos").strip()
+    todos = _custo_coletas("", "todos")
+    contagem = {"todos": len(todos)}
+    for m in todos:
+        contagem[m["tipo"]] = contagem.get(m["tipo"], 0) + 1
+    itens = _custo_coletas(q, tipo)
+    return render_template("custo_coletas.html", c=canal_por_chave()["meli"], itens=itens, q=q, tipo=tipo, contagem=contagem,
+                           tem_desc=bool(descricoes_ler()["skus"]), sem_peso=sum(1 for m in todos if not m.get("peso")))
+
+
+@app.route("/baixar/custo-coletas")
+@logado
+@exige("exportar")
+def baixar_custo_coletas():
+    q = (request.args.get("q") or "").strip()
+    tipo = (request.args.get("tipo") or "todos").strip()
+    bio = planilhas.custo_coletas_xlsx(_custo_coletas(q, tipo), q, tipo)
+    return send_file(bio, as_attachment=True,
+                     download_name=f"PLUTOS_CustoColetas_{agora().strftime('%d%m%Y_%H%M')}.xlsx",
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+@app.route("/baixar/coletas")
+@logado
+@exige("exportar")
+def baixar_coletas():
+    comp = comp_atual()
+    col = [p for p in _coletas_pedidos() if p["competencia"] == comp]
+    desc = descricoes_ler()["skus"]
+    bio = planilhas.coletas_xlsx(col, desc, comp)
+    return send_file(bio, as_attachment=True,
+                     download_name=f"PLUTOS_Coletas_{comp.replace('-', '')}.xlsx",
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+@app.route("/baixar/mlbs")
+@logado
+@exige("exportar")
+def baixar_mlbs():
+    q = (request.args.get("q") or "").strip()
+    tipo = (request.args.get("tipo") or "todos").strip()
+    bio = planilhas.mlbs_xlsx(_mlbs_filtrados(q, tipo), q, tipo)
+    suf = "" if tipo == "todos" else "_" + secure_filename(tipo)
+    return send_file(bio, as_attachment=True,
+                     download_name=f"PLUTOS_ListaMLBs{suf}_{agora().strftime('%d%m%Y_%H%M')}.xlsx",
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
 @app.route("/baixar/<qual>")
 @logado
 @exige("exportar")

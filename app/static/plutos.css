@@ -187,3 +187,61 @@ table.cols-13 td input.obs{width:100%;box-sizing:border-box} table.cols-13 td in
 .barra-massa input.val{width:74px;flex:0 0 74px;padding:5px 6px;font-size:12px}
 .barra-massa .mini{padding:5px 8px;font-size:11px}
 .barra-massa b,.barra-massa .nota{font-size:11px}
+
+/* BOX PRINCIPAL — o arquivo do ERP, separado e acima dos boxes de canal:
+   faixa preta com a linha de ouro, como o topo do app; corpo branco */
+.box-principal{background:var(--sup);border:1px solid var(--linha);border-top:0;margin-bottom:14px;box-shadow:0 1px 2px rgba(19,19,21,.05)}
+.bp-topo{background:#0B0B0C;border-bottom:3px solid var(--ouro);padding:14px 18px;display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+.bp-eyebrow{display:block;font:700 9.5px Archivo,sans-serif;letter-spacing:.2em;text-transform:uppercase;color:var(--ouro2)}
+.bp-tit{margin:2px 0 0;font:600 18px Archivo,sans-serif;letter-spacing:0;text-transform:none;color:#F2F2F0}
+.bp-sub{font-size:12.5px;color:#A9ACAF;margin-top:1px}
+.bp-num{text-align:right;color:#F2F2F0} .bp-num b{display:block;font:600 26px "IBM Plex Mono",monospace;color:var(--ouro2);line-height:1.1} .bp-num span{font-size:11px;color:#A9ACAF}
+.bp-corpo{padding:14px 18px}
+.bp-corpo .arq-sub{font-size:13px;color:var(--tinta2)}
+/* pílulas do box: uma embaixo da outra — status do box em cima, "linha a linha ok" embaixo */
+.pils{white-space:normal;margin-left:0;margin-top:5px;display:flex;flex-direction:column;align-items:flex-start;gap:3px}
+.pils .tag{white-space:nowrap}
+.bp-corpo .rol.fit td:first-child{width:24%}
+/* Lista de MLB's */
+.kpis.quatro{grid-template-columns:repeat(4,minmax(0,1fr))}
+.filtro-mlb{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.filtro-mlb input[type=search]{flex:1 1 320px;min-width:220px;padding:7px 10px;border:1px solid var(--linha2);border-radius:2px;font:500 13px Archivo,sans-serif;background:var(--sup);color:var(--tinta)}
+.chips{display:flex;gap:6px}
+.chip{border:1px solid var(--linha2);background:var(--sup);color:var(--tinta2);padding:6px 12px;border-radius:2px;font:600 11px Archivo,sans-serif;letter-spacing:.06em;text-transform:uppercase;cursor:pointer}
+.chip.on{background:#0B0B0C;color:var(--ouro2);border-color:#0B0B0C}
+.tag.prem{background:rgba(212,160,23,.16);color:#8A6A0A}
+.tag.clas{background:rgba(43,108,176,.12);color:#2B6CB0}
+/* box Mercado Livre em Arquivos: as duas planilhas lado a lado */
+.dois-upl{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px}
+.upl-box{border:1px solid var(--linha);border-radius:2px;padding:10px 12px;background:var(--sup)}
+.upl-eyebrow{font:700 9.5px Archivo,sans-serif;letter-spacing:.2em;text-transform:uppercase;color:var(--ouro2);margin-bottom:4px}
+.upl-box .arq-n{display:block}
+@media (max-width:1100px){.dois-upl{grid-template-columns:1fr}}
+.arq.arq-largo{grid-column:1 / -1}
+.arq.arq-largo .upl input[type=file]{max-width:260px}
+/* Coletas */
+table.cols-coletas-m{min-width:1190px} table.cols-coletas-m tr.on td{background:#FFF9E8;font-weight:600}
+.rol.fit table.cols-coletas-m td:first-child{width:auto}
+table.cols-coletas-m th:nth-child(1){width:135px} table.cols-coletas-m th:nth-child(2){width:120px} table.cols-coletas-m th:nth-child(3){width:130px}
+table.cols-coletas-m th:nth-child(4){width:150px} table.cols-coletas-m th:nth-child(5){width:130px} table.cols-coletas-m th:nth-child(6){width:140px} table.cols-coletas-m th:nth-child(7){width:110px} table.cols-coletas-m th:nth-child(8){width:130px} table.cols-coletas-m th:nth-child(9){width:170px}
+/* Meses no topo (como no Tropa): os 12 do ano, cinza sem dados, ouro o selecionado; abre sempre no mês atual */
+.meses{display:flex;flex-direction:column;gap:4px;align-items:flex-end}
+.anos{display:flex;gap:4px} .anos .ano{font:600 10px "IBM Plex Mono",monospace;color:#8B8E91;text-decoration:none;padding:1px 6px;border-radius:2px} .anos .ano.on{color:var(--ouro2)}
+.topo-tela .jan-fech .janela{font:600 11.5px "IBM Plex Mono",monospace;padding:5px 9px;min-width:36px;text-align:center}
+.topo-tela .jan-fech .janela.off{background:#141416;border-color:#232326;color:#4A4D50;cursor:default;pointer-events:none}
+.topo-tela .jan-fech .janela.tem{background:#F2F2F0;border-color:#F2F2F0;color:#131315}
+.topo-tela .jan-fech .janela.tem:hover{background:#fff}
+.topo-tela .jan-fech .janela.on{background:var(--ouro);border-color:var(--ouro);color:#0B0B0C}
+
+/* Listas de MLB (Lista de MLB's · Custo coletas · Coletas por MLB): colunas
+   compactas e do mesmo passo, a DESCRIÇÃO fica com o espaço que sobra e o
+   texto é justificado; tudo cabe na tela sem rolagem horizontal. */
+table.cols-mlb,table.cols-cc,table.cols-coletas{table-layout:fixed;min-width:0;width:100%}
+table.cols-mlb th,table.cols-mlb td,table.cols-cc th,table.cols-cc td,table.cols-coletas th,table.cols-coletas td{padding:7px 8px}
+table.cols-mlb td:nth-child(3),table.cols-cc td:nth-child(3),table.cols-coletas td:nth-child(3){white-space:normal;text-align:justify;line-height:1.3;font-size:12.5px}
+table.cols-mlb th:nth-child(1),table.cols-cc th:nth-child(1),table.cols-coletas th:nth-child(1){width:128px}
+table.cols-mlb th:nth-child(2),table.cols-cc th:nth-child(2),table.cols-coletas th:nth-child(2){width:104px}
+table.cols-mlb th:nth-child(4),table.cols-cc th:nth-child(4),table.cols-coletas th:nth-child(4){width:96px}
+table.cols-mlb th:nth-child(5){width:92px} table.cols-mlb th:nth-child(6){width:78px} table.cols-mlb th:nth-child(7){width:104px}
+table.cols-cc th:nth-child(5){width:104px} table.cols-cc th:nth-child(6){width:92px} table.cols-cc th:nth-child(7){width:78px} table.cols-cc th:nth-child(8){width:74px} table.cols-cc th:nth-child(9){width:98px}
+table.cols-coletas th:nth-child(5){width:74px} table.cols-coletas th:nth-child(6){width:104px} table.cols-coletas th:nth-child(7){width:110px} table.cols-coletas th:nth-child(8){width:100px} table.cols-coletas th:nth-child(9){width:100px} table.cols-coletas th:nth-child(10){width:118px}

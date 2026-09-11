@@ -51,6 +51,18 @@
 </div>
 {% endif %}
 
+{% if PODE.parametros %}
+<div class="bloco">
+  <h2>Cadastro de SKUs (descrição)</h2>
+  <form method="post" enctype="multipart/form-data" class="upl" style="margin:0">
+    <input type="hidden" name="acao" value="descricoes_arquivo">
+    <input type="file" name="arquivo" accept=".xlsx,.xls,.csv" required>
+    <button class="bt sec" type="submit">Subir / atualizar o cadastro</button>
+    <span class="nota" style="margin:0">colunas: <b>SKU</b> (ou Código) · <b>Descrição</b> (ou Nome). Alimenta a coluna Descrição da Lista de MLB's e vale para todos os canais. {% if DESC.quando %}Hoje: {{ DESC.skus|length }} SKUs · {{ DESC.arquivo }} · {{ DESC.quando|quando }} por {{ DESC.quem }}.{% else %}Ainda sem cadastro.{% endif %}</span>
+  </form>
+</div>
+{% endif %}
+
 <div class="bloco">
   <h2>As três formas de rebate (regra da casa)</h2>
   <div class="rol fit"><table data-sem-ordenar>

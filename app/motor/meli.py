@@ -368,3 +368,69 @@ def sugestoes_faltante(linhas: list[dict], faltante: dict) -> list[dict]:
         out.append({**l, "manual": f, "sugestao": sug, "sugestao_origem": origem})
     out.sort(key=lambda x: (x["faltante_status"] != "pendente", x["data"], x["sku"]))
     return out
+
+
+# ---------------------------------------------------------------------------
+# Planilha 2 · "Resumo de Rebates" (Relatorios_PedidosxRebates_BI_MercadoLivre)
+# Uma linha por pedido, com o MLB, o SKU, o tipo de anúncio e a comissão bruta
+# de tabela (Premium 16,5% · Clássico 11,5%). Daqui nasce a "Lista de MLB's".
+# ---------------------------------------------------------------------------
+COLS_REBATES = {
+    "pedido_canal": "Pedido Canal", "pedido_mkt": "Pedido Marketplace (Any)", "data": "Data Pedido",
+    "sku": "SKU", "anuncio": "Anúncio", "tipo": "Tipo Anúncio", "qtd": "Quantidade",
+    "valor_prod": "Valor Produtos Meli (+)", "frete": "Frete Pedido", "frete_coletas": "Frete Coletas",
+    "cupom_canal": "Cupom Canal", "cupom_seller": "Cupom Seller Meli", "valor_meli": "Valor Pedido Meli",
+    "pct_bruta": "% Comissão (Bruta)", "com_bruta": "Comissão (Bruta)", "rebate_bi": "Rebate",
+    "pct_liq": "% Comissão (Líquida)", "com_liq": "Comissão (Líquida)",
+}
+OBRIG_REBATES = ["pedido_mkt", "data", "sku", "anuncio", "tipo", "pct_bruta"]
+
+
+def ler_resumo_rebates(caminho: str) -> tuple[pd.DataFrame, dict]:
+    """Lê a Planilha 2 (Resumo de Rebates). Devolve (df normalizado, diagnóstico)."""
+    inv = {_norm(v): k for k, v in COLS_REBATES.items()}
+    xl = pd.ExcelFile(caminho)
+    escolhida, df = None, None
+    for aba in xl.sheet_names:
+        d = xl.parse(aba, dtype=str)
+        mapa = {c: inv[_norm(c)] for c in d.columns if _norm(c) in inv}
+        if all(k in mapa.values() for k in OBRIG_REBATES):
+            escolhida, df = aba, d.rename(columns=mapa)
+            break
+    if df is None:
+        raise ValueError("Nenhuma aba tem as colunas do Resumo de Rebates. Preciso pelo menos de: "
+                         + ", ".join(COLS_REBATES[k] for k in OBRIG_REBATES) + ".")
+    df = df.copy()
+    for k in ("pedido_canal", "pedido_mkt"):
+        df[k] = df[k].map(_pedido) if k in df else ""
+    for k in ("qtd", "valor_prod", "frete", "frete_coletas", "cupom_canal", "cupom_seller", "valor_meli",
+              "pct_bruta", "com_bruta", "rebate_bi", "pct_liq", "com_liq"):
+        df[k] = df[k].map(_num) if k in df else 0.0
+    for k in ("sku", "anuncio", "tipo"):
+        df[k] = df[k].fillna("").astype(str).str.strip() if k in df else ""
+    df["data"] = df["data"].map(_data)
+    ruim = df["pedido_mkt"].eq("") | df["data"].isna() | df["anuncio"].eq("")
+    diag: dict[str, Any] = {"aba": escolhida, "linhas_brutas": int(len(df)), "n_rejeitadas": int(ruim.sum())}
+    df = df[~ruim].copy()
+    df["competencia"] = df["data"].map(lambda d: f"{d.year}-{d.month:02d}")
+    diag["competencias"] = df["competencia"].value_counts().sort_index().to_dict()
+    diag["de"], diag["ate"], diag["linhas"] = str(df["data"].min()), str(df["data"].max()), int(len(df))
+    diag["tipos"] = df["tipo"].value_counts().to_dict()
+    diag["mlbs"] = int(df["anuncio"].nunique())
+    return df, diag
+
+
+def lista_mlbs(df: pd.DataFrame) -> dict:
+    """MLB → {sku, tipo, pct, primeira, ultima, pedidos}. Vale o que a última
+    venda diz (um MLB pode mudar de Clássico para Premium); o histórico fica
+    em 'pedidos'."""
+    out: dict[str, dict] = {}
+    d = df.sort_values("data")
+    for r in d.itertuples(index=False):
+        m = out.get(r.anuncio)
+        if m is None:
+            m = out[r.anuncio] = {"mlb": r.anuncio, "sku": r.sku, "tipo": r.tipo, "pct": float(r.pct_bruta),
+                                  "primeira": str(r.data), "ultima": str(r.data), "pedidos": 0}
+        m["sku"], m["tipo"], m["pct"], m["ultima"] = r.sku, r.tipo, float(r.pct_bruta), str(r.data)
+        m["pedidos"] += 1
+    return out

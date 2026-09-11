@@ -215,3 +215,74 @@ def export_rebates_xlsx(linhas: list[dict], quando) -> io.BytesIO:
     ws3["A1"].font = Font(bold=True, size=13)
     bio = io.BytesIO(); wb.save(bio); bio.seek(0)
     return bio
+
+
+def mlbs_xlsx(itens: list[dict], q: str, tipo: str) -> io.BytesIO:
+    """Lista de MLB's do Mercado Livre — MLB · SKU · Descrição · Tipo de anúncio · % comissão."""
+    wb = Workbook()
+    wb.remove(wb.active)
+    cab = ["MLB", "SKU", "Descrição", "Tipo de anúncio", "% Comissão", "Pedidos", "Primeira venda", "Última venda"]
+    ls = [[m["mlb"], m["sku"], m.get("descricao") or "", m["tipo"], m["pct"], m["pedidos"],
+           datetime.fromisoformat(m["primeira"]), datetime.fromisoformat(m["ultima"])] for m in itens]
+    ws = _aba(wb, "Lista_MLBs", cab, ls, [18, 16, 46, 16, 12, 10, 14, 14])
+    for row in ws.iter_rows(min_row=2, min_col=5, max_col=5):
+        for c in row:
+            c.number_format = "0.0%"
+    for row in ws.iter_rows(min_row=2, min_col=7, max_col=8):
+        for c in row:
+            c.number_format = "DD/MM/YYYY"
+    filtro = " · ".join(x for x in [f"busca: {q}" if q else "", f"tipo: {tipo}" if tipo and tipo != "todos" else ""] if x)
+    ws2 = _aba(wb, "Como_ler", ["Item", "Explicação"], [
+        ["Origem", "Planilha 2 · Resumo de Rebates (Relatorios_PedidosxRebates_BI_MercadoLivre)"],
+        ["Tipo de anúncio", "Premium = comissão 16,5% · Clássico = comissão 11,5% (tabela do Mercado Livre)"],
+        ["Regra", "Vale o tipo da última venda do MLB; um MLB que mudou de tipo aparece com o tipo atual"],
+        ["Descrição", "Vem do cadastro de SKUs subido em Parâmetros; vazio = SKU sem cadastro"],
+        ["Filtro aplicado", filtro or "nenhum (lista completa)"],
+    ], [18, 90])
+    bio = io.BytesIO(); wb.save(bio); bio.seek(0)
+    return bio
+
+
+def custo_coletas_xlsx(itens: list[dict], q: str, tipo: str) -> io.BytesIO:
+    wb = Workbook()
+    wb.remove(wb.active)
+    cab = ["MLB", "SKU", "Descrição", "Tipo de anúncio", "Custo Coletas (R$)", "Peso produto (kg)", "R$/kg",
+           "Pedidos coletas", "Último pedido", "Data do último", "Valor produto (último)"]
+    ls = [[m["mlb"], m["sku"], m.get("descricao") or "", m["tipo"], m["custo"], m.get("peso"), m.get("custo_kg"),
+           m["pedidos"], m["pedido"], datetime.fromisoformat(m["data"]), m["valor_prod"]] for m in itens]
+    ws = _aba(wb, "Custo_Coletas", cab, ls, [18, 16, 46, 16, 16, 14, 10, 12, 22, 14, 16], moeda=(5, 7, 11))
+    for row in ws.iter_rows(min_row=2, min_col=10, max_col=10):
+        for c in row:
+            c.number_format = "DD/MM/YYYY"
+    for row in ws.iter_rows(min_row=2, min_col=9, max_col=9):
+        for c in row:
+            c.number_format = "@"
+    filtro = " · ".join(x for x in [f"busca: {q}" if q else "", f"tipo: {tipo}" if tipo and tipo != "todos" else ""] if x)
+    _aba(wb, "Como_ler", ["Item", "Explicação"], [
+        ["Origem", "Planilha 2 · Resumo de Rebates — pedidos com Frete Coletas > 0"],
+        ["Custo Coletas", "O frete coletas do ÚLTIMO pedido válido daquele MLB (o valor mais recente que o Meli cobrou)"],
+        ["Peso / Descrição", "Cadastro de SKUs (CustoProduto) subido em Parâmetros"],
+        ["Filtro aplicado", filtro or "nenhum (lista completa)"],
+    ], [18, 90])
+    bio = io.BytesIO(); wb.save(bio); bio.seek(0)
+    return bio
+
+
+def coletas_xlsx(pedidos: list[dict], desc: dict, comp: str) -> io.BytesIO:
+    wb = Workbook()
+    wb.remove(wb.active)
+    cab = ["Pedido", "Data", "MLB", "SKU", "Descrição", "Tipo de anúncio", "Qtd", "Valor produtos", "Frete pedido",
+           "Frete Coletas", "Cupom canal", "Comissão bruta", "Comissão líquida", "Rebate comissão (BI)"]
+    ls = [[p["pedido_mkt"], datetime.fromisoformat(p["data"]), p["anuncio"], p["sku"], (desc.get(p["sku"]) or {}).get("descricao") or "",
+           p["tipo"], p["qtd"], p["valor_prod"], p["frete"], p["frete_coletas"], p["cupom_canal"], p["com_bruta"], p["com_liq"], p["rebate_bi"]]
+          for p in sorted(pedidos, key=lambda p: p["data"])]
+    ws = _aba(wb, f"Coletas_{comp.replace('-', '')}", cab, ls, [22, 12, 18, 16, 40, 14, 6, 14, 13, 13, 12, 14, 14, 16],
+              moeda=(8, 9, 10, 11, 12, 13, 14))
+    for row in ws.iter_rows(min_row=2, min_col=2, max_col=2):
+        for c in row:
+            c.number_format = "DD/MM/YYYY"
+    for row in ws.iter_rows(min_row=2, min_col=1, max_col=1):
+        for c in row:
+            c.number_format = "@"
+    bio = io.BytesIO(); wb.save(bio); bio.seek(0)
+    return bio

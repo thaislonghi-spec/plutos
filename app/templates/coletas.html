@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block acoes_topo %}
+{% if PODE.exportar and atual.pedidos %}
+<div class="janelas baixar-topo">
+  <a class="janela baixar" href="{{ url_for('baixar_coletas', mes=comp) }}" data-tip="Todos os pedidos de coletas da competência, pedido a pedido">↓ Coletas {{ comp|mesano }}</a>
+</div>
+{% endif %}
+{% endblock %}
+{% block conteudo %}
+{% if not por_comp %}
+<div class="aviso">A tela nasce da <b>Planilha 2 · Resumo de Rebates</b> — suba em Arquivos, box Mercado Livre. Pedido de coletas = Frete Coletas maior que zero.</div>
+{% endif %}
+{% if fora or sem_status %}<div class="nota" style="margin:0 0 10px">{% if fora %}<b>{{ fora }}</b> pedido(s) de coletas cancelados / devolvidos em {{ comp|mesano }} ficaram fora (status da Planilha 1). {% endif %}{% if sem_status %}<b>{{ sem_status }}</b> pedido(s) sem status — suba a Planilha 1 (Completo) de {{ comp|mesano }} para separar pagos de cancelados.{% endif %}</div>{% endif %}
+<div class="kpis cinco">
+  <div class="kpi preto"><span class="l">Pedidos coletas</span><span class="v">{{ atual.pedidos }}</span><span class="o">{{ (100 * atual.share)|round(1) }}% dos {{ atual.meli }} pedidos Meli de {{ comp|mesano }}</span></div>
+  <div class="kpi ouro"><span class="l">Venda (produtos)</span><span class="v">R$ {{ atual.venda|brl(0) }}</span><span class="o">valor produtos Meli dos pedidos coletas</span></div>
+  <div class="kpi crit"><span class="l">Custo Coletas</span><span class="v">R$ {{ atual.coletas|brl(0) }}</span><span class="o">{{ (100 * atual.coletas / atual.venda)|round(1) if atual.venda else 0 }}% da venda · custo nosso, não é rebate</span></div>
+  <div class="kpi bom"><span class="l">Rebates (BI)</span><span class="v">R$ {{ (atual.cupom + atual.rebate_com)|brl(0) }}</span><span class="o">cupom canal R$ {{ atual.cupom|brl(0) }} + comissão R$ {{ atual.rebate_com|brl(0) }}</span></div>
+  <div class="kpi preto"><span class="l">Frete pedido</span><span class="v">R$ {{ atual.frete|brl(0) }}</span><span class="o">frete cobrado do cliente nesses pedidos</span></div>
+</div>
+
+<div class="bloco">
+  <h2>Mês a mês</h2>
+  <div class="rol"><table class="cols-coletas-m">
+    <thead><tr><th>Competência</th><th class="n">Pedidos</th><th class="n">% do Meli</th><th class="n">Venda</th><th class="n">Frete pedido</th><th class="n">Custo</th><th class="n">% venda</th><th class="n">Cupom canal</th><th class="n">Reb. comissão</th></tr></thead>
+    <tbody>
+    {% for x in por_comp %}
+    <tr class="{{ 'on' if x.comp == comp }}">
+      <td data-ord="{{ x.comp }}"><a href="{{ url_for('coletas', mes=x.comp) }}">{{ x.comp|mesano }}</a></td>
+      <td class="n">{{ x.pedidos }}</td><td class="n">{{ (100 * x.share)|round(1) }}%</td>
+      <td class="n">{{ x.venda|brl }}</td><td class="n">{{ x.frete|brl }}</td><td class="n"><b>{{ x.coletas|brl }}</b></td>
+      <td class="n">{{ (100 * x.coletas / x.venda)|round(1) if x.venda else 0 }}%</td>
+      <td class="n">{{ x.cupom|brl }}</td><td class="n">{{ x.rebate_com|brl }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</div>
+
+<div class="bloco">
+  <h2>Por MLB em {{ comp|mesano }} <span class="qtd">{{ linhas|length }} anúncios</span></h2>
+  <div class="rol"><table class="cols-coletas">
+    <thead><tr><th>MLB</th><th>SKU</th><th>Descrição</th><th>Tipo</th><th class="n">Pedidos</th><th class="n">Venda</th><th class="n">Custo</th><th class="n">Média/ped.</th><th class="n">Cupom canal</th><th class="n">Reb. comissão</th></tr></thead>
+    <tbody>
+    {% for m in linhas %}
+    <tr><td class="n" style="text-align:left">{{ m.mlb }}</td><td class="n" style="text-align:left">{{ m.sku }}</td><td>{{ m.descricao or '—' }}</td>
+      <td><span class="tag {{ 'prem' if m.tipo == 'Premium' else 'clas' }}">{{ m.tipo }}</span></td>
+      <td class="n">{{ m.pedidos }}</td><td class="n">{{ m.venda|brl }}</td><td class="n"><b>{{ m.coletas|brl }}</b></td><td class="n">{{ m.custo_medio|brl }}</td>
+      <td class="n">{{ m.cupom|brl }}</td><td class="n">{{ m.rebate_com|brl }}</td></tr>
+    {% else %}
+    <tr><td colspan="10" class="vazio">Nenhum pedido de coletas em {{ comp|mesano }}.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</div>
+{% endblock %}
