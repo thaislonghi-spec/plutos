@@ -13,7 +13,7 @@
   <div class="kpi preto"><span class="l">Comissão · Diferença</span><span class="v">R$ {{ s.rebate_comissao|brl(0) }}</span><span class="o">{% if r.sistema %}sistema − cobrada · {{ s.dif_pos }} pedidos{% else %}aguardando o ERP (box 0){% endif %}</span></div>
   <div class="kpi {{ 'crit' if s.faltante_pendentes else 'bom' }}"><span class="l">A apurar</span><span class="v">{{ s.faltante_pendentes }}</span><span class="o">{% if s.faltante_pendentes %}<a href="{{ url_for('faltante', mes=comp) }}">abrir a tabela manual</a>{% else %}nada pendente{% endif %}</span></div>
 </div>
-{% if r.sistema %}
+{% if r.sistema and s.com_sistema is defined %}
 <div class="kpis tres-com">
   <div class="kpi preto"><span class="l">Comissão sistema (deveria ser)</span><span class="v">R$ {{ s.com_sistema|brl(0) }}</span><span class="o">{{ s.com_sistema_pct|brl(2) }}% de R$ {{ s.com_venda|brl(0) }} · % do ERP × valor produtos · {{ s.com_pedidos }} pedidos com par</span></div>
   <div class="kpi crit"><span class="l">Comissão real (cobrada pelo Meli)</span><span class="v">R$ {{ s.com_real|brl(0) }}</span><span class="o">{{ s.com_real_pct|brl(2) }}% · tarifa de venda do export, já com descontos de campanha</span></div>

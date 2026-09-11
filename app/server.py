@@ -22,7 +22,7 @@ from werkzeug.utils import secure_filename
 from motor import meli, erp
 import planilhas
 
-VERSAO = "2026-09-11b"
+VERSAO = "2026-09-11c"
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(RAIZ), "dados")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -568,6 +568,10 @@ def canal(chave):
     c = canal_por_chave().get(chave) or abort(404)
     comp = comp_atual()
     r = rodada(chave, comp) if c["ativo"] else None
+    if r and chave == "meli" and "com_sistema" not in r["resumo"]:
+        # rodada gravada por versão anterior: completa o resumo sem exigir rodar de novo
+        r["resumo"] = meli.resumo(r["linhas"])
+        _json_gravar(rodada_caminho("meli", comp), r)
     return render_template("canal.html", c=c, r=r)
 
 
