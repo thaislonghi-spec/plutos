@@ -74,7 +74,8 @@
   {% for cn in CANAIS %}
     {% if cn.ativo %}
     <div class="arq arq-largo">
-      <div class="arq-top"><b>{{ loop.index }} · {{ cn.nome|upper }}</b><span class="arq-top-dir">{% if pend_por.get(cn.chave) and PODE.arquivos %}<form method="post" action="{{ url_for('rodar_box', chave=cn.chave) }}" style="margin:0"><button class="bt pri" type="submit" style="padding:5px 11px" data-tip="Roda só este box agora">▶ Rodar {{ cn.nome }} ({{ pend_por[cn.chave]|length }})</button></form>{% endif %}{% if r_meli %}<span class="ok">rodado {{ comp|mesano }}</span>{% endif %}</span></div>
+      <div class="arq-top"><b>{{ loop.index }} · {{ cn.nome|upper }}</b><span class="arq-top-dir">{% if pend_por.get(cn.chave) and PODE.arquivos %}<form method="post" action="{{ url_for('rodar_box', chave=cn.chave) }}" style="margin:0"><button class="bt pri" type="submit" style="padding:5px 11px" data-tip="Roda só este box agora">▶ Rodar {{ cn.nome }} ({{ pend_por[cn.chave]|length }})</button></form>{% endif %}{% if rods.get(cn.chave) %}<span class="ok">rodado {{ comp|mesano }}</span>{% endif %}</span></div>
+      {% if cn.chave == 'meli' %}
       <div class="dois-upl">
         <div class="upl-box">
           <div class="upl-eyebrow">Planilha 1 · Completo</div>
@@ -107,10 +108,32 @@
           {% endif %}
         </div>
       </div>
+      {% else %}
+      {% set rc = rods.get(cn.chave) %}
+      <div class="upl-box" style="margin-top:8px">
+        <div class="arq-tit">{{ cn.arquivo }}</div>
+        <div class="arq-sub">{{ cn.arquivo_sub }}</div>
+        {% if rc %}<span class="arq-n">{{ rc.arquivo.nome }} · {{ rc.quando|quando }} · {{ rc.resumo.pedidos }} pedidos válidos · {{ rc.resumo.cancelados or 0 }} cancelados fora</span>
+        <span class="arq-n">comissão do sistema: <span class="ok">{{ rc.sistema.nome }}</span></span>{% else %}<span class="arq-n">ainda não subiu nesta competência</span>{% endif %}
+        {% if PODE.arquivos %}
+        <form method="post" action="{{ url_for('subir', chave=cn.chave) }}" enctype="multipart/form-data" class="upl">
+          <input type="hidden" name="tipo" value="base"><input type="file" name="arquivo" accept=".xlsx,.xls,.csv" required>
+          <button class="bt pri" type="submit" style="padding:7px 14px">Subir</button>
+        </form>
+        {% for x in pend_por.get(cn.chave, []) %}<span class="arq-n espera-n">⏳ {{ x.nome }} · aguardando ▶ rodar</span>{% endfor %}
+        {% if rc %}<div class="ok-canto"><span class="pill-ok">ok · {{ rc.quando|quando }}</span></div>{% endif %}
+        {% endif %}
+      </div>
+      {% endif %}
       <details class="ajuda2"><summary>O que o PLUTOS faz com isso</summary>
+        {% if cn.chave == 'magalu' %}
+        <p>Do FINANCEIRO POR PERÍODO: tira os <b>cancelados</b> e a linha de total; comissão do sistema = <b>% + R$/pedido da tabela de Parâmetros</b> (Magalu 11% + R$ 5) sobre o valor pago pelo cliente; comissão real = <b>Serviços do marketplace (1+2+3+4) + Tarifa fixa</b>; a diferença é o rebate de comissão.</p>
+        <p>Rebate em R$ = coparticipação de descontos <b>paga pelo Magalu</b> (desconto à vista + preço promocional) + subsídio de cupom pago pelo Magalu. Coparticipação de frete vai para a conta logística, não é rebate. OC do ERP casa tirando o sufixo "-1/-2".</p>
+        {% else %}
         <p>Da TABELA GERAL: separa por mês da data do pedido, calcula o % de comissão cobrada, marca os pedidos de <b>tarifa zero</b> (vão para a tabela Faltante campanha) e soma o <b>Cupom Meli</b> como rebate em R$.</p>
         <p>Do RESUMO DE REBATES (Planilha 2): monta a <b>Lista de MLB's</b> — cada anúncio com SKU e tipo (Premium 16,5% · Clássico 11,5%); sobe quantas vezes quiser, o MLB que já existe é atualizado, nunca duplicado.</p>
         <p>Da comissão do sistema (box 0 · ERP): casa cada pedido pela OC = "Pedido Marketplace (Any)", aplica o % do ERP (coluna AB) sobre o valor de produtos do export e calcula a <b>diferença</b> comissão do sistema − tarifa cobrada = rebate de comissão.</p>
+        {% endif %}
       </details>
     </div>
     {% else %}

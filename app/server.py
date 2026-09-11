@@ -19,10 +19,10 @@ from flask import (Flask, abort, flash, jsonify, redirect, render_template, requ
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
-from motor import meli, erp
+from motor import meli, erp, magalu
 import planilhas
 
-VERSAO = "2026-09-11e"
+VERSAO = "2026-09-11f"
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(RAIZ), "dados")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -41,7 +41,9 @@ CANAIS = [
     {"chave": "meli",     "nome": "Mercado Livre",   "ativo": True,
      "arquivo": "TABELA GERAL DE PEDIDOS", "arquivo_sub": "export do Power BI · filtro Pago · dia 01 a 31",
      "extra": None},
-    {"chave": "magalu",   "nome": "Magazine Luiza",  "ativo": False},
+    {"chave": "magalu",   "nome": "Magazine Luiza",  "ativo": True,
+     "arquivo": "FINANCEIRO POR PERÍODO", "arquivo_sub": "export do portal Magalu · 1 linha por pedido · dia 01 a 31",
+     "extra": None},
     {"chave": "madeira",  "nome": "Madeira Madeira", "ativo": False},
     {"chave": "colombo",  "nome": "Colombo",         "ativo": False},
     {"chave": "cbahia",   "nome": "Casas Bahia",     "ativo": False},
@@ -410,6 +412,30 @@ def erp_comissao_sistema() -> dict:
     return {oc: {"pct": l["pct_comissao"], "rs": None} for oc, l in erp_ler()["ocs"].items()}
 
 
+def comissao_cadastrada(nomes: tuple[str, ...], padrao: tuple[float, float]) -> tuple[float, float]:
+    """(pct, taxa R$ por pedido) da tabela de comissões de Parâmetros para o canal;
+    nomes = pedaços que identificam a linha (ex.: 'MAGAZINE', 'MAGALU')."""
+    for lin in parametros().get("comissoes") or COMISSAO_PADRAO:
+        nome = unidecode_lower(lin.get("canal", ""))
+        if any(unidecode_lower(n) in nome for n in nomes) and "full" not in nome:
+            try:
+                pct = float(str(lin.get("comissao", "0")).replace("%", "").replace(",", ".") or 0) / 100
+                taxa = float(str(lin.get("taxa", "0")).replace("R$", "").replace(",", ".").strip() or 0)
+                return pct, taxa
+            except ValueError:
+                break
+    return padrao
+
+
+def erp_por_base(box: str) -> dict:
+    """OC do ERP sem o sufixo -N → linha do ERP (o Magalu grava 'LU-…-1', 'LU-…-2')."""
+    out = {}
+    for oc, l in erp_ler()["ocs"].items():
+        if l.get("box") == box:
+            out.setdefault(magalu.base_oc(oc), l)
+    return out
+
+
 def erp_linhas(box: str | None = None, comp: str | None = None) -> list[dict]:
     out = list(erp_ler()["ocs"].values())
     if box:
@@ -514,6 +540,61 @@ def recalcular_meli(comp: str):
     r["recalculado"] = agora().isoformat()
     _json_gravar(rodada_caminho("meli", comp), r)
     return r
+
+
+def recalcular_magalu(comp: str):
+    r = rodada("magalu", comp)
+    if not r:
+        return None
+    df, diag = magalu.ler(r["arquivo"]["caminho"])
+    df = df[df["competencia"] == comp]
+    pct, taxa = comissao_cadastrada(("MAGAZINE", "MAGALU"), (0.11, 5.0))
+    linhas = magalu.calcular(df, pct, taxa, erp_por_base("magalu"))
+    r["linhas"] = linhas
+    r["resumo"] = magalu.resumo(linhas, int(df["cancelado"].sum()))
+    r["sistema"] = {"nome": f"Parâmetros · {pct * 100:.2f}% + R$ {taxa:.2f}/pedido", "quando": agora().isoformat(),
+                    "diag": {"linhas": len(linhas), "modo": "tabela de comissões (Parâmetros)"}}
+    r["sistema_diag"] = r["sistema"]["diag"]
+    r["recalculado"] = agora().isoformat()
+    _json_gravar(rodada_caminho("magalu", comp), r)
+    return r
+
+
+def processar_magalu(destino: str, nome: str, quem: str) -> str:
+    df, diag = magalu.ler(destino)
+    comps = diag["competencias"]
+    principal = max(comps, key=comps.get)
+    pct, taxa = comissao_cadastrada(("MAGAZINE", "MAGALU"), (0.11, 5.0))
+    feitos = []
+    fora = 0
+    for comp, n in comps.items():
+        if comp != principal and n < 0.3 * comps[principal]:
+            fora += n
+            continue
+        sub = df[df["competencia"] == comp]
+        linhas = magalu.calcular(sub, pct, taxa, erp_por_base("magalu"))
+        r = {"canal": "magalu", "competencia": comp, "quando": agora().isoformat(), "quem": quem,
+             "arquivo": {"nome": nome, "caminho": destino, "diag": {k: v for k, v in diag.items() if k != "competencias"}},
+             "sistema": {"nome": f"Parâmetros · {pct * 100:.2f}% + R$ {taxa:.2f}/pedido", "quando": agora().isoformat(),
+                         "diag": {"linhas": len(linhas), "modo": "tabela de comissões (Parâmetros)"}},
+             "linhas": linhas, "resumo": magalu.resumo(linhas, int(sub["cancelado"].sum()))}
+        r["sistema_diag"] = r["sistema"]["diag"]
+        _json_gravar(rodada_caminho("magalu", comp), r)
+        feitos.append((comp, len(linhas), r["resumo"]["rebate_total"]))
+    txt = " · ".join(f"{f_mesano(c)}: {n} pedidos, R$ {f_brl(t)}" for c, n, t in feitos)
+    extra = f" {fora} linha(s) de outro mês ficaram de fora." if fora else ""
+    return f"Magazine Luiza lido. {txt}. Cancelados fora: {diag['cancelados']}.{extra}"
+
+
+def recalcular_canais(comp: str) -> list[str]:
+    feitos = []
+    r = recalcular_meli(comp)
+    if r:
+        feitos.append(f"Mercado Livre {f_mesano(comp)}: R$ {f_brl(r['resumo']['rebate_total'])}")
+    r = recalcular_magalu(comp)
+    if r:
+        feitos.append(f"Magazine Luiza {f_mesano(comp)}: R$ {f_brl(r['resumo']['rebate_total'])}")
+    return feitos
 
 
 # --------------------------------------------------------------------------
@@ -646,6 +727,8 @@ def canal(chave):
         # rodada gravada por versão anterior: completa o resumo sem exigir rodar de novo
         r["resumo"] = meli.resumo(r["linhas"])
         _json_gravar(rodada_caminho("meli", comp), r)
+    if chave == "magalu":
+        return render_template("canal_magalu.html", c=c, r=r)
     return render_template("canal.html", c=c, r=r)
 
 
@@ -660,6 +743,20 @@ LINHA_COLS = {
         ("% comissão cobrada", "pct_comissao", "p"), ("% comissão sistema", "sis_pct", "p"),
         ("Comissão sistema R$", "sis_rs", "n"), ("Diferença comissão", "diferenca", "n"),
         ("Tarifa zero?", "tarifa_zero", "b"), ("Faltante campanha", "faltante", "n"), ("Status faltante", "faltante_status", "t"),
+        ("Rebate R$", "rebate_rs", "n"), ("Rebate comissão", "rebate_comissao", "n"), ("Rebate frete", "rebate_frete", "n"),
+        ("REBATE TOTAL", "rebate_total", "n"),
+    ],
+    "magalu": [
+        ("Data", "data", "d"), ("OC / Pedido", "pedido_mkt", "t"), ("Pedido Any", "pedido_any", "t"),
+        ("Status", "status", "t"), ("Modalidade", "modalidade", "t"), ("CD", "conta", "t"), ("Forma pgto", "forma_pgto", "t"),
+        ("Valor pago cliente", "valor_prod", "n"), ("Valor itens", "itens", "n"),
+        ("% serviços Magalu", "pct_mkt", "p"), ("Serviços 1+2+3+4", "servicos", "n"), ("Intermediação", "intermediacao", "n"),
+        ("Tecnologia", "tecnologia", "n"), ("MDR", "mdr", "n"), ("Tarifa fixa", "tarifa_fixa", "n"), ("Serviços pgto 2", "servicos_pgto2", "n"),
+        ("Comissão real R$", "tarifa", "n"), ("% real", "pct_comissao", "p"),
+        ("Comissão sistema R$", "sis_rs", "n"), ("% sistema", "sis_pct", "p"), ("Diferença = rebate comissão", "diferenca", "n"),
+        ("Desc. à vista Magalu", "desc_vista_magalu", "n"), ("Preço promo Magalu", "promo_magalu", "n"), ("Cupom Magalu", "cupom_magalu", "n"),
+        ("Desc. à vista seller", "desc_vista_seller", "n"), ("Cupom seller", "cupom_seller", "n"),
+        ("Copart. frete (logística)", "copart_frete", "n"), ("Custos logísticos", "custos_log", "n"), ("Repasse", "repasse", "n"), ("Líquido a receber", "liquido", "n"),
         ("Rebate R$", "rebate_rs", "n"), ("Rebate comissão", "rebate_comissao", "n"), ("Rebate frete", "rebate_frete", "n"),
         ("REBATE TOTAL", "rebate_total", "n"),
     ],
@@ -690,9 +787,10 @@ def linha(chave):
     if r:
         cols = LINHA_COLS.get(chave, []) + ERP_COLS
         cad = descricoes_ler()["skus"]
+        base = erp_por_base(chave) if chave == "magalu" else {}
         linhas = []
         for l in r["linhas"]:
-            e = idx.get(l["pedido_mkt"]) or idx.get(l["pedido_canal"]) or {}
+            e = idx.get(l["pedido_mkt"]) or idx.get(l["pedido_canal"]) or base.get(l["pedido_mkt"]) or {}
             m = dict(l)
             m["descricao"] = descricao_de(l.get("sku"), cad)
             for _, k, _ in ERP_COLS:
@@ -888,7 +986,8 @@ def arquivos():
     pend_por = {}
     for x in pend:
         pend_por.setdefault(x["chave"], []).append(x)
-    return render_template("arquivos.html", pend=pend, pend_por=pend_por, hist=hist, r_meli=rodada("meli", comp), erp_idx=idx, erp_res=erp_res,
+    rods = {c["chave"]: rodada(c["chave"], comp) for c in canais() if c["ativo"]}
+    return render_template("arquivos.html", pend=pend, pend_por=pend_por, rods=rods, hist=hist, r_meli=rodada("meli", comp), erp_idx=idx, erp_res=erp_res,
                            nomes_erp=nomes_erp, sem_box=sem_box, mapa_erp=m,
                            mlbs_ult=(ml["uploads"][-1] if ml["uploads"] else None), mlbs_total=len(ml["mlbs"]))
 
@@ -987,6 +1086,8 @@ def pend_processar(chave: str | None = None) -> list[str]:
                 m = processar_erp(x["caminho"], x["nome"], x["quem"], recalcular=False)
             elif x["chave"] == "meli":
                 m = processar_meli(x["tipo"], x["caminho"], x["nome"], x["quem"])
+            elif x["chave"] == "magalu":
+                m = processar_magalu(x["caminho"], x["nome"], x["quem"])
             else:
                 m = f"{x['nome']}: o box {x['chave']} ainda não tem motor."
         except Exception as e:  # noqa: BLE001
@@ -1036,7 +1137,7 @@ def rodar_box(chave):
     if chave == "erp":
         reclassificar_erp()
         for comp in competencias():
-            recalcular_meli(comp)
+            recalcular_canais(comp)
     if not msgs:
         flash("Nada aguardando neste box.")
     for m in msgs:
@@ -1088,7 +1189,7 @@ def erp_limpar():
     n = len(idx["ocs"])
     erp_gravar({"ocs": {}, "uploads": []})
     for comp in competencias():
-        recalcular_meli(comp)
+        recalcular_canais(comp)
     flash(f"ERP zerado: {len(idx['uploads'])} arquivo(s) e {n} OCs excluídos. Suba o export de novo quando quiser.")
     return redirect(url_for("arquivos"))
 
@@ -1105,9 +1206,7 @@ def rodar_tudo():
     reclassificar_erp()
     feitos = []
     for comp in competencias():
-        r = recalcular_meli(comp)
-        if r:
-            feitos.append(f"Mercado Livre {f_mesano(comp)}: R$ {f_brl(r['resumo']['rebate_total'])}")
+        feitos += recalcular_canais(comp)
     seg = (agora() - t0).total_seconds()
     for m in msgs:
         flash(m)
@@ -1180,7 +1279,7 @@ def subir_erp():
             flash(m)
         reclassificar_erp()
         for comp in competencias():
-            recalcular_meli(comp)
+            recalcular_canais(comp)
         return redirect(url_for("arquivos"))
     flash(f"{nome} guardado como arquivo principal — aguardando. Clique ▶ Rodar ERP ou ▶ Rodar o PLUTOS.")
     return redirect(url_for("arquivos"))
@@ -1346,7 +1445,7 @@ def parametros_tela():
             pass
         _json_gravar(pasta("parametros.json"), p)
         for comp in competencias():
-            recalcular_meli(comp)
+            recalcular_canais(comp)
         flash("Parâmetros gravados e rebates recalculados.")
         return redirect(url_for("parametros_tela"))
     return render_template("parametros.html", DESC=descricoes_ler())
@@ -1574,8 +1673,9 @@ def baixar(qual):
         if r:
             linhas = []
             cad = descricoes_ler()["skus"]
+            base = erp_por_base(chave) if chave == "magalu" else {}
             for l in r["linhas"]:
-                e = idx.get(l["pedido_mkt"]) or idx.get(l["pedido_canal"]) or {}
+                e = idx.get(l["pedido_mkt"]) or idx.get(l["pedido_canal"]) or base.get(l["pedido_mkt"]) or {}
                 m = dict(l); m["descricao"] = descricao_de(l.get("sku"), cad)
                 m.update({k: (e.get(k[4:]) if e else None) for _, k, _ in ERP_COLS}); linhas.append(m)
             bio = planilhas.linha_xlsx({"linhas": linhas}, LINHA_COLS.get(chave, []) + ERP_COLS, canal_por_chave()[chave]["nome"], comp)

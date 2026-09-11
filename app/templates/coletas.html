@@ -20,24 +20,6 @@
 </div>
 
 <div class="bloco">
-  <h2>Mês a mês</h2>
-  <div class="rol"><table class="cols-coletas-m">
-    <thead><tr><th>Competência</th><th class="n">Pedidos</th><th class="n">% do Meli</th><th class="n">Venda</th><th class="n">% venda Meli</th><th class="n">Frete pedido</th><th class="n">Custo</th><th class="n">% venda</th><th class="n">Cupom canal</th><th class="n">Reb. comissão</th></tr></thead>
-    <tbody>
-    {% for x in por_comp %}
-    <tr class="{{ 'on' if x.comp == comp }}">
-      <td data-ord="{{ x.comp }}"><a href="{{ url_for('coletas', mes=x.comp) }}">{{ x.comp|mesano }}</a></td>
-      <td class="n">{{ x.pedidos }}</td><td class="n">{{ (100 * x.share)|round(1) }}%</td>
-      <td class="n">{{ x.venda|brl }}</td><td class="n">{{ (100 * x.share_venda)|brl(1) }}%</td><td class="n">{{ x.frete|brl }}</td><td class="n"><b>{{ x.coletas|brl }}</b></td>
-      <td class="n">{{ (100 * x.coletas / x.venda)|round(1) if x.venda else 0 }}%</td>
-      <td class="n">{{ x.cupom|brl }}</td><td class="n">{{ x.rebate_com|brl }}</td>
-    </tr>
-    {% endfor %}
-    </tbody>
-  </table></div>
-</div>
-
-<div class="bloco">
   <h2>Por MLB em {{ comp|mesano }} <span class="qtd">{{ linhas|length }} anúncios</span></h2>
   <div class="rol"><table class="cols-coletas">
     <thead><tr><th>MLB</th><th>SKU</th><th>Descrição</th><th>Tipo</th><th class="n">Pedidos</th><th class="n">Venda</th><th class="n">Custo</th><th class="n">Média/ped.</th><th class="n">Cupom canal</th><th class="n">Reb. comissão</th></tr></thead>
