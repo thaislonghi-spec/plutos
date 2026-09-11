@@ -279,7 +279,7 @@ table.linha-base td.col-descricao{white-space:normal;line-height:1.25;font-size:
 .rodar-tudo.pulsa{box-shadow:0 0 0 3px rgba(242,201,76,.35)}
 /* Parâmetros: cadastro de SKUs e tabela de custos lado a lado */
 .dois-cad{display:grid;grid-template-columns:1fr 1fr;gap:12px} @media (max-width:1100px){.dois-cad{grid-template-columns:1fr}}
-.cad-st{margin-top:8px;font:500 12px "IBM Plex Mono",monospace;padding:7px 10px;border-radius:2px}
+.cad-st{margin-top:8px;font:500 12px "IBM Plex Mono",monospace;text-transform:none;word-break:break-all;padding:7px 10px;border-radius:2px}
 .cad-st.ok{background:#EEF6F1;color:#15794F} .cad-st.pend{background:#FFF6F5;color:var(--crit)}
 /* linha "Última rodada" + botão de exportar à direita */
 .linha-ult{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
@@ -287,3 +287,13 @@ table.linha-base td.col-descricao{white-space:normal;line-height:1.25;font-size:
 .bt-excel{background:#0B0B0C!important;color:var(--ouro2)!important;border:1px solid #0B0B0C;padding:8px 18px;font:700 12px Archivo,sans-serif;letter-spacing:.14em;text-transform:uppercase;text-decoration:none;border-radius:2px}
 .bt-excel:hover{background:#2C2C2E!important}
 .kpis.tres-com{grid-template-columns:repeat(3,minmax(0,1fr))}
+/* pílulas de situação: "ok · data" no canto inferior direito de cada box/aba; "atualizado" cinza no topo */
+.pill-ok{display:inline-block;font:700 10px "IBM Plex Mono",monospace;letter-spacing:.06em;text-transform:uppercase;background:#15794F;color:#fff;padding:4px 9px;border-radius:2px}
+.ok-canto{display:flex;justify-content:flex-end;margin-top:8px}
+.ok-rodape{display:flex;justify-content:flex-end;margin:6px 0 0}
+.pill-cinza{display:inline-block;font:600 10.5px "IBM Plex Mono",monospace;background:#2C2C2E;color:#C9CBCE;padding:6px 10px;border-radius:2px;white-space:nowrap;align-self:center}
+.bp-dir{display:flex;align-items:center;gap:18px}
+.bp-dir .rodar-tudo{padding:10px 16px;font-weight:700;white-space:nowrap}
+.card-arq{position:relative}
+.kpi .v .v-sub{font-style:normal;font-size:15px;color:var(--tinta3);font-weight:500}
+table.cols-coletas-m{min-width:1300px} table.cols-coletas-m th:nth-child(5){width:110px}

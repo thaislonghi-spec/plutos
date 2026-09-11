@@ -1,12 +1,12 @@
 {% extends "base.html" %}
-{% block acoes_topo %}
-{% if PODE.arquivos %}<form method="post" action="{{ url_for('rodar_tudo') }}" style="margin:0"><button class="janela on rodar-tudo {{ 'pulsa' if pend }}" type="submit" style="cursor:pointer" data-tip="Roda TODOS os arquivos que estão aguardando (ERP primeiro, depois os canais) e recalcula tudo — suba todas as planilhas e clique aqui uma vez só">▶ Rodar o PLUTOS{% if pend %} · {{ pend|length }} aguardando{% endif %}</button></form>{% endif %}
-{% endblock %}
 {% block conteudo %}
 <div class="box-principal">
   <div class="bp-topo">
     <div><span class="bp-eyebrow">Arquivo principal</span><h2 class="bp-tit">ERP · Pedidos Marketplace</h2><div class="bp-sub">um arquivo do mês com as vendas de TODOS os canais — é dele que nasce a base de cada box</div></div>
-    {% if erp_idx.uploads %}<div class="bp-num"><b>{{ erp_idx.ocs|length|brl(0) }}</b><span>OCs no índice · sem duplicar</span></div>{% endif %}
+    <div class="bp-dir">
+      {% if erp_idx.uploads %}<div class="bp-num"><b>{{ erp_idx.ocs|length|brl(0) }}</b><span>OCs no índice · sem duplicar</span></div>{% endif %}
+      {% if PODE.arquivos %}<form method="post" action="{{ url_for('rodar_tudo') }}" style="margin:0"><button class="bt pri rodar-tudo {{ 'pulsa' if pend }}" type="submit" data-tip="Roda TODOS os arquivos que estão aguardando (ERP primeiro, depois os canais) e recalcula tudo — suba todas as planilhas e clique aqui uma vez só">▶ Rodar o PLUTOS{% if pend %} · {{ pend|length }} aguardando{% endif %}</button></form>{% endif %}
+    </div>
   </div>
   <div class="bp-corpo bp-duas">
     <div class="card-arq">
@@ -45,6 +45,7 @@
       <form method="post" action="{{ url_for('erp_limpar') }}" id="ferp-limpar" hidden></form>
       <div class="ca-escolhido" id="erp-escolhido"></div>
       {% endif %}
+      {% if erp_idx.uploads %}<div class="ok-canto"><span class="pill-ok">ok · {{ erp_idx.uploads[-1].quando|quando }}</span></div>{% endif %}
     </div>
     <div>
       <div class="arq-sub">Export "Pedidos_Marketplace_DDMMateDDMMAAAA_HHMM" em <b>.csv</b> ou <b>.xlsx</b> — tanto faz, o app lê os dois igual. A OC é texto e é a chave de tudo; a coluna T diz o canal (sem o "MP - "); a coluna AB é o % de comissão do ERP. <b>Nunca soma duas vezes:</b> pode subir o mês inteiro de novo — OC que já existe é ignorada (ou atualizada se mudou), só as novas entram.</div>
@@ -87,6 +88,7 @@
             <button class="bt pri" type="submit" style="padding:7px 14px">Subir</button>
           </form>
           {% for x in pend_por.get(cn.chave, []) if x.tipo == 'base' %}<span class="arq-n espera-n">⏳ {{ x.nome }} · aguardando ▶ rodar</span>{% endfor %}
+          {% if r_meli %}<div class="ok-canto"><span class="pill-ok">ok · {{ r_meli.quando|quando }}</span></div>{% endif %}
           {% endif %}
         </div>
         <div class="upl-box">
@@ -101,6 +103,7 @@
             <button class="bt pri" type="submit" style="padding:7px 14px">Subir</button>
           </form>
           {% for x in pend_por.get(cn.chave, []) if x.tipo == 'rebates' %}<span class="arq-n espera-n">⏳ {{ x.nome }} · aguardando ▶ rodar</span>{% endfor %}
+          {% if mlbs_ult %}<div class="ok-canto"><span class="pill-ok">ok · {{ mlbs_ult.quando|quando }}</span></div>{% endif %}
           {% endif %}
         </div>
       </div>

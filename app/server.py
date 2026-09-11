@@ -22,7 +22,7 @@ from werkzeug.utils import secure_filename
 from motor import meli, erp
 import planilhas
 
-VERSAO = "2026-09-11c"
+VERSAO = "2026-09-11e"
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(RAIZ), "dados")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -299,8 +299,52 @@ def contexto():
         "usuario": session.get("usuario"), "PODE": {k: (papel in v) for k, v in PODE.items()},
         "IRMAOS": [{"chave": c, "rotulo": r, "url": u, "arquivo": _icone_irmao(c)} for c, r, u in IRMAOS],
         "PARAM": parametros(), "COMPS": competencias(), "comp": comp_atual(), "HOJE_COMP": agora().strftime("%Y-%m"),
-        "ULT": ultima_rodada_info(),
+        "ULT": ultima_rodada_info(), "ATUALIZADO": ultima_atualizacao(), "OK_QUANDO": ok_quando_pagina(),
     }
+
+
+def ultima_atualizacao():
+    """A última vez que ALGUMA coisa entrou no PLUTOS (ERP, canais, Planilha 2, cadastros, comissões)."""
+    if not session.get("usuario"):
+        return None
+    ts = []
+    u = ultima_rodada_info()
+    if u:
+        ts.append(u["quando"])
+    ts += [x["quando"] for x in erp_ler()["uploads"]]
+    ts += [x["quando"] for x in mlbs_ler()["uploads"]]
+    cad = descricoes_ler()
+    ts += [v["quando"] for k, v in cad.items() if isinstance(v, dict) and k in ("anymarket", "custos") and v.get("quando")]
+    p = parametros()
+    if p.get("comissoes_quando"):
+        ts.append(p["comissoes_quando"])
+    return max(ts) if ts else None
+
+
+def ok_quando_pagina():
+    """O 'ok · data' de cada aba: quando o dado que a aba mostra entrou."""
+    if not session.get("usuario") or not request:
+        return None
+    ep = request.endpoint or ""
+    if ep in ("mlbs", "custo_coletas", "coletas"):
+        ups = mlbs_ler()["uploads"]
+        return ups[-1]["quando"] if ups else None
+    if ep in ("canal", "linha", "faltante", "pedidos", "painel"):
+        chave = request.view_args.get("chave", "meli") if request.view_args else "meli"
+        r = rodada(chave, comp_atual())
+        if r:
+            return r["quando"]
+        u = ultima_rodada_info()
+        return u["quando"] if u else None
+    if ep == "parametros_tela":
+        cad = descricoes_ler()
+        ts = [v["quando"] for k, v in cad.items() if isinstance(v, dict) and k in ("anymarket", "custos") and v.get("quando")]
+        if parametros().get("comissoes_quando"):
+            ts.append(parametros()["comissoes_quando"])
+        return max(ts) if ts else None
+    if ep == "arquivos":
+        return ultima_atualizacao()
+    return None
 
 
 def _icone_irmao(chave):
@@ -405,6 +449,36 @@ def resumo_meli_gravar(d):
 
 RESUMO_CAMPOS = ("pedido_canal", "data", "competencia", "sku", "anuncio", "tipo", "qtd", "valor_prod", "frete",
                  "frete_coletas", "cupom_canal", "cupom_seller", "valor_meli", "pct_bruta", "com_bruta", "rebate_bi", "com_liq")
+
+
+def _tabela_leve(f, nome: str):
+    """Lê uma planilha grande sem pandas (o Anymarket tem 244 colunas × 10 mil
+    linhas — em pandas estoura a memória do Render). Devolve (cabeçalho,
+    iterador de linhas, função para fechar)."""
+    import csv, io, tempfile
+    if nome.lower().endswith((".csv", ".txt")):
+        raw = f.read()
+        txt = raw.decode("utf-8-sig") if raw[:3] == b"\xef\xbb\xbf" else raw.decode("latin-1")
+        sep = ";" if txt[:2000].count(";") > txt[:2000].count("\t") else "\t"
+        if txt[:2000].count(",") > txt[:2000].count(sep):
+            sep = ","
+        rd = csv.reader(io.StringIO(txt), delimiter=sep)
+        cab = next(rd)
+        return cab, rd, (lambda: None)
+    import openpyxl
+    tmp = tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False)
+    f.save(tmp.name)
+    wb = openpyxl.load_workbook(tmp.name, read_only=True, data_only=True)
+    ws = wb.worksheets[0]
+    it = ws.iter_rows(values_only=True)
+    cab = [("" if c is None else str(c)) for c in next(it)]
+    def fechar():
+        wb.close()
+        try:
+            os.remove(tmp.name)
+        except OSError:
+            pass
+    return cab, it, fechar
 
 
 def descricao_de(sku, cad=None) -> str:
@@ -1177,14 +1251,12 @@ def parametros_tela():
             if not f or not f.filename:
                 flash("Escolha a planilha de cadastro (SKU · Descrição).")
                 return redirect(url_for("parametros_tela"))
-            import pandas as pd
             try:
                 nome = secure_filename(f.filename)
-                if nome.lower().endswith(".csv"):
-                    d = pd.read_csv(f, sep=None, engine="python", dtype=str, encoding="latin-1").fillna("")
-                else:
-                    d = pd.read_excel(f, dtype=str).fillna("")
-                cols = {unidecode_lower(c).replace(" ", ""): c for c in d.columns}
+                cabec, linhas_iter, fechar = _tabela_leve(f, nome)
+                cols = {}
+                for i, c in enumerate(cabec):  # coluna repetida (ex.: dois "CUSTO TOTAL"): vale a primeira
+                    cols.setdefault(unidecode_lower(c).replace(" ", ""), i)
                 def col(*cands):  # prioridade = ordem dos candidatos, não a ordem do arquivo
                     return next((cols[k] for k in cands if k in cols), None)
                 csku = col("codigofornecedor/skuinterno", "skuinterno", "sku", "modelo", "codigo", "cod", "produto", "codigoproduto", "referencia")
@@ -1193,32 +1265,36 @@ def parametros_tela():
                 ccub = col("cubagem", "m3", "cubagemm3")
                 ccus = col("custototal")  # "CUSTO" do Anymarket é preço, não custo
                 ccat = col("categoria")
-                if acao == "custos_arquivo" and not ccus:
+                if acao == "custos_arquivo" and ccus is None:
                     raise ValueError("essa não é a tabela de Custos MUL (falta a coluna CUSTO TOTAL) — suba-a no bloco Cadastro de SKUs")
-                if acao == "descricoes_arquivo" and ccus:
+                if acao == "descricoes_arquivo" and ccus is not None:
                     raise ValueError("essa é a tabela de Custos MUL — suba-a no bloco Tabela de Custos, ao lado")
-                if not csku or not (cdes or cpeso):
+                if csku is None or (cdes is None and cpeso is None):
                     raise ValueError("preciso de uma coluna SKU (ou Código) e uma Descrição (ou Nome) e/ou Peso")
+                def cel(row, i):
+                    v = row[i] if i is not None and i < len(row) else None
+                    return "" if v is None else str(v).strip()
                 skus = {}
-                for _, r in d.iterrows():
-                    k = str(r[csku]).strip()
+                for row in linhas_iter:
+                    k = cel(row, csku)
                     if not k:
                         continue
                     e = {}
-                    if cdes and str(r[cdes]).strip():  # CustoProduto traz a descrição curta do ERP; a bonita vem do Anymarket
-                        e["descricao_curta" if ccus else "descricao"] = str(r[cdes]).strip()
-                    if ccat and str(r[ccat]).strip():
-                        e["categoria"] = str(r[ccat]).strip()
+                    if cdes is not None and cel(row, cdes):  # CustoProduto traz a descrição curta do ERP; a bonita vem do Anymarket
+                        e["descricao_curta" if ccus is not None else "descricao"] = cel(row, cdes)
+                    if ccat is not None and cel(row, ccat):
+                        e["categoria"] = cel(row, ccat)
                     # PESO OFICIAL = o do CustoProduto (arquivo com CUSTO TOTAL). O peso do
                     # Anymarket fica guardado à parte (peso_any) e só vale se não houver o oficial.
-                    for cc, kk in ((cpeso, "peso" if ccus else "peso_any"), (ccub, "cubagem"), (ccus, "custo")):
-                        if cc and str(r[cc]).strip():
+                    for cc, kk in ((cpeso, "peso" if ccus is not None else "peso_any"), (ccub, "cubagem"), (ccus, "custo")):
+                        if cc is not None and cel(row, cc):
                             try:
-                                e[kk] = float(str(r[cc]).replace("kg", "").replace(",", ".").strip())
+                                e[kk] = float(cel(row, cc).replace("kg", "").replace(",", ".").strip())
                             except ValueError:
                                 pass
                     if e:
                         skus[k] = e
+                fechar()
                 cad = descricoes_ler()
                 antes = len(cad["skus"])
                 for k, e in skus.items():
@@ -1374,10 +1450,12 @@ def coletas():
     for cp in comps:
         pc = [p for p in col if p["competencia"] == cp]
         tm = [p for k, p in todos.items() if p["competencia"] == cp and unidecode_lower(st.get(k, ("", ""))[0] or "pago") == "pago"]
+        venda_meli = _soma(tm, "valor_prod")
         por_comp.append({"comp": cp, "pedidos": len(pc), "meli": len(tm), "share": (len(pc) / len(tm) if tm else 0),
-                         "venda": _soma(pc, "valor_prod"), "frete": _soma(pc, "frete"), "coletas": _soma(pc, "frete_coletas"),
+                         "venda": _soma(pc, "valor_prod"), "venda_meli": venda_meli,
+                         "share_venda": (_soma(pc, "valor_prod") / venda_meli if venda_meli else 0), "frete": _soma(pc, "frete"), "coletas": _soma(pc, "frete_coletas"),
                          "cupom": _soma(pc, "cupom_canal"), "rebate_com": _soma(pc, "rebate_bi"), "com_liq": _soma(pc, "com_liq")})
-    atual = next((x for x in por_comp if x["comp"] == comp), None) or {"comp": comp, "pedidos": 0, "meli": 0, "share": 0, "venda": 0, "frete": 0, "coletas": 0, "cupom": 0, "rebate_com": 0, "com_liq": 0}
+    atual = next((x for x in por_comp if x["comp"] == comp), None) or {"comp": comp, "pedidos": 0, "meli": 0, "share": 0, "venda": 0, "venda_meli": 0, "share_venda": 0, "frete": 0, "coletas": 0, "cupom": 0, "rebate_com": 0, "com_liq": 0}
     desc = descricoes_ler()["skus"]
     por_mlb: dict[str, dict] = {}
     for p in col:
