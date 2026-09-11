@@ -245,3 +245,45 @@ table.cols-mlb th:nth-child(4),table.cols-cc th:nth-child(4),table.cols-coletas 
 table.cols-mlb th:nth-child(5){width:92px} table.cols-mlb th:nth-child(6){width:78px} table.cols-mlb th:nth-child(7){width:104px}
 table.cols-cc th:nth-child(5){width:104px} table.cols-cc th:nth-child(6){width:92px} table.cols-cc th:nth-child(7){width:78px} table.cols-cc th:nth-child(8){width:74px} table.cols-cc th:nth-child(9){width:98px}
 table.cols-coletas th:nth-child(5){width:74px} table.cols-coletas th:nth-child(6){width:104px} table.cols-coletas th:nth-child(7){width:110px} table.cols-coletas th:nth-child(8){width:100px} table.cols-coletas th:nth-child(9){width:100px} table.cols-coletas th:nth-child(10){width:118px}
+/* Arquivo principal: cartão de arquivos (como no Tropa) à esquerda, explicação e distribuição à direita */
+.bp-duas{display:grid;grid-template-columns:360px 1fr;gap:18px;align-items:start}
+@media (max-width:1100px){.bp-duas{grid-template-columns:1fr}}
+.card-arq{background:var(--sup);border:1px solid var(--linha2);border-radius:2px;padding:14px 16px;box-shadow:0 1px 2px rgba(19,19,21,.05)}
+.ca-topo{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:10px}
+.ca-tit{font:700 17px Archivo,sans-serif;color:var(--tinta)} .ca-sub{font-size:12.5px;color:var(--tinta3);margin-top:2px}
+.tag.ca-st{font-size:10px;padding:4px 9px} .tag.ca-st.ok{background:#15794F;color:#fff} .tag.ca-st.pend{background:var(--crit);color:#fff}
+.ca-lista{display:flex;flex-direction:column;gap:6px}
+.ca-item{position:relative;border:1px solid var(--linha);border-radius:2px;padding:9px 78px 9px 11px;background:var(--sup2)}
+.ca-item.vale{background:#EEF6F1;border-color:#BFDCCB}
+.ca-nome{font:600 12.5px "IBM Plex Mono",monospace;color:var(--tinta);word-break:break-all}
+.ca-item:not(.vale) .ca-nome{font-weight:500;color:var(--tinta2)}
+.ca-meta{font:500 11.5px "IBM Plex Mono",monospace;color:var(--tinta3);margin-top:3px}
+.ca-rot{font:700 9.5px Archivo,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:var(--tinta3);margin-top:4px}
+.ca-item.vale .ca-rot{color:#15794F}
+.ca-acoes{position:absolute;right:9px;top:9px;display:flex;gap:4px} .ca-acoes form{margin:0} .ca-acoes .mini{padding:4px 8px;text-decoration:none;line-height:1.2}
+.ca-vazio{font-size:12.5px;color:var(--tinta3);padding:8px 0}
+.ca-pe{display:flex;align-items:center;gap:8px;margin-top:12px}
+.ca-excluir{margin-right:auto;color:var(--crit);font:600 12.5px Archivo,sans-serif;text-decoration:underline}
+.ca-pe span{margin-right:auto}
+.ca-incluir{background:#0B0B0C;color:#fff;border-color:#0B0B0C;padding:8px 14px} .ca-incluir:hover{background:#2C2C2E}
+.ca-ok{padding:8px 18px;font-weight:700} .ca-ok:disabled{opacity:.45;cursor:default}
+.ca-escolhido{font-size:12px;color:var(--ouro3);margin-top:6px;min-height:14px}
+/* Linha a linha: a Descrição (depois do SKU) ganha o dobro da largura e quebra linha */
+table.linha-base th.col-descricao{width:350px}
+table.linha-base td.col-descricao{white-space:normal;line-height:1.25;font-size:12px}
+/* arquivos aguardando o ▶ Rodar */
+.ca-item.espera{background:#FFF9E8;border-color:rgba(212,160,23,.45);padding-right:11px} .ca-item.espera .ca-rot{color:var(--ouro3)}
+.espera-n{color:var(--ouro3);font-weight:600}
+.ca-rodar{margin-top:8px} .ca-rodar .bt{width:100%}
+.arq-top-dir{display:flex;align-items:center;gap:8px}
+.rodar-tudo.pulsa{box-shadow:0 0 0 3px rgba(242,201,76,.35)}
+/* Parâmetros: cadastro de SKUs e tabela de custos lado a lado */
+.dois-cad{display:grid;grid-template-columns:1fr 1fr;gap:12px} @media (max-width:1100px){.dois-cad{grid-template-columns:1fr}}
+.cad-st{margin-top:8px;font:500 12px "IBM Plex Mono",monospace;padding:7px 10px;border-radius:2px}
+.cad-st.ok{background:#EEF6F1;color:#15794F} .cad-st.pend{background:#FFF6F5;color:var(--crit)}
+/* linha "Última rodada" + botão de exportar à direita */
+.linha-ult{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+.linha-ult .ult-base{margin:0}
+.bt-excel{background:#0B0B0C!important;color:var(--ouro2)!important;border:1px solid #0B0B0C;padding:8px 18px;font:700 12px Archivo,sans-serif;letter-spacing:.14em;text-transform:uppercase;text-decoration:none;border-radius:2px}
+.bt-excel:hover{background:#2C2C2E!important}
+.kpis.tres-com{grid-template-columns:repeat(3,minmax(0,1fr))}

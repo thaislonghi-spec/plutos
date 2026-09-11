@@ -306,7 +306,15 @@ def resumo(linhas: list[dict]) -> dict:
         for k in ("venda", "cupom", "faltante", "comissao", "total"):
             d[k] = round(d[k], 2)
     venda = s("valor_prod")
+    com = [l for l in linhas if l.get("sis_rs") is not None]  # pedidos com par no ERP
+    com_sis = round(sum(l["sis_rs"] for l in com), 2)
+    com_real = round(sum((l["tarifa"] or 0.0) for l in com), 2)
+    venda_com = round(sum(l["valor_prod"] for l in com), 2)
     return {
+        "com_pedidos": len(com), "com_sistema": com_sis, "com_real": com_real, "com_venda": venda_com,
+        "com_sistema_pct": (round(100 * com_sis / venda_com, 2) if venda_com else 0.0),
+        "com_real_pct": (round(100 * com_real / venda_com, 2) if venda_com else 0.0),
+        "com_dif": round(com_sis - com_real, 2),
         "pedidos": n, "venda": venda, "tarifa": s("tarifa"), "frete": s("frete"),
         "cupom_meli": s("cupom_meli"), "cupom_seller": s("cupom_seller"),
         "faltante": s("faltante"), "rebate_rs": s("rebate_rs"), "rebate_comissao": s("rebate_comissao"),

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block acoes_topo %}
-{% if PODE.arquivos %}<form method="post" action="{{ url_for('rodar_tudo') }}" style="margin:0"><button class="janela on" type="submit" style="cursor:pointer" data-tip="Recalcula tudo com os arquivos, tabelas e boxes atuais — use depois de atualizar qualquer coisa">▶ Rodar o PLUTOS</button></form>{% endif %}
+{% if PODE.arquivos %}<form method="post" action="{{ url_for('rodar_tudo') }}" style="margin:0"><button class="janela on rodar-tudo {{ 'pulsa' if pend }}" type="submit" style="cursor:pointer" data-tip="Roda TODOS os arquivos que estão aguardando (ERP primeiro, depois os canais) e recalcula tudo — suba todas as planilhas e clique aqui uma vez só">▶ Rodar o PLUTOS{% if pend %} · {{ pend|length }} aguardando{% endif %}</button></form>{% endif %}
 {% endblock %}
 {% block conteudo %}
 <div class="box-principal">
@@ -8,16 +8,51 @@
     <div><span class="bp-eyebrow">Arquivo principal</span><h2 class="bp-tit">ERP · Pedidos Marketplace</h2><div class="bp-sub">um arquivo do mês com as vendas de TODOS os canais — é dele que nasce a base de cada box</div></div>
     {% if erp_idx.uploads %}<div class="bp-num"><b>{{ erp_idx.ocs|length|brl(0) }}</b><span>OCs no índice · sem duplicar</span></div>{% endif %}
   </div>
-  <div class="bp-corpo">
+  <div class="bp-corpo bp-duas">
+    <div class="card-arq">
+      <div class="ca-topo"><div><b class="ca-tit">Pedidos Marketplace</b><div class="ca-sub">export de vendas do ERP</div></div>
+        {% if erp_idx.uploads %}<span class="tag ca-st ok">Recebido</span>{% else %}<span class="tag ca-st pend">Pendente</span>{% endif %}</div>
+      <div class="ca-lista">
+        {% for x in pend_por.get('erp', [])|reverse %}
+        <div class="ca-item espera">
+          <div class="ca-nome">{{ x.nome }}</div>
+          <div class="ca-meta">{{ x.quando|quando }} · {{ x.quem }}</div>
+          <div class="ca-rot">aguardando ▶ rodar</div>
+        </div>
+        {% endfor %}
+        {% for u in erp_idx.uploads|reverse %}
+        <div class="ca-item {{ 'vale' if loop.first }}">
+          <div class="ca-nome">{{ u.nome }}</div>
+          <div class="ca-meta">{{ ((u.bytes or 0) / 1048576)|brl(1) }} MB · {{ u.quando|quando }} · {{ u.linhas }} pedidos · {{ u.novas }} novas</div>
+          <div class="ca-rot">{% if loop.first %}mais recente · no índice{% else %}anterior · no índice{% endif %}</div>
+          <div class="ca-acoes">
+            <a class="mini" href="{{ url_for('erp_baixar', quando=u.quando) }}" data-tip="Baixar este arquivo">⇩</a>
+            {% if PODE.arquivos %}<form method="post" action="{{ url_for('erp_remover', quando=u.quando) }}"><button class="mini" type="submit" data-tip="Tirar da lista (as OCs já lidas ficam)">✕</button></form>{% endif %}
+          </div>
+        </div>
+        {% else %}
+        <div class="ca-vazio">Nenhum export ainda. Inclua o arquivo e clique OK.</div>
+        {% endfor %}
+      </div>
+      {% if PODE.arquivos %}
+      <form method="post" action="{{ url_for('subir_erp') }}" enctype="multipart/form-data" class="ca-pe" id="ferp">
+        {% if erp_idx.uploads %}<a href="#" class="ca-excluir" id="erp-limpar">excluir todos</a>{% else %}<span></span>{% endif %}
+        <input type="file" name="arquivo" accept=".xlsx,.xls,.csv,.txt" id="erp-arq" hidden required>
+        <button type="button" class="bt sec ca-incluir" id="erp-incluir">Incluir arquivo</button>
+        <button type="submit" class="bt pri ca-ok" id="erp-ok" disabled>OK</button>
+      </form>
+      {% if pend_por.get('erp') %}<form method="post" action="{{ url_for('rodar_box', chave='erp') }}" class="ca-rodar"><button class="bt sec" type="submit" data-tip="Roda só o ERP agora, sem esperar o ▶ Rodar o PLUTOS">▶ Rodar ERP ({{ pend_por['erp']|length }})</button></form>{% endif %}
+      <form method="post" action="{{ url_for('erp_limpar') }}" id="ferp-limpar" hidden></form>
+      <div class="ca-escolhido" id="erp-escolhido"></div>
+      {% endif %}
+    </div>
     <div>
       <div class="arq-sub">Export "Pedidos_Marketplace_DDMMateDDMMAAAA_HHMM" em <b>.csv</b> ou <b>.xlsx</b> — tanto faz, o app lê os dois igual. A OC é texto e é a chave de tudo; a coluna T diz o canal (sem o "MP - "); a coluna AB é o % de comissão do ERP. <b>Nunca soma duas vezes:</b> pode subir o mês inteiro de novo — OC que já existe é ignorada (ou atualizada se mudou), só as novas entram.</div>
       {% if erp_idx.uploads %}{% set u = erp_idx.uploads[-1] %}<span class="arq-n">último: {{ u.nome }} · {{ u.quando|quando }} por {{ u.quem }} · {{ u.linhas }} pedidos de {{ u.de|dia }} a {{ u.ate|dia }} · <b>{{ u.novas }} novas</b> · {{ u.atualizadas or 0 }} atualizadas · {{ u.iguais or 0 }} iguais (ignoradas){% if u.sem_box %} · <span class="tag mk-aten">sem box: {% for k, v in u.sem_box.items() %}{{ k }} ({{ v }}){% if not loop.last %}, {% endif %}{% endfor %}</span>{% endif %}</span>{% endif %}
-      {% if PODE.arquivos %}
-      <form method="post" action="{{ url_for('subir_erp') }}" enctype="multipart/form-data" class="upl">
-        <input type="file" name="arquivo" accept=".xlsx,.xls,.csv,.txt" required>
-        <button class="bt pri" type="submit" style="padding:7px 14px">Subir o ERP e distribuir pelos boxes</button>
-      </form>
-      {% endif %}
+    </div>
+  </div>
+  <div class="bp-corpo" style="padding-top:0">
+    <div>
       {% if erp_res %}
       <div class="rol fit" style="margin-top:10px"><table data-sem-ordenar>
         <thead><tr><th>Box</th><th>Canal no ERP</th><th class="n">Pedidos</th><th class="n">Venda (produtos)</th><th class="n">Frete</th><th class="n">Comissão ERP R$</th></tr></thead>
@@ -38,7 +73,7 @@
   {% for cn in CANAIS %}
     {% if cn.ativo %}
     <div class="arq arq-largo">
-      <div class="arq-top"><b>{{ loop.index }} · {{ cn.nome|upper }}</b>{% if r_meli %}<span class="ok">rodado {{ comp|mesano }}</span>{% endif %}</div>
+      <div class="arq-top"><b>{{ loop.index }} · {{ cn.nome|upper }}</b><span class="arq-top-dir">{% if pend_por.get(cn.chave) and PODE.arquivos %}<form method="post" action="{{ url_for('rodar_box', chave=cn.chave) }}" style="margin:0"><button class="bt pri" type="submit" style="padding:5px 11px" data-tip="Roda só este box agora">▶ Rodar {{ cn.nome }} ({{ pend_por[cn.chave]|length }})</button></form>{% endif %}{% if r_meli %}<span class="ok">rodado {{ comp|mesano }}</span>{% endif %}</span></div>
       <div class="dois-upl">
         <div class="upl-box">
           <div class="upl-eyebrow">Planilha 1 · Completo</div>
@@ -49,8 +84,9 @@
           {% if PODE.arquivos %}
           <form method="post" action="{{ url_for('subir', chave=cn.chave) }}" enctype="multipart/form-data" class="upl">
             <input type="hidden" name="tipo" value="base"><input type="file" name="arquivo" accept=".xlsx,.xls,.csv" required>
-            <button class="bt pri" type="submit" style="padding:7px 14px">Subir e rodar</button>
+            <button class="bt pri" type="submit" style="padding:7px 14px">Subir</button>
           </form>
+          {% for x in pend_por.get(cn.chave, []) if x.tipo == 'base' %}<span class="arq-n espera-n">⏳ {{ x.nome }} · aguardando ▶ rodar</span>{% endfor %}
           {% endif %}
         </div>
         <div class="upl-box">
@@ -62,8 +98,9 @@
           {% if PODE.arquivos %}
           <form method="post" action="{{ url_for('subir', chave=cn.chave) }}" enctype="multipart/form-data" class="upl">
             <input type="hidden" name="tipo" value="rebates"><input type="file" name="arquivo" accept=".xlsx,.xls" required>
-            <button class="bt pri" type="submit" style="padding:7px 14px">Subir a Planilha 2</button>
+            <button class="bt pri" type="submit" style="padding:7px 14px">Subir</button>
           </form>
+          {% for x in pend_por.get(cn.chave, []) if x.tipo == 'rebates' %}<span class="arq-n espera-n">⏳ {{ x.nome }} · aguardando ▶ rodar</span>{% endfor %}
           {% endif %}
         </div>
       </div>
@@ -126,4 +163,14 @@
   </div>
   <div class="nota">O JSON é o "Enviar para…" dos outros apps: <code>/api/rebates/{{ comp }}.json</code> — rebate por OC nas três formas. Protegido por token (variável PLUTOS_TOKEN no Render).</div>
 </div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function(){
+  var inc=document.getElementById('erp-incluir'),arq=document.getElementById('erp-arq'),ok=document.getElementById('erp-ok'),esc=document.getElementById('erp-escolhido'),lim=document.getElementById('erp-limpar');
+  if(inc){inc.addEventListener('click',function(){arq.click();});
+    arq.addEventListener('change',function(){if(arq.files.length){ok.disabled=false;esc.textContent='Pronto para subir: '+arq.files[0].name+' — clique OK';}});}
+  if(lim){lim.addEventListener('click',function(ev){ev.preventDefault();if(window.confirm('Excluir TODOS os arquivos do ERP e zerar o índice de OCs? As bases Linha a linha ficam vazias até subir de novo.'))document.getElementById('ferp-limpar').submit();});}
+})();
+</script>
 {% endblock %}

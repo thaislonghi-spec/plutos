@@ -1,10 +1,6 @@
 {% extends "base.html" %}
-{% block acoes_topo %}
-{% if PODE.exportar %}
-<div class="janelas baixar-topo">
-  <a class="janela baixar" id="bexp" href="{{ url_for('baixar_custo_coletas', q=q, tipo=tipo) }}" data-tip="Baixa a lista do jeito que está filtrada na tela">↓ Exportar lista</a>
-</div>
-{% endif %}
+{% block acoes_ult %}
+{% if PODE.exportar %}<a class="bt-excel" id="bexp2" href="{{ url_for('baixar_custo_coletas', q=q, tipo=tipo) }}" data-tip="Baixa a lista do jeito que está filtrada na tela (busca + tipo)">↓ EXCEL</a>{% endif %}
 {% endblock %}
 {% block conteudo %}
 <div class="kpis quatro">

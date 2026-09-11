@@ -273,7 +273,7 @@ def coletas_xlsx(pedidos: list[dict], desc: dict, comp: str) -> io.BytesIO:
     wb.remove(wb.active)
     cab = ["Pedido", "Data", "MLB", "SKU", "Descrição", "Tipo de anúncio", "Qtd", "Valor produtos", "Frete pedido",
            "Frete Coletas", "Cupom canal", "Comissão bruta", "Comissão líquida", "Rebate comissão (BI)"]
-    ls = [[p["pedido_mkt"], datetime.fromisoformat(p["data"]), p["anuncio"], p["sku"], (desc.get(p["sku"]) or {}).get("descricao") or "",
+    ls = [[p["pedido_mkt"], datetime.fromisoformat(p["data"]), p["anuncio"], p["sku"], ((desc.get(p["sku"]) or {}).get("descricao") or (desc.get(p["sku"]) or {}).get("descricao_curta") or ""),
            p["tipo"], p["qtd"], p["valor_prod"], p["frete"], p["frete_coletas"], p["cupom_canal"], p["com_bruta"], p["com_liq"], p["rebate_bi"]]
           for p in sorted(pedidos, key=lambda p: p["data"])]
     ws = _aba(wb, f"Coletas_{comp.replace('-', '')}", cab, ls, [22, 12, 18, 16, 40, 14, 6, 14, 13, 13, 12, 14, 14, 16],

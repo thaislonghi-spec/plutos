@@ -52,14 +52,27 @@
 {% endif %}
 
 {% if PODE.parametros %}
+<div class="dois-cad">
 <div class="bloco">
   <h2>Cadastro de SKUs (descrição)</h2>
   <form method="post" enctype="multipart/form-data" class="upl" style="margin:0">
     <input type="hidden" name="acao" value="descricoes_arquivo">
     <input type="file" name="arquivo" accept=".xlsx,.xls,.csv" required>
-    <button class="bt sec" type="submit">Subir / atualizar o cadastro</button>
-    <span class="nota" style="margin:0">colunas: <b>SKU</b> (ou Código) · <b>Descrição</b> (ou Nome). Alimenta a coluna Descrição da Lista de MLB's e vale para todos os canais. {% if DESC.quando %}Hoje: {{ DESC.skus|length }} SKUs · {{ DESC.arquivo }} · {{ DESC.quando|quando }} por {{ DESC.quem }}.{% else %}Ainda sem cadastro.{% endif %}</span>
+    <button class="bt sec" type="submit">Subir / atualizar</button>
   </form>
+  <div class="nota">Export do Anymarket "Cadastros … Skus x Descrição": chave = <b>CÓDIGO FORNECEDOR / SKU INTERNO</b>, descrição = <b>TÍTULO SKU</b>. Vale para todos os canais.</div>
+  {% if DESC.anymarket %}<div class="cad-st ok"><b>Recebido</b> · {{ DESC.anymarket.n }} SKUs · {{ DESC.anymarket.arquivo }} · {{ DESC.anymarket.quando|quando }} por {{ DESC.anymarket.quem }}</div>{% else %}<div class="cad-st pend">Ainda sem cadastro</div>{% endif %}
+</div>
+<div class="bloco">
+  <h2>Tabela de Custos MUL (peso oficial)</h2>
+  <form method="post" enctype="multipart/form-data" class="upl" style="margin:0">
+    <input type="hidden" name="acao" value="custos_arquivo">
+    <input type="file" name="arquivo" accept=".xlsx,.xls,.csv" required>
+    <button class="bt sec" type="submit">Subir / atualizar</button>
+  </form>
+  <div class="nota">Planilha "CustoProduto_MUL…": <b>MODELO · Descricao · Peso · Cubagem · CUSTO TOTAL</b>. O <b>peso daqui é o oficial</b> (R$/kg do Coletas); o do Anymarket só vale para SKU sem peso aqui.</div>
+  {% if DESC.custos %}<div class="cad-st ok"><b>Recebido</b> · {{ DESC.custos.n }} SKUs · {{ DESC.custos.arquivo }} · {{ DESC.custos.quando|quando }} por {{ DESC.custos.quem }}</div>{% else %}<div class="cad-st pend">Ainda sem tabela de custos</div>{% endif %}
+</div>
 </div>
 {% endif %}
 

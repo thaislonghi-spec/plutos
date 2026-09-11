@@ -22,7 +22,7 @@ from werkzeug.utils import secure_filename
 from motor import meli, erp
 import planilhas
 
-VERSAO = "2026-09-11a"
+VERSAO = "2026-09-11b"
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(RAIZ), "dados")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -407,6 +407,13 @@ RESUMO_CAMPOS = ("pedido_canal", "data", "competencia", "sku", "anuncio", "tipo"
                  "frete_coletas", "cupom_canal", "cupom_seller", "valor_meli", "pct_bruta", "com_bruta", "rebate_bi", "com_liq")
 
 
+def descricao_de(sku, cad=None) -> str:
+    """Descrição do SKU pelo cadastro (Anymarket primeiro, CustoProduto se não houver)."""
+    cad = cad if cad is not None else descricoes_ler()["skus"]
+    e = cad.get(str(sku or "").strip()) or cad.get(str(sku or "").strip().upper()) or {}
+    return e.get("descricao") or e.get("descricao_curta") or ""
+
+
 def descricoes_ler() -> dict:
     """SKU → descrição (cadastro subido em Parâmetros). Vale para todos os canais."""
     return _json_ler(pasta("cadastro", "descricoes.json"), {"skus": {}, "quando": None, "quem": None, "arquivo": None})
@@ -569,7 +576,7 @@ LINHA_COLS = {
     "meli": [
         ("Data", "data", "d"), ("OC / Pedido mkt", "pedido_mkt", "t"), ("Pedido canal", "pedido_canal", "t"),
         ("ID mkt (Any)", "id_mkt", "t"), ("Pedido Any", "pedido_any", "t"), ("Conta", "conta", "t"),
-        ("Status", "status", "t"), ("SKU", "sku", "t"), ("Anúncio", "anuncio", "t"), ("Tipo anúncio", "tipo", "t"),
+        ("Status", "status", "t"), ("SKU", "sku", "t"), ("Descrição", "descricao", "t"), ("Anúncio", "anuncio", "t"), ("Tipo anúncio", "tipo", "t"),
         ("Valor produtos", "valor_prod", "n"), ("Tarifa venda", "tarifa", "n"), ("Frete pedido", "frete", "n"),
         ("Cupom seller", "cupom_seller", "n"), ("Cupom Meli", "cupom_meli", "n"),
         ("% comissão cobrada", "pct_comissao", "p"), ("% comissão sistema", "sis_pct", "p"),
@@ -604,10 +611,12 @@ def linha(chave):
     idx = erp_ler()["ocs"]
     if r:
         cols = LINHA_COLS.get(chave, []) + ERP_COLS
+        cad = descricoes_ler()["skus"]
         linhas = []
         for l in r["linhas"]:
             e = idx.get(l["pedido_mkt"]) or idx.get(l["pedido_canal"]) or {}
             m = dict(l)
+            m["descricao"] = descricao_de(l.get("sku"), cad)
             for _, k, _ in ERP_COLS:
                 m[k] = e.get(k[4:]) if e else None
             linhas.append(m)
@@ -786,20 +795,136 @@ def arquivos():
                          "sistema": bool(r.get("sistema"))})
     hist.sort(key=lambda h: h["quando"], reverse=True)
     idx = erp_ler()
+    for u in idx["uploads"]:
+        if not u.get("bytes"):
+            try:
+                u["bytes"] = os.path.getsize(u["caminho"])
+            except OSError:
+                u["bytes"] = 0
     erp_res = erp.resumo_por_box([l for l in idx["ocs"].values() if l["competencia"] == comp])
     nomes_erp = sorted({l["canal_nome"] for l in idx["ocs"].values()})
     m = mapa_erp_box()
     sem_box = [n for n in nomes_erp if m.get(n, "outros") == "outros"]
     ml = mlbs_ler()
-    return render_template("arquivos.html", hist=hist, r_meli=rodada("meli", comp), erp_idx=idx, erp_res=erp_res,
+    pend = pend_ler()
+    pend_por = {}
+    for x in pend:
+        pend_por.setdefault(x["chave"], []).append(x)
+    return render_template("arquivos.html", pend=pend, pend_por=pend_por, hist=hist, r_meli=rodada("meli", comp), erp_idx=idx, erp_res=erp_res,
                            nomes_erp=nomes_erp, sem_box=sem_box, mapa_erp=m,
                            mlbs_ult=(ml["uploads"][-1] if ml["uploads"] else None), mlbs_total=len(ml["mlbs"]))
+
+
+def processar_meli(tipo: str, destino: str, nome: str, quem: str) -> str:
+    """Lê um arquivo do box Mercado Livre já guardado no disco e roda o box.
+    tipo = base (Planilha 1 · Completo) · rebates (Planilha 2 · Resumo) · sistema."""
+    if tipo == "rebates":
+        df, diag = meli.ler_resumo_rebates(destino)
+        novos = meli.lista_mlbs(df)
+        d = mlbs_ler()
+        n_novos = n_mud = 0
+        for k, v in novos.items():
+            a = d["mlbs"].get(k)
+            if a is None:
+                n_novos += 1
+                d["mlbs"][k] = v
+            else:
+                if a["tipo"] != v["tipo"] or a["sku"] != v["sku"]:
+                    n_mud += 1
+                v["primeira"] = min(a["primeira"], v["primeira"])
+                v["pedidos"] = a["pedidos"] + v["pedidos"] if v["primeira"] > a["ultima"] else max(a["pedidos"], v["pedidos"])
+                d["mlbs"][k] = v
+        d["uploads"].append({"nome": nome, "caminho": destino, "quando": agora().isoformat(),
+                             "quem": quem, "diag": diag})
+        d["uploads"] = d["uploads"][-30:]
+        mlbs_gravar(d)
+        rp = resumo_meli_ler()
+        for r_ in df.itertuples(index=False):
+            rp["pedidos"][r_.pedido_mkt] = {k: (str(getattr(r_, k)) if k == "data" else getattr(r_, k)) for k in RESUMO_CAMPOS}
+            for k in ("qtd", "valor_prod", "frete", "frete_coletas", "cupom_canal", "cupom_seller", "valor_meli", "pct_bruta", "com_bruta", "rebate_bi", "com_liq"):
+                rp["pedidos"][r_.pedido_mkt][k] = float(rp["pedidos"][r_.pedido_mkt][k] or 0)
+        resumo_meli_gravar(rp)
+        return (f"Resumo de Rebates lido: {diag['linhas']} pedidos de {f_dia(diag['de'])} a {f_dia(diag['ate'])} · "
+                f"{diag['mlbs']} MLB's no arquivo — {n_novos} novos · {n_mud} mudaram de tipo/SKU. "
+                f"Lista de MLB's: {len(d['mlbs'])} anúncios.")
+    if tipo == "sistema":
+        comp = comp_atual()
+        r = rodada("meli", comp)
+        if not r:
+            return f"Suba primeiro a Tabela Geral de {f_mesano(comp)}; a comissão do sistema entra em cima dela."
+        sis, diag = meli.ler_comissao_sistema(destino)
+        r["sistema"] = {"nome": nome, "caminho": destino, "quando": agora().isoformat(), "diag": diag}
+        _json_gravar(rodada_caminho("meli", comp), r)
+        r = recalcular_meli(comp)
+        return (f"Comissão do sistema lida ({diag['linhas']} pedidos, {diag['modo']}). "
+                f"Rebate de comissão: R$ {f_brl(r['resumo']['rebate_comissao'])}.")
+    df, diag = meli.ler_tabela_geral(destino)
+    comps = diag["competencias"]
+    principal = max(comps, key=comps.get)
+    feitos = []
+    fora = 0
+    for comp, n in comps.items():
+        if comp != principal and n < 0.3 * comps[principal]:
+            fora += n  # linhas soltas de outro mês = sujeira do filtro do BI, não competência
+            continue
+        sub = df[df["competencia"] == comp]
+        sis = erp_comissao_sistema()
+        sis_diag = {"linhas": len(sis), "modo": "ERP · Pedidos Marketplace (coluna AB)"} if sis else None
+        linhas = meli.calcular(sub, sis, faltante_ler("meli"), parametros()["tolerancia_comissao"])
+        r = {"canal": "meli", "competencia": comp, "quando": agora().isoformat(),
+             "quem": quem,
+             "arquivo": {"nome": nome, "caminho": destino, "diag": {k: v for k, v in diag.items() if k != "competencias"}},
+             "sistema": ({"nome": "ERP · Pedidos Marketplace", "quando": erp_ler()["uploads"][-1]["quando"], "diag": sis_diag}
+                         if sis and erp_ler()["uploads"] else None),
+             "sistema_diag": sis_diag,
+             "linhas": linhas, "resumo": meli.resumo(linhas)}
+        _json_gravar(rodada_caminho("meli", comp), r)
+        feitos.append((comp, len(linhas), r["resumo"]["rebate_total"]))
+    txt = " · ".join(f"{f_mesano(c)}: {n} pedidos, R$ {f_brl(t)}" for c, n, t in feitos)
+    extra = f" {fora} linha(s) de outro mês ficaram de fora (filtro do BI)." if fora else ""
+    return f"Mercado Livre lido. {txt}. Linhas rejeitadas: {diag['n_rejeitadas']}.{extra}"
+
+
+PEND_ORDEM = {"erp": 0, "base": 1, "rebates": 2, "sistema": 3}
+
+
+def pend_ler() -> list[dict]:
+    return _json_ler(pasta("pendentes.json"), [])
+
+
+def pend_gravar(lista):
+    _json_gravar(pasta("pendentes.json"), lista)
+
+
+def pend_processar(chave: str | None = None) -> list[str]:
+    """Roda os arquivos que estão aguardando (todos, ou só os de um box), na
+    ordem certa: ERP primeiro (é a comissão do sistema), depois os canais."""
+    lista = pend_ler()
+    fila = [x for x in lista if chave is None or x["chave"] == chave]
+    fila.sort(key=lambda x: (PEND_ORDEM.get(x["tipo"], 9), x["quando"]))
+    msgs, feitos = [], []
+    for x in fila:
+        try:
+            if x["chave"] == "erp":
+                m = processar_erp(x["caminho"], x["nome"], x["quem"], recalcular=False)
+            elif x["chave"] == "meli":
+                m = processar_meli(x["tipo"], x["caminho"], x["nome"], x["quem"])
+            else:
+                m = f"{x['nome']}: o box {x['chave']} ainda não tem motor."
+        except Exception as e:  # noqa: BLE001
+            m = f"{x['nome']}: não consegui ler — {e}"
+        msgs.append(m)
+        feitos.append(x["quando"])
+    pend_gravar([x for x in pend_ler() if x["quando"] not in feitos])
+    return msgs
 
 
 @app.route("/arquivos/subir/<chave>", methods=["POST"])
 @logado
 @exige("arquivos")
 def subir(chave):
+    """Guarda o arquivo e deixa aguardando. Roda com '▶ Rodar <box>' ou com o
+    '▶ Rodar o PLUTOS' (tudo de uma vez). Com rodar=1 no form, roda na hora."""
     c = canal_por_chave().get(chave) or abort(404)
     if not c["ativo"]:
         flash(f"O box {c['nome']} ainda está em construção.")
@@ -813,80 +938,80 @@ def subir(chave):
     destino = pasta("arquivos", chave, f"{carimbo}_{nome}")
     f.save(destino)
     tipo = request.form.get("tipo", "base")
-    try:
-        if chave == "meli":
-            if tipo == "rebates":
-                df, diag = meli.ler_resumo_rebates(destino)
-                novos = meli.lista_mlbs(df)
-                d = mlbs_ler()
-                n_novos = n_mud = 0
-                for k, v in novos.items():
-                    a = d["mlbs"].get(k)
-                    if a is None:
-                        n_novos += 1
-                        d["mlbs"][k] = v
-                    else:
-                        if a["tipo"] != v["tipo"] or a["sku"] != v["sku"]:
-                            n_mud += 1
-                        v["primeira"] = min(a["primeira"], v["primeira"])
-                        v["pedidos"] = a["pedidos"] + v["pedidos"] if v["primeira"] > a["ultima"] else max(a["pedidos"], v["pedidos"])
-                        d["mlbs"][k] = v
-                d["uploads"].append({"nome": nome, "caminho": destino, "quando": agora().isoformat(),
-                                     "quem": session["usuario"], "diag": diag})
-                d["uploads"] = d["uploads"][-30:]
-                mlbs_gravar(d)
-                rp = resumo_meli_ler()
-                for r_ in df.itertuples(index=False):
-                    rp["pedidos"][r_.pedido_mkt] = {k: (str(getattr(r_, k)) if k == "data" else getattr(r_, k)) for k in RESUMO_CAMPOS}
-                    for k in ("qtd", "valor_prod", "frete", "frete_coletas", "cupom_canal", "cupom_seller", "valor_meli", "pct_bruta", "com_bruta", "rebate_bi", "com_liq"):
-                        rp["pedidos"][r_.pedido_mkt][k] = float(rp["pedidos"][r_.pedido_mkt][k] or 0)
-                resumo_meli_gravar(rp)
-                flash(f"Resumo de Rebates lido: {diag['linhas']} pedidos de {f_dia(diag['de'])} a {f_dia(diag['ate'])} · "
-                      f"{diag['mlbs']} MLB's no arquivo — {n_novos} novos · {n_mud} mudaram de tipo/SKU. "
-                      f"Lista de MLB's: {len(d['mlbs'])} anúncios.")
-                return redirect(url_for("mlbs"))
-            if tipo == "sistema":
-                comp = request.form.get("comp") or comp_atual()
-                r = rodada("meli", comp)
-                if not r:
-                    flash(f"Suba primeiro a Tabela Geral de {f_mesano(comp)}; a comissão do sistema entra em cima dela.")
-                    return redirect(url_for("arquivos", mes=comp))
-                sis, diag = meli.ler_comissao_sistema(destino)
-                r["sistema"] = {"nome": nome, "caminho": destino, "quando": agora().isoformat(), "diag": diag}
-                _json_gravar(rodada_caminho("meli", comp), r)
-                r = recalcular_meli(comp)
-                flash(f"Comissão do sistema lida ({diag['linhas']} pedidos, {diag['modo']}). "
-                      f"Rebate de comissão: R$ {f_brl(r['resumo']['rebate_comissao'])}.")
-                return redirect(url_for("canal", chave="meli", mes=comp))
-            df, diag = meli.ler_tabela_geral(destino)
-            comps = diag["competencias"]
-            principal = max(comps, key=comps.get)
-            feitos = []
-            fora = 0
-            for comp, n in comps.items():
-                if comp != principal and n < 0.3 * comps[principal]:
-                    fora += n  # linhas soltas de outro mês = sujeira do filtro do BI, não competência
-                    continue
-                sub = df[df["competencia"] == comp]
-                sis = erp_comissao_sistema()
-                sis_diag = {"linhas": len(sis), "modo": "ERP · Pedidos Marketplace (coluna AB)"} if sis else None
-                linhas = meli.calcular(sub, sis, faltante_ler("meli"), parametros()["tolerancia_comissao"])
-                r = {"canal": "meli", "competencia": comp, "quando": agora().isoformat(),
-                     "quem": session["usuario"],
-                     "arquivo": {"nome": nome, "caminho": destino, "diag": {k: v for k, v in diag.items() if k != "competencias"}},
-                     "sistema": ({"nome": "ERP · Pedidos Marketplace", "quando": erp_ler()["uploads"][-1]["quando"], "diag": sis_diag}
-                                 if sis and erp_ler()["uploads"] else None),
-                     "sistema_diag": sis_diag,
-                     "linhas": linhas, "resumo": meli.resumo(linhas)}
-                _json_gravar(rodada_caminho("meli", comp), r)
-                feitos.append((comp, len(linhas), r["resumo"]["rebate_total"]))
-            txt = " · ".join(f"{f_mesano(c)}: {n} pedidos, R$ {f_brl(t)}" for c, n, t in feitos)
-            extra = f" {fora} linha(s) de outro mês ficaram de fora (filtro do BI)." if fora else ""
-            flash(f"Mercado Livre lido. {txt}. Linhas rejeitadas: {diag['n_rejeitadas']}.{extra}")
-            return redirect(url_for("canal", chave="meli", mes=principal))
-    except Exception as e:  # noqa: BLE001
-        flash(f"Não consegui ler o arquivo: {e}")
+    lista = pend_ler()
+    lista.append({"chave": chave, "tipo": tipo, "nome": nome, "caminho": destino, "quando": agora().isoformat(), "quem": session["usuario"]})
+    pend_gravar(lista)
+    if request.form.get("rodar"):
+        for m in pend_processar(chave):
+            flash(m)
         return redirect(url_for("arquivos"))
+    n = len([x for x in lista if x["chave"] == chave])
+    flash(f"{nome} guardado no box {c['nome']} — {n} arquivo(s) aguardando. Clique ▶ Rodar {c['nome']} ou ▶ Rodar o PLUTOS.")
+    return redirect(url_for("arquivos"))
+
+
+@app.route("/arquivos/rodar/<chave>", methods=["POST"])
+@logado
+@exige("arquivos")
+def rodar_box(chave):
+    msgs = pend_processar(chave)
+    if chave == "erp":
+        reclassificar_erp()
+        for comp in competencias():
+            recalcular_meli(comp)
+    if not msgs:
+        flash("Nada aguardando neste box.")
+    for m in msgs:
+        flash(m)
+    return redirect(url_for("arquivos"))
+
+
+@app.route("/arquivos/erp/baixar/<quando>")
+@logado
+def erp_baixar(quando):
+    u = next((u for u in erp_ler()["uploads"] if u["quando"] == quando), None)
+    if not u or not os.path.exists(u.get("caminho") or ""):
+        flash("Esse arquivo não está mais guardado no servidor.")
+        return redirect(url_for("arquivos"))
+    return send_file(u["caminho"], as_attachment=True, download_name=u["nome"])
+
+
+@app.route("/arquivos/erp/remover/<quando>", methods=["POST"])
+@logado
+@exige("arquivos")
+def erp_remover(quando):
+    """Tira o arquivo da lista (e do disco). As OCs que ele trouxe continuam no
+    índice — para zerar o índice use 'excluir todos'."""
+    idx = erp_ler()
+    u = next((u for u in idx["uploads"] if u["quando"] == quando), None)
+    if u:
+        idx["uploads"] = [x for x in idx["uploads"] if x["quando"] != quando]
+        try:
+            os.remove(u["caminho"])
+        except OSError:
+            pass
+        erp_gravar(idx)
+        flash(f"Arquivo {u['nome']} removido da lista. As OCs já lidas continuam no índice.")
+    return redirect(url_for("arquivos"))
+
+
+@app.route("/arquivos/erp/limpar", methods=["POST"])
+@logado
+@exige("arquivos")
+def erp_limpar():
+    """Excluir todos: apaga os arquivos do ERP E zera o índice de OCs. As rodadas
+    dos canais são recalculadas sem comissão do sistema."""
+    idx = erp_ler()
+    for u in idx["uploads"]:
+        try:
+            os.remove(u["caminho"])
+        except OSError:
+            pass
+    n = len(idx["ocs"])
+    erp_gravar({"ocs": {}, "uploads": []})
+    for comp in competencias():
+        recalcular_meli(comp)
+    flash(f"ERP zerado: {len(idx['uploads'])} arquivo(s) e {n} OCs excluídos. Suba o export de novo quando quiser.")
     return redirect(url_for("arquivos"))
 
 
@@ -898,6 +1023,7 @@ def rodar_tudo():
     em todas as competências com os arquivos já guardados. Para depois de
     atualizar arquivos, tabelas manuais, comissões ou boxes."""
     t0 = agora()
+    msgs = pend_processar()
     reclassificar_erp()
     feitos = []
     for comp in competencias():
@@ -905,27 +1031,16 @@ def rodar_tudo():
         if r:
             feitos.append(f"Mercado Livre {f_mesano(comp)}: R$ {f_brl(r['resumo']['rebate_total'])}")
     seg = (agora() - t0).total_seconds()
-    flash(f"Rodado em {seg:.0f} s. ERP reclassificado ({len(erp_ler()['ocs'])} OCs)."
+    for m in msgs:
+        flash(m)
+    flash(f"PLUTOS rodado em {seg:.0f} s — {len(msgs)} arquivo(s) processado(s). ERP reclassificado ({len(erp_ler()['ocs'])} OCs)."
           + (" " + " · ".join(feitos) if feitos else " Nenhum canal com rodada ainda."))
     return redirect(url_for("arquivos"))
 
 
-@app.route("/arquivos/subir-erp", methods=["POST"])
-@logado
-@exige("arquivos")
-def subir_erp():
-    f = request.files.get("arquivo")
-    if not f or not f.filename:
-        flash("Escolha o arquivo do ERP (.csv ou .xlsx).")
-        return redirect(url_for("arquivos"))
-    nome = secure_filename(f.filename)
-    destino = pasta("arquivos", "erp", f"{agora().strftime('%Y%m%d_%H%M%S')}_{nome}")
-    f.save(destino)
-    try:
-        linhas, diag = erp.ler(destino, mapa_erp_box())
-    except Exception as e:  # noqa: BLE001
-        flash(f"Não consegui ler o arquivo do ERP: {e}")
-        return redirect(url_for("arquivos"))
+def processar_erp(destino: str, nome: str, quem: str, recalcular: bool = True) -> str:
+    """Lê o export do ERP já guardado e distribui pelos boxes (índice por OC)."""
+    linhas, diag = erp.ler(destino, mapa_erp_box())
     # NUNCA soma duas vezes: a OC é a chave. OC que já existe e veio igual é
     # ignorada; OC que já existe e veio diferente (NF emitida, status, valor) é
     # atualizada — continua sendo UMA linha; OC nova entra.
@@ -947,8 +1062,8 @@ def subir_erp():
         else:
             atualizadas += 1
             idx["ocs"][l["oc"]] = l
-    idx["uploads"].append({"nome": nome, "caminho": destino, "quando": agora().isoformat(), "quem": session["usuario"],
-                           "linhas": diag["linhas"], "novas": novas, "atualizadas": atualizadas, "iguais": iguais,
+    idx["uploads"].append({"nome": nome, "caminho": destino, "quando": agora().isoformat(), "quem": quem,
+                           "bytes": os.path.getsize(destino), "linhas": diag["linhas"], "novas": novas, "atualizadas": atualizadas, "iguais": iguais,
                            "de": diag["de"], "ate": diag["ate"],
                            "canais": diag["canais"], "sem_box": diag["sem_box"], "rejeitadas": diag["rejeitadas"],
                            "ocs_duplicadas": diag["ocs_duplicadas"]})
@@ -956,15 +1071,40 @@ def subir_erp():
     erp_gravar(idx)
     # os canais ativos recalculam com a comissão do ERP
     recalc = []
-    for comp in competencias():
-        if recalcular_meli(comp):
-            recalc.append(comp)
+    if recalcular:
+        for comp in competencias():
+            if recalcular_meli(comp):
+                recalc.append(comp)
     canais_txt = " · ".join(f"{k} {v}" for k, v in sorted(diag["canais"].items(), key=lambda x: -x[1]))
     extra = (" Sem box ainda: " + ", ".join(f"{k} ({v})" for k, v in diag["sem_box"].items()) + ".") if diag["sem_box"] else ""
-    flash(f"ERP lido: {diag['linhas']} pedidos de {f_dia(diag['de'])} a {f_dia(diag['ate'])} — "
+    return (f"ERP lido: {diag['linhas']} pedidos de {f_dia(diag['de'])} a {f_dia(diag['ate'])} — "
           f"{novas} OCs novas · {atualizadas} atualizadas · {iguais} já estavam iguais (ignoradas). "
           f"Índice: {len(idx['ocs'])} OCs, sem duplicar. {canais_txt}.{extra}"
           + (f" Mercado Livre recalculado ({', '.join(f_mesano(c) for c in recalc)})." if recalc else ""))
+
+
+@app.route("/arquivos/subir-erp", methods=["POST"])
+@logado
+@exige("arquivos")
+def subir_erp():
+    f = request.files.get("arquivo")
+    if not f or not f.filename:
+        flash("Escolha o arquivo do ERP (.csv ou .xlsx).")
+        return redirect(url_for("arquivos"))
+    nome = secure_filename(f.filename)
+    destino = pasta("arquivos", "erp", f"{agora().strftime('%Y%m%d_%H%M%S')}_{nome}")
+    f.save(destino)
+    lista = pend_ler()
+    lista.append({"chave": "erp", "tipo": "erp", "nome": nome, "caminho": destino, "quando": agora().isoformat(), "quem": session["usuario"]})
+    pend_gravar(lista)
+    if request.form.get("rodar"):
+        for m in pend_processar("erp"):
+            flash(m)
+        reclassificar_erp()
+        for comp in competencias():
+            recalcular_meli(comp)
+        return redirect(url_for("arquivos"))
+    flash(f"{nome} guardado como arquivo principal — aguardando. Clique ▶ Rodar ERP ou ▶ Rodar o PLUTOS.")
     return redirect(url_for("arquivos"))
 
 
@@ -1028,7 +1168,7 @@ def parametros_tela():
             _json_gravar(pasta("parametros.json"), p)
             flash(f"Tabela de comissões gravada: {len(linhas)} canais.")
             return redirect(url_for("parametros_tela"))
-        if acao == "descricoes_arquivo":
+        if acao in ("descricoes_arquivo", "custos_arquivo"):
             f = request.files.get("arquivo")
             if not f or not f.filename:
                 flash("Escolha a planilha de cadastro (SKU · Descrição).")
@@ -1049,6 +1189,10 @@ def parametros_tela():
                 ccub = col("cubagem", "m3", "cubagemm3")
                 ccus = col("custototal")  # "CUSTO" do Anymarket é preço, não custo
                 ccat = col("categoria")
+                if acao == "custos_arquivo" and not ccus:
+                    raise ValueError("essa não é a tabela de Custos MUL (falta a coluna CUSTO TOTAL) — suba-a no bloco Cadastro de SKUs")
+                if acao == "descricoes_arquivo" and ccus:
+                    raise ValueError("essa é a tabela de Custos MUL — suba-a no bloco Tabela de Custos, ao lado")
                 if not csku or not (cdes or cpeso):
                     raise ValueError("preciso de uma coluna SKU (ou Código) e uma Descrição (ou Nome) e/ou Peso")
                 skus = {}
@@ -1057,11 +1201,13 @@ def parametros_tela():
                     if not k:
                         continue
                     e = {}
-                    if cdes and str(r[cdes]).strip():
-                        e["descricao"] = str(r[cdes]).strip()
+                    if cdes and str(r[cdes]).strip():  # CustoProduto traz a descrição curta do ERP; a bonita vem do Anymarket
+                        e["descricao_curta" if ccus else "descricao"] = str(r[cdes]).strip()
                     if ccat and str(r[ccat]).strip():
                         e["categoria"] = str(r[ccat]).strip()
-                    for cc, kk in ((cpeso, "peso"), (ccub, "cubagem"), (ccus, "custo")):
+                    # PESO OFICIAL = o do CustoProduto (arquivo com CUSTO TOTAL). O peso do
+                    # Anymarket fica guardado à parte (peso_any) e só vale se não houver o oficial.
+                    for cc, kk in ((cpeso, "peso" if ccus else "peso_any"), (ccub, "cubagem"), (ccus, "custo")):
                         if cc and str(r[cc]).strip():
                             try:
                                 e[kk] = float(str(r[cc]).replace("kg", "").replace(",", ".").strip())
@@ -1074,6 +1220,7 @@ def parametros_tela():
                 for k, e in skus.items():
                     cad["skus"].setdefault(k, {}).update(e)
                 cad.update({"quando": agora().isoformat(), "quem": session["usuario"], "arquivo": nome})
+                cad["custos" if ccus else "anymarket"] = {"quando": agora().isoformat(), "quem": session["usuario"], "arquivo": nome, "n": len(skus)}
                 _json_gravar(pasta("cadastro", "descricoes.json"), cad)
                 flash(f"Cadastro lido: {len(skus)} SKUs no arquivo · {len(cad['skus']) - antes} novos · cadastro com {len(cad['skus'])} SKUs.")
             except Exception as e:  # noqa: BLE001
@@ -1135,8 +1282,8 @@ def _mlbs_filtrados(q: str, tipo: str) -> list[dict]:
     for m in d["mlbs"].values():
         m = dict(m)
         e = desc.get(m["sku"]) or desc.get(m["sku"].upper()) or {}
-        m["descricao"] = e.get("descricao") or ""
-        m["peso"] = e.get("peso")
+        m["descricao"] = e.get("descricao") or e.get("descricao_curta") or ""
+        m["peso"] = e.get("peso") or e.get("peso_any")
         itens.append(m)
     if tipo and tipo != "todos":
         itens = [m for m in itens if unidecode_lower(m["tipo"]) == unidecode_lower(tipo)]
@@ -1237,7 +1384,7 @@ def coletas():
     linhas = sorted(por_mlb.values(), key=lambda m: -m["coletas"])
     for m in linhas:
         e = desc.get(m["sku"]) or {}
-        m["descricao"] = e.get("descricao") or ""
+        m["descricao"] = e.get("descricao") or e.get("descricao_curta") or ""
         m["custo_medio"] = m["coletas"] / m["pedidos"] if m["pedidos"] else 0
     return render_template("coletas.html", c=canal_por_chave()["meli"], comp=comp, atual=atual, por_comp=por_comp, linhas=linhas,
                            COMPS_COLETAS=comps, fora=fora.get(comp, 0), sem_status=sem_status)
@@ -1258,8 +1405,8 @@ def _custo_coletas(q: str, tipo: str) -> list[dict]:
     itens = []
     for m in ult.values():
         e = desc.get(m["sku"]) or desc.get(m["sku"].upper()) or {}
-        m["descricao"] = e.get("descricao") or ""
-        m["peso"] = e.get("peso")
+        m["descricao"] = e.get("descricao") or e.get("descricao_curta") or ""
+        m["peso"] = e.get("peso") or e.get("peso_any")
         m["custo_kg"] = (m["custo"] / m["peso"]) if m.get("peso") else None
         itens.append(m)
     if tipo and tipo != "todos":
@@ -1344,9 +1491,11 @@ def baixar(qual):
         idx = erp_ler()["ocs"]
         if r:
             linhas = []
+            cad = descricoes_ler()["skus"]
             for l in r["linhas"]:
                 e = idx.get(l["pedido_mkt"]) or idx.get(l["pedido_canal"]) or {}
-                m = dict(l); m.update({k: (e.get(k[4:]) if e else None) for _, k, _ in ERP_COLS}); linhas.append(m)
+                m = dict(l); m["descricao"] = descricao_de(l.get("sku"), cad)
+                m.update({k: (e.get(k[4:]) if e else None) for _, k, _ in ERP_COLS}); linhas.append(m)
             bio = planilhas.linha_xlsx({"linhas": linhas}, LINHA_COLS.get(chave, []) + ERP_COLS, canal_por_chave()[chave]["nome"], comp)
         else:
             bio = planilhas.linha_xlsx({"linhas": erp_linhas(chave, comp)}, ERP_SO_COLS, canal_por_chave()[chave]["nome"], comp)

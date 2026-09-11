@@ -13,6 +13,13 @@
   <div class="kpi preto"><span class="l">Comissão · Diferença</span><span class="v">R$ {{ s.rebate_comissao|brl(0) }}</span><span class="o">{% if r.sistema %}sistema − cobrada · {{ s.dif_pos }} pedidos{% else %}aguardando o ERP (box 0){% endif %}</span></div>
   <div class="kpi {{ 'crit' if s.faltante_pendentes else 'bom' }}"><span class="l">A apurar</span><span class="v">{{ s.faltante_pendentes }}</span><span class="o">{% if s.faltante_pendentes %}<a href="{{ url_for('faltante', mes=comp) }}">abrir a tabela manual</a>{% else %}nada pendente{% endif %}</span></div>
 </div>
+{% if r.sistema %}
+<div class="kpis tres-com">
+  <div class="kpi preto"><span class="l">Comissão sistema (deveria ser)</span><span class="v">R$ {{ s.com_sistema|brl(0) }}</span><span class="o">{{ s.com_sistema_pct|brl(2) }}% de R$ {{ s.com_venda|brl(0) }} · % do ERP × valor produtos · {{ s.com_pedidos }} pedidos com par</span></div>
+  <div class="kpi crit"><span class="l">Comissão real (cobrada pelo Meli)</span><span class="v">R$ {{ s.com_real|brl(0) }}</span><span class="o">{{ s.com_real_pct|brl(2) }}% · tarifa de venda do export, já com descontos de campanha</span></div>
+  <div class="kpi bom"><span class="l">Sistema − real = rebate de comissão</span><span class="v">R$ {{ s.com_dif|brl(0) }}</span><span class="o">{{ ((s.com_sistema_pct - s.com_real_pct))|brl(2) }} p.p. a menos de comissão{% if (s.com_dif - s.rebate_comissao)|abs > 1 %} · R$ {{ (s.com_dif - s.rebate_comissao)|brl(0) }} abaixo da tolerância / negativos{% endif %}</span></div>
+</div>
+{% endif %}
 
 {% if not r.sistema %}
 <div class="aviso"><b>Falta a comissão do sistema.</b> O rebate de COMISSÃO (ERP − Meli) só nasce quando o arquivo <b>ERP · Pedidos Marketplace</b> sobe no box 0 em <a href="{{ url_for('arquivos', mes=comp) }}">Arquivos</a>. Cupom Meli e Faltante campanha já estão calculados.</div>

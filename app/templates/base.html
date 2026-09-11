@@ -136,9 +136,10 @@
   </div>
 </div>
 <div class="wrap">
-  {% if ULT %}
-  <div class="ult-base" data-tip="A última rodada que entrou no PLUTOS">Última rodada: {{ ULT.canal|upper }} {{ ULT.comp|mesano }} em {{ ULT.quando|quando }} por {{ ULT.quem }}</div>
-  {% endif %}
+  <div class="linha-ult">
+    {% if ULT %}<div class="ult-base" data-tip="A última rodada que entrou no PLUTOS">Última rodada: {{ ULT.canal|upper }} {{ ULT.comp|mesano }} em {{ ULT.quando|quando }} por {{ ULT.quem }}</div>{% else %}<span></span>{% endif %}
+    {% block acoes_ult %}{% endblock %}
+  </div>
   {% with msgs = get_flashed_messages() %}{% for m in msgs %}<div class="flash">{{ m }}</div>{% endfor %}{% endwith %}
   {% block conteudo %}{% endblock %}
 </div>

@@ -14,13 +14,13 @@
   <span class="nota" style="margin:0">{{ total|brl(0) }} pedidos · {{ cols|length }} colunas · {{ origem }}{% if r %} · {{ r.arquivo.nome }}{% endif %}</span>
 </form>
 <div class="bloco">
-<div class="rol" style="max-height:74vh"><table class="cols-{{ cols|length }} linha-base" data-sem-ordenar style="min-width:{{ cols|length * 150 }}px">
-  <thead><tr>{% for rot, k, t in cols %}<th class="{{ 'n' if t in ('n','p') }} ord {{ ('desc' if desc else 'asc') if ordem == k }}"><a href="{{ url_for('linha', chave=c.chave, mes=comp, q=q, ord=k, desc=('0' if (ordem == k and desc) else '1')) }}">{{ rot }}</a></th>{% endfor %}</tr></thead>
+<div class="rol" style="max-height:74vh"><table class="cols-{{ cols|length }} linha-base" data-sem-ordenar style="min-width:{{ cols|length * 150 + 200 }}px">
+  <thead><tr>{% for rot, k, t in cols %}<th class="col-{{ k }} {{ 'n' if t in ('n','p') }} ord {{ ('desc' if desc else 'asc') if ordem == k }}"><a href="{{ url_for('linha', chave=c.chave, mes=comp, q=q, ord=k, desc=('0' if (ordem == k and desc) else '1')) }}">{{ rot }}</a></th>{% endfor %}</tr></thead>
   <tbody>
   {% for l in linhas %}
   <tr class="{{ 'pend' if l.faltante_status == 'pendente' }}">
     {% for rot, k, t in cols %}{% set v = l[k] %}
-    <td class="{{ 'n' if t in ('n','p','t') and k not in ('conta','status','tipo','faltante_status') }}">
+    <td class="col-{{ k }} {{ 'n' if t in ('n','p','t') and k not in ('conta','status','tipo','faltante_status','descricao') }}">
       {%- if v is none or v == '' %}—
       {%- elif t == 'd' %}{{ v|dia }}
       {%- elif t == 'n' %}{{ v|brl }}
