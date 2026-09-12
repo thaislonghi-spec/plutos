@@ -23,7 +23,7 @@ from werkzeug.utils import secure_filename
 from motor import meli, erp, magalu, shopee, madeira, webcont
 import planilhas
 
-VERSAO = "2026-09-12o"
+VERSAO = "2026-09-12q"
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(RAIZ), "dados")
 os.makedirs(DATA_DIR, exist_ok=True)
