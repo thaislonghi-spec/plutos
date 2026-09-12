@@ -37,7 +37,7 @@
       {% if PODE.arquivos %}
       <form method="post" action="{{ url_for('subir_erp') }}" enctype="multipart/form-data" class="ca-pe" id="ferp">
         {% if erp_idx.uploads %}<a href="#" class="ca-excluir" id="erp-limpar">excluir todos</a>{% else %}<span></span>{% endif %}
-        <input type="hidden" name="rodar" value="1"><input type="file" name="arquivo" accept=".xlsx,.xls,.csv,.txt" id="erp-arq" hidden required>
+        <input type="hidden" name="rodar" value="1"><input type="file" name="arquivo" accept=".xlsx,.xls,.csv,.txt,.zip" id="erp-arq" hidden required>
         <button type="button" class="bt sec ca-incluir" id="erp-incluir">Incluir arquivo</button>
         <button type="submit" class="bt pri ca-ok" id="erp-ok" disabled>OK</button>
       </form>
@@ -85,7 +85,7 @@
           <span class="arq-n">comissão do sistema: {% if r_meli.sistema %}<span class="ok">ERP</span> {{ r_meli.sistema_diag.linhas }} OCs{% else %}<span class="tag pend">suba o ERP (arquivo principal)</span>{% endif %}</span>{% else %}<span class="arq-n">ainda não subiu nesta competência</span>{% endif %}
           {% if PODE.arquivos %}
           <form method="post" action="{{ url_for('subir', chave=cn.chave) }}" enctype="multipart/form-data" class="upl">
-            <input type="hidden" name="tipo" value="base"><input type="hidden" name="rodar" value="1"><input type="file" name="arquivo" accept=".xlsx,.xls,.csv" required>
+            <input type="hidden" name="tipo" value="base"><input type="hidden" name="rodar" value="1"><input type="file" name="arquivo" accept=".xlsx,.xls,.csv,.zip" required>
             <button class="bt pri" type="submit" style="padding:7px 14px">Subir e rodar</button>
           </form>
           {% for x in pend_por.get(cn.chave, []) if x.tipo == 'base' %}<span class="arq-n espera-n">⏳ {{ x.nome }} · aguardando ▶ rodar</span>{% endfor %}
@@ -100,7 +100,7 @@
           <span class="arq-n">Lista de MLB's: <b>{{ mlbs_total }}</b> anúncios — <a href="{{ url_for('mlbs') }}">abrir</a></span>{% else %}<span class="arq-n">ainda não subiu — a Lista de MLB's nasce daqui</span>{% endif %}
           {% if PODE.arquivos %}
           <form method="post" action="{{ url_for('subir', chave=cn.chave) }}" enctype="multipart/form-data" class="upl">
-            <input type="hidden" name="tipo" value="rebates"><input type="hidden" name="rodar" value="1"><input type="file" name="arquivo" accept=".xlsx,.xls" required>
+            <input type="hidden" name="tipo" value="rebates"><input type="hidden" name="rodar" value="1"><input type="file" name="arquivo" accept=".xlsx,.xls,.zip" required>
             <button class="bt pri" type="submit" style="padding:7px 14px">Subir e rodar</button>
           </form>
           {% for x in pend_por.get(cn.chave, []) if x.tipo == 'rebates' %}<span class="arq-n espera-n">⏳ {{ x.nome }} · aguardando ▶ rodar</span>{% endfor %}
@@ -117,7 +117,7 @@
         <span class="arq-n">comissão do sistema: <span class="ok">{{ rc.sistema.nome }}</span></span>{% else %}<span class="arq-n">ainda não subiu nesta competência</span>{% endif %}
         {% if PODE.arquivos %}
         <form method="post" action="{{ url_for('subir', chave=cn.chave) }}" enctype="multipart/form-data" class="upl">
-          <input type="hidden" name="tipo" value="base"><input type="hidden" name="rodar" value="1"><input type="file" name="arquivo" accept=".xlsx,.xls,.csv" required>
+          <input type="hidden" name="tipo" value="base"><input type="hidden" name="rodar" value="1"><input type="file" name="arquivo" accept=".xlsx,.xls,.csv,.zip" required>
           <button class="bt pri" type="submit" style="padding:7px 14px">Subir e rodar</button>
         </form>
         {% for x in pend_por.get(cn.chave, []) %}<span class="arq-n espera-n">⏳ {{ x.nome }} · aguardando ▶ rodar</span>{% endfor %}

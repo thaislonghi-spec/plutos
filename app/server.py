@@ -23,7 +23,7 @@ from werkzeug.utils import secure_filename
 from motor import meli, erp, magalu, shopee
 import planilhas
 
-VERSAO = "2026-09-12e"
+VERSAO = "2026-09-12f"
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(RAIZ), "dados")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -548,14 +548,98 @@ def descricoes_ler() -> dict:
     return _json_ler(pasta("cadastro", "descricoes.json"), {"skus": {}, "quando": None, "quem": None, "arquivo": None})
 
 
+# --------------------------------------------------------------------------
+# BASE ACUMULADA por canal × competência: cada arquivo subido faz UPSERT por
+# pedido (novo entra, igual é ignorado, diferente é atualizado). Nunca soma
+# duas vezes, nunca sobrescreve o que outro arquivo trouxe. A rodada do canal
+# é recalculada a partir da base, não do último arquivo.
+# --------------------------------------------------------------------------
+def base_ler(canal: str, comp: str) -> dict:
+    return _json_ler(pasta("base", f"{canal}_{comp}.json"), {"pedidos": {}, "uploads": []})
+
+
+def base_gravar(canal: str, comp: str, d: dict):
+    _json_gravar(pasta("base", f"{canal}_{comp}.json"), d)
+
+
+def _linha_serial(row: dict) -> dict:
+    out = {}
+    for k, v in row.items():
+        if hasattr(v, "isoformat"):
+            v = v.isoformat()
+        elif hasattr(v, "item"):  # numpy
+            v = v.item()
+        if isinstance(v, float) and v != v:
+            v = None
+        out[k] = v
+    return out
+
+
+def base_upsert(canal: str, df, chave: str, nome: str, caminho: str, quem: str) -> dict:
+    """Aplica o df (já normalizado, com coluna 'competencia') na base de cada
+    competência. Devolve {comp: {novas, atualizadas, iguais, antigas, total}}.
+    Um arquivo mais ANTIGO (período termina antes) nunca sobrescreve o que um
+    arquivo mais novo já trouxe — só acrescenta pedidos que faltavam."""
+    res = {}
+    snap = str(df["data"].max()) if "data" in df and len(df) else ""
+    for comp, sub in df.groupby("competencia"):
+        b = base_ler(canal, comp)
+        novas = atualizadas = iguais = antigas = 0
+        for row in sub.to_dict("records"):
+            k = str(row.get(chave) or "").strip()
+            if not k:
+                continue
+            row = _linha_serial(row)
+            row["_snap"] = snap
+            atual = b["pedidos"].get(k)
+            if atual is None:
+                novas += 1
+                b["pedidos"][k] = row
+            elif {x: v for x, v in atual.items() if x != "_snap"} == {x: v for x, v in row.items() if x != "_snap"}:
+                iguais += 1
+            elif (atual.get("_snap") or "") > snap:
+                antigas += 1  # a base já tem uma foto mais nova deste pedido
+            else:
+                atualizadas += 1
+                b["pedidos"][k] = row
+        b["uploads"].append({"nome": nome, "caminho": caminho, "quando": agora().isoformat(), "quem": quem,
+                             "linhas": int(len(sub)), "novas": novas, "atualizadas": atualizadas, "iguais": iguais, "antigas": antigas})
+        b["uploads"] = b["uploads"][-50:]
+        base_gravar(canal, comp, b)
+        res[comp] = {"novas": novas, "atualizadas": atualizadas, "iguais": iguais, "antigas": antigas, "total": len(b["pedidos"])}
+    return res
+
+
+def base_df(canal: str, comp: str):
+    """DataFrame da base acumulada (data volta a ser date)."""
+    import pandas as pd
+    b = base_ler(canal, comp)
+    if not b["pedidos"]:
+        return None
+    df = pd.DataFrame(list(b["pedidos"].values()))
+    if "_snap" in df:
+        df = df.drop(columns=["_snap"])
+    if "data" in df:
+        df["data"] = pd.to_datetime(df["data"]).dt.date
+    return df
+
+
+def _txt_upsert(res: dict) -> str:
+    return " · ".join(f"{f_mesano(c)}: {v['novas']} novas, {v['atualizadas']} atualizadas, {v['iguais']} iguais"
+                      + (f", {v['antigas']} mantidas (arquivo mais antigo)" if v.get("antigas") else "") + f" → base {v['total']} pedidos"
+                      for c, v in res.items())
+
+
 def recalcular_meli(comp: str):
     """Recalcula a rodada do Meli daquela competência a partir dos arquivos
     guardados (usado quando a tabela manual muda ou o ADC002 chega)."""
     r = rodada("meli", comp)
     if not r:
         return None
-    df, diag = meli.ler_tabela_geral(r["arquivo"]["caminho"])
-    df = df[df["competencia"] == comp]
+    df = base_df("meli", comp)
+    if df is None:
+        df, diag = meli.ler_tabela_geral(r["arquivo"]["caminho"])
+        df = df[df["competencia"] == comp]
     sis = erp_comissao_sistema()
     sis_diag = {"linhas": len(sis), "modo": "ERP · Pedidos Marketplace (coluna AB)"} if sis else None
     if not sis and r.get("sistema") and os.path.exists(r["sistema"]["caminho"]):
@@ -575,8 +659,10 @@ def recalcular_magalu(comp: str):
     r = rodada("magalu", comp)
     if not r:
         return None
-    df, diag = magalu.ler(r["arquivo"]["caminho"])
-    df = df[df["competencia"] == comp]
+    df = base_df("magalu", comp)
+    if df is None:
+        df, diag = magalu.ler(r["arquivo"]["caminho"])
+        df = df[df["competencia"] == comp]
     pct, taxa = comissao_cadastrada(("MAGAZINE", "MAGALU"), (0.11, 5.0))
     linhas = magalu.calcular(df, pct, taxa, erp_por_base("magalu"))
     r["linhas"] = linhas
@@ -593,34 +679,34 @@ def processar_magalu(destino: str, nome: str, quem: str) -> str:
     df, diag = magalu.ler(destino)
     comps = diag["competencias"]
     principal = max(comps, key=comps.get)
-    pct, taxa = comissao_cadastrada(("MAGAZINE", "MAGALU"), (0.11, 5.0))
-    feitos = []
     fora = 0
-    for comp, n in comps.items():
+    for comp, n in list(comps.items()):
         if comp != principal and n < 0.3 * comps[principal]:
             fora += n
-            continue
-        sub = df[df["competencia"] == comp]
-        linhas = magalu.calcular(sub, pct, taxa, erp_por_base("magalu"))
-        r = {"canal": "magalu", "competencia": comp, "quando": agora().isoformat(), "quem": quem,
-             "arquivo": {"nome": nome, "caminho": destino, "diag": {k: v for k, v in diag.items() if k != "competencias"}},
-             "sistema": {"nome": f"Parâmetros · {pct * 100:.2f}% + R$ {taxa:.2f}/pedido", "quando": agora().isoformat(),
-                         "diag": {"linhas": len(linhas), "modo": "tabela de comissões (Parâmetros)"}},
-             "linhas": linhas, "resumo": magalu.resumo(linhas, int(sub["cancelado"].sum()))}
-        r["sistema_diag"] = r["sistema"]["diag"]
+            df = df[df["competencia"] != comp]
+    res = base_upsert("magalu", df, "pedido", nome, destino, quem)
+    feitos = []
+    for comp in res:
+        r = rodada("magalu", comp) or {"canal": "magalu", "competencia": comp}
+        r.update({"quando": agora().isoformat(), "quem": quem,
+                  "arquivo": {"nome": nome, "caminho": destino, "diag": {k: v for k, v in diag.items() if k != "competencias"}},
+                  "linhas": [], "resumo": {}})
         _json_gravar(rodada_caminho("magalu", comp), r)
-        feitos.append((comp, len(linhas), r["resumo"]["rebate_total"]))
+        r = recalcular_magalu(comp)
+        feitos.append((comp, r["resumo"]["pedidos"], r["resumo"]["rebate_total"]))
     txt = " · ".join(f"{f_mesano(c)}: {n} pedidos, R$ {f_brl(t)}" for c, n, t in feitos)
     extra = f" {fora} linha(s) de outro mês ficaram de fora." if fora else ""
-    return f"Magazine Luiza lido. {txt}. Cancelados fora: {diag['cancelados']}.{extra}"
+    return f"Magazine Luiza lido — {_txt_upsert(res)}. {txt}. Cancelados fora: {diag['cancelados']}.{extra}"
 
 
 def recalcular_shopee(comp: str):
     r = rodada("shopee", comp)
     if not r:
         return None
-    df, diag = shopee.ler(r["arquivo"]["caminho"])
-    df = df[df["competencia"] == comp]
+    df = base_df("shopee", comp)
+    if df is None:
+        df, diag = shopee.ler(r["arquivo"]["caminho"])
+        df = df[df["competencia"] == comp]
     pct, taxa = comissao_cadastrada(("SHOPEE",), (0.12, 12.0))
     linhas = shopee.calcular(df, pct, taxa, erp_ler()["ocs"])
     r["linhas"] = linhas
@@ -637,26 +723,24 @@ def processar_shopee(destino: str, nome: str, quem: str) -> str:
     df, diag = shopee.ler(destino)
     comps = diag["competencias"]
     principal = max(comps, key=comps.get)
-    pct, taxa = comissao_cadastrada(("SHOPEE",), (0.12, 12.0))
-    feitos = []
     fora = 0
-    for comp, n in comps.items():
+    for comp, n in list(comps.items()):
         if comp != principal and n < 0.3 * comps[principal]:
             fora += n
-            continue
-        sub = df[df["competencia"] == comp]
-        linhas = shopee.calcular(sub, pct, taxa, erp_ler()["ocs"])
-        r = {"canal": "shopee", "competencia": comp, "quando": agora().isoformat(), "quem": quem,
-             "arquivo": {"nome": nome, "caminho": destino, "diag": {k: v for k, v in diag.items() if k != "competencias"}},
-             "sistema": {"nome": f"Parâmetros · {pct * 100:.2f}% + R$ {taxa:.2f}/item", "quando": agora().isoformat(),
-                         "diag": {"linhas": len(linhas), "modo": "tabela de comissões (Parâmetros)"}},
-             "linhas": linhas, "resumo": shopee.resumo(linhas, int(sub["cancelado"].sum()))}
-        r["sistema_diag"] = r["sistema"]["diag"]
+            df = df[df["competencia"] != comp]
+    res = base_upsert("shopee", df, "pedido", nome, destino, quem)
+    feitos = []
+    for comp in res:
+        r = rodada("shopee", comp) or {"canal": "shopee", "competencia": comp}
+        r.update({"quando": agora().isoformat(), "quem": quem,
+                  "arquivo": {"nome": nome, "caminho": destino, "diag": {k: v for k, v in diag.items() if k != "competencias"}},
+                  "linhas": [], "resumo": {}})
         _json_gravar(rodada_caminho("shopee", comp), r)
-        feitos.append((comp, len(linhas), r["resumo"]["rebate_total"]))
+        r = recalcular_shopee(comp)
+        feitos.append((comp, r["resumo"]["pedidos"], r["resumo"]["rebate_total"]))
     txt = " · ".join(f"{f_mesano(c)}: {n} pedidos, R$ {f_brl(t)}" for c, n, t in feitos)
     extra = f" {fora} linha(s) de outro mês ficaram de fora." if fora else ""
-    return f"Shopee lida. {txt}. Cancelados fora: {diag['cancelados']} · {diag['itens']} itens → {diag['linhas']} pedidos.{extra}"
+    return f"Shopee lida — {_txt_upsert(res)}. {txt}. Cancelados fora: {diag['cancelados']} · {diag['itens']} itens → {diag['linhas']} pedidos.{extra}"
 
 
 def recalcular_canais(comp: str) -> list[str]:
@@ -1131,31 +1215,55 @@ def processar_meli(tipo: str, destino: str, nome: str, quem: str) -> str:
     df, diag = meli.ler_tabela_geral(destino)
     comps = diag["competencias"]
     principal = max(comps, key=comps.get)
-    feitos = []
     fora = 0
-    for comp, n in comps.items():
+    for comp, n in list(comps.items()):
         if comp != principal and n < 0.3 * comps[principal]:
             fora += n  # linhas soltas de outro mês = sujeira do filtro do BI, não competência
-            continue
-        sub = df[df["competencia"] == comp]
-        sis = erp_comissao_sistema()
-        sis_diag = {"linhas": len(sis), "modo": "ERP · Pedidos Marketplace (coluna AB)"} if sis else None
-        linhas = meli.calcular(sub, sis, faltante_ler("meli"), parametros()["tolerancia_comissao"])
-        r = {"canal": "meli", "competencia": comp, "quando": agora().isoformat(),
-             "quem": quem,
-             "arquivo": {"nome": nome, "caminho": destino, "diag": {k: v for k, v in diag.items() if k != "competencias"}},
-             "sistema": ({"nome": "ERP · Pedidos Marketplace", "quando": erp_ler()["uploads"][-1]["quando"], "diag": sis_diag}
-                         if sis and erp_ler()["uploads"] else None),
-             "sistema_diag": sis_diag,
-             "linhas": linhas, "resumo": meli.resumo(linhas)}
+            df = df[df["competencia"] != comp]
+    res = base_upsert("meli", df, "pedido_mkt", nome, destino, quem)
+    feitos = []
+    for comp in res:
+        r = rodada("meli", comp) or {"canal": "meli", "competencia": comp}
+        r.update({"quando": agora().isoformat(), "quem": quem,
+                  "arquivo": {"nome": nome, "caminho": destino, "diag": {k: v for k, v in diag.items() if k != "competencias"}},
+                  "linhas": [], "resumo": {}})
         _json_gravar(rodada_caminho("meli", comp), r)
-        feitos.append((comp, len(linhas), r["resumo"]["rebate_total"]))
+        r = recalcular_meli(comp)
+        feitos.append((comp, r["resumo"]["pedidos"], r["resumo"]["rebate_total"]))
     txt = " · ".join(f"{f_mesano(c)}: {n} pedidos, R$ {f_brl(t)}" for c, n, t in feitos)
     extra = f" {fora} linha(s) de outro mês ficaram de fora (filtro do BI)." if fora else ""
-    return f"Mercado Livre lido. {txt}. Linhas rejeitadas: {diag['n_rejeitadas']}.{extra}"
+    return f"Mercado Livre lido — {_txt_upsert(res)}. {txt}. Linhas rejeitadas: {diag['n_rejeitadas']}.{extra}"
 
 
 PEND_ORDEM = {"erp": 0, "base": 1, "rebates": 2, "sistema": 3}
+
+
+def _guardar_upload(f, pasta_destino: str) -> list[tuple[str, str]]:
+    """Salva o arquivo enviado. Se for .zip, extrai as planilhas de dentro
+    (.xlsx/.xls/.csv/.txt) na ordem do nome — o portal quebra exports grandes
+    em part_1_of_2, part_2_of_2… Devolve [(nome, caminho)]."""
+    import zipfile
+    nome = secure_filename(f.filename)
+    carimbo = agora().strftime("%Y%m%d_%H%M%S")
+    destino = os.path.join(pasta_destino, f"{carimbo}_{nome}")
+    os.makedirs(pasta_destino, exist_ok=True)
+    f.save(destino)
+    if not nome.lower().endswith(".zip"):
+        return [(nome, destino)]
+    out = []
+    with zipfile.ZipFile(destino) as z:
+        membros = sorted(m for m in z.namelist()
+                         if m.lower().endswith((".xlsx", ".xls", ".csv", ".txt")) and not os.path.basename(m).startswith(("~", "."))
+                         and not m.endswith("/"))
+        for i, m in enumerate(membros, 1):
+            nm = secure_filename(os.path.basename(m))
+            cam = os.path.join(pasta_destino, f"{carimbo}_{i:02d}_{nm}")
+            with z.open(m) as src, open(cam, "wb") as dst:
+                shutil.copyfileobj(src, dst)
+            out.append((nm, cam))
+    if not out:
+        raise ValueError("o .zip não tem nenhuma planilha (.xlsx/.csv) dentro")
+    return out
 
 
 def pend_ler() -> list[dict]:
@@ -1207,14 +1315,18 @@ def subir(chave):
     if not f or not f.filename:
         flash("Escolha um arquivo.")
         return redirect(url_for("arquivos"))
-    nome = secure_filename(f.filename)
-    carimbo = agora().strftime("%Y%m%d_%H%M%S")
-    destino = pasta("arquivos", chave, f"{carimbo}_{nome}")
-    f.save(destino)
     tipo = request.form.get("tipo", "base")
+    try:
+        arquivos_ = _guardar_upload(f, pasta("arquivos", chave))
+    except Exception as e:  # noqa: BLE001
+        flash(f"Não consegui guardar o arquivo: {e}")
+        return redirect(url_for("arquivos"))
     lista = pend_ler()
-    lista.append({"chave": chave, "tipo": tipo, "nome": nome, "caminho": destino, "quando": agora().isoformat(), "quem": session["usuario"]})
+    for i, (nome, destino) in enumerate(arquivos_):
+        lista.append({"chave": chave, "tipo": tipo, "nome": nome, "caminho": destino,
+                      "quando": (agora() + timedelta(milliseconds=i)).isoformat(), "quem": session["usuario"]})
     pend_gravar(lista)
+    nome = " + ".join(n for n, _ in arquivos_) if len(arquivos_) > 1 else arquivos_[0][0]
     if request.form.get("rodar"):
         for m in pend_processar(chave):
             flash(m)
@@ -1363,12 +1475,17 @@ def subir_erp():
     if not f or not f.filename:
         flash("Escolha o arquivo do ERP (.csv ou .xlsx).")
         return redirect(url_for("arquivos"))
-    nome = secure_filename(f.filename)
-    destino = pasta("arquivos", "erp", f"{agora().strftime('%Y%m%d_%H%M%S')}_{nome}")
-    f.save(destino)
+    try:
+        arquivos_ = _guardar_upload(f, pasta("arquivos", "erp"))
+    except Exception as e:  # noqa: BLE001
+        flash(f"Não consegui guardar o arquivo: {e}")
+        return redirect(url_for("arquivos"))
     lista = pend_ler()
-    lista.append({"chave": "erp", "tipo": "erp", "nome": nome, "caminho": destino, "quando": agora().isoformat(), "quem": session["usuario"]})
+    for i, (nome, destino) in enumerate(arquivos_):
+        lista.append({"chave": "erp", "tipo": "erp", "nome": nome, "caminho": destino,
+                      "quando": (agora() + timedelta(milliseconds=i)).isoformat(), "quem": session["usuario"]})
     pend_gravar(lista)
+    nome = " + ".join(n for n, _ in arquivos_) if len(arquivos_) > 1 else arquivos_[0][0]
     if request.form.get("rodar"):
         for m in pend_processar("erp"):
             flash(m)
