@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block conteudo %}
+{% if not r %}
+<div class="aviso"><b>Sem rodada de {{ c.nome }} em {{ comp|mesano }}.</b> Suba o export Order.all em <a href="{{ url_for('arquivos', mes=comp) }}">Arquivos</a> e clique Subir e rodar.</div>
+{% else %}
+{% set s = r.resumo %}
+<div class="kpis cinco">
+  <div class="kpi bom"><span class="l">Rebate em R$</span><span class="v">R$ {{ s.rebate_rs|brl(0) }}</span><span class="o">incentivo ação comercial R$ {{ s.incentivo|brl(0) }} + incentivo de cupom R$ {{ s.cupom_shopee|brl(0) }}</span></div>
+  <div class="kpi preto"><span class="l">Rebate em comissão</span><span class="v">R$ {{ s.rebate_comissao|brl(0) }}</span><span class="o">comissão sistema − cobrada · {{ s.dif_pos }} a favor · {{ s.dif_neg }} contra</span></div>
+  <div class="kpi preto"><span class="l">Rebate em frete</span><span class="v">R$ {{ s.rebate_frete|brl(0) }}</span><span class="o">Frete Grátis: R$ 40 em {{ s.fretes['40'] }} · R$ 20 em {{ s.fretes['20'] }} · zero em {{ s.fretes['0'] }}</span></div>
+  <div class="kpi {{ 'crit' if s.cancelados else 'bom' }}"><span class="l">Cancelados (fora)</span><span class="v">{{ s.cancelados }}</span><span class="o">{{ s.erp_ok }} de {{ s.pedidos }} com par no ERP</span></div>
+  <div class="kpi ouro"><span class="l">Rebate total</span><span class="v">R$ {{ s.rebate_total|brl(0) }}</span><span class="o">{{ s.pct_sobre_venda|brl(2) }}% de R$ {{ s.venda|brl(0) }} de produto · {{ s.pedidos }} pedidos</span></div>
+</div>
+<div class="kpis tres-com">
+  <div class="kpi preto"><span class="l">Comissão sistema (deveria ser)</span><span class="v">R$ {{ s.com_sistema|brl(0) }}</span><span class="o">{{ s.com_sistema_pct|brl(2) }}% do subtotal · {{ r.sistema.nome }}</span></div>
+  <div class="kpi crit"><span class="l">Comissão real (cobrada pela Shopee)</span><span class="v">R$ {{ s.com_real|brl(0) }}</span><span class="o">{{ s.com_real_pct|brl(2) }}% · comissão bruta + serviço bruta − ajuste por ação comercial</span></div>
+  <div class="kpi bom"><span class="l">Sistema − real = rebate de comissão</span><span class="v">R$ {{ s.com_dif|brl(0) }}</span><span class="o">{{ (s.com_sistema_pct - s.com_real_pct)|brl(2) }} p.p.</span></div>
+</div>
+
+<div class="bloco">
+  <h2>Dia a dia · {{ comp|mesano }}</h2>
+  {% set maxd = s.por_dia.values()|map(attribute='total')|max if s.por_dia else 1 %}
+  <div class="barras">
+    {% for d, v in s.por_dia.items() %}
+    <div class="b" style="height:{{ (100 * v.total / maxd) if maxd else 0 }}%" data-tip="{{ d|dia }} · R$ {{ v.total|brl }} · {{ v.pedidos }} pedidos"><i>{{ d[8:10] }}</i></div>
+    {% endfor %}
+  </div>
+  <div class="rol" style="max-height:50vh;margin-top:18px"><table class="cols-8">
+    <thead><tr><th>Dia</th><th class="n">Pedidos</th><th class="n">Subtotal produto</th><th class="n">Rebate R$</th><th class="n">Rebate comissão</th><th class="n">Rebate frete</th><th class="n">SOMA</th><th class="n">% da venda</th></tr></thead>
+    <tbody>
+    {% for d, v in s.por_dia.items() %}
+    <tr><td>{{ d|dia }}</td><td class="n">{{ v.pedidos }}</td><td class="n">{{ v.venda|brl(0) }}</td><td class="n">{{ v.cupom|brl }}</td><td class="n">{{ v.comissao|brl }}</td><td class="n">{{ v.frete|brl }}</td><td class="n"><b>{{ v.total|brl }}</b></td><td class="n">{{ (100 * v.total / v.venda)|brl(2) if v.venda else '—' }}%</td></tr>
+    {% endfor %}
+    <tr class="linha-total"><td><b>Total</b></td><td class="n"><b>{{ s.pedidos }}</b></td><td class="n"><b>{{ s.venda|brl(0) }}</b></td><td class="n"><b>{{ s.rebate_rs|brl }}</b></td><td class="n"><b>{{ s.rebate_comissao|brl }}</b></td><td class="n"><b>{{ s.rebate_frete|brl }}</b></td><td class="n"><b>{{ s.rebate_total|brl }}</b></td><td class="n"><b>{{ s.pct_sobre_venda|brl(2) }}%</b></td></tr>
+    </tbody></table></div>
+</div>
+
+<div class="dois-blocos">
+<div class="bloco">
+  <h2>O box · como o rebate nasce na {{ c.nome }}</h2>
+  <div class="rol fit"><table data-sem-ordenar>
+    <thead><tr><th>Rebate</th><th>Forma</th><th>Origem</th><th>Automático?</th></tr></thead>
+    <tbody>
+      <tr><td>Incentivo Shopee para ação comercial</td><td><span class="tag ok2">R$</span></td><td>coluna do export — a Shopee paga parte do desconto das campanhas</td><td>sim</td></tr>
+      <tr><td>Incentivo de cupom</td><td><span class="tag ok2">R$</span></td><td>coluna "Incentivo de cupom" (não a coluna "Cupom", que inclui o cupom do vendedor)</td><td>sim</td></tr>
+      <tr><td>Diferença de comissão</td><td><span class="tag ouro">Comissão</span></td><td>(% × subtotal + R$/item × qtd, de Parâmetros) − (comissão bruta + serviço bruta − ajuste por ação comercial)</td><td>sim</td></tr>
+      <tr><td>Frete Grátis</td><td><span class="tag ouro">Frete</span></td><td>Valor estimado do frete − Taxa de envio paga pelo comprador (teto R$ 40)</td><td>sim</td></tr>
+    </tbody></table></div>
+  <div class="nota">Entrada: export Order.all (1 linha por item → o app junta em 1 por pedido: soma subtotal e quantidade, taxas valem uma vez). Cancelados fora. Chave: ID do pedido = OC do ERP. Competência: data de criação do pedido. Baixar o mês fechado — cancelamentos tardios mudam o arquivo; subir de novo atualiza sem somar.</div>
+</div>
+<div class="bloco">
+  <h2>Sinais desta rodada</h2>
+  <div class="rol fit"><table data-sem-ordenar><tbody>
+    <tr><td>Arquivo</td><td class="n">{{ r.arquivo.nome }}</td></tr>
+    <tr><td>Período no arquivo</td><td class="n">{{ r.arquivo.diag.de|dia }} a {{ r.arquivo.diag.ate|dia }}</td></tr>
+    <tr><td>Itens → pedidos</td><td class="n">{{ r.arquivo.diag.itens }} itens → {{ r.arquivo.diag.linhas }} pedidos ({{ s.multi_item }} com mais de um item)</td></tr>
+    <tr><td>Cancelados (fora)</td><td class="n">{{ s.cancelados }}</td></tr>
+    <tr><td>Opção de envio</td><td class="n">{% for k, v in s.envios.items() %}{{ k }} {{ v }}{% if not loop.last %} · {% endif %}{% endfor %}</td></tr>
+    <tr><td>Comissão do sistema</td><td class="n">{{ r.sistema.nome }}</td></tr>
+    <tr><td>Comissão bruta + serviço bruta</td><td class="n">R$ {{ s.comissao_bruta|brl }} + R$ {{ s.servico_bruta|brl }}</td></tr>
+    <tr><td>Ajuste por ação comercial (devolvido)</td><td class="n">R$ {{ s.ajuste|brl }}</td></tr>
+    <tr><td>Comissão zerada pelo ajuste</td><td class="n">{{ s.tarifa_zero }} pedidos</td></tr>
+    <tr><td>Frete estimado − pago pelo comprador</td><td class="n">R$ {{ s.frete|brl }} − R$ {{ s.frete_comprador|brl }}</td></tr>
+    <tr><td>Cupom do vendedor (nosso, não é rebate)</td><td class="n">R$ {{ s.cupom_seller|brl }}</td></tr>
+    <tr><td>Diferença negativa (cobrou mais)</td><td class="n">{{ s.dif_neg }} pedidos · R$ {{ s.dif_neg_rs|brl }}</td></tr>
+  </tbody></table></div>
+  <a class="bt sec" href="{{ url_for('linha', chave='shopee', mes=comp) }}" style="margin-top:10px">Linha a linha Shopee →</a>
+</div>
+</div>
+{% endif %}
+{% endblock %}

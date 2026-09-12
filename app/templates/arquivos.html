@@ -126,7 +126,10 @@
       </div>
       {% endif %}
       <details class="ajuda2"><summary>O que o PLUTOS faz com isso</summary>
-        {% if cn.chave == 'magalu' %}
+        {% if cn.chave == 'shopee' %}
+        <p>Do ORDER.ALL (1 linha por item): junta em 1 por pedido, tira os <b>cancelados</b>; comissão do sistema = <b>% × subtotal + R$/item × quantidade</b> (Parâmetros: Shopee 12% + R$ 12); comissão real = comissão bruta + serviço bruta − ajuste por ação comercial; a diferença é o rebate de comissão.</p>
+        <p>Rebate em R$ = Incentivo Shopee para ação comercial + Incentivo de cupom. Rebate em frete = frete estimado − frete pago pelo comprador (Frete Grátis, teto R$ 40). Chave: ID do pedido = OC do ERP. Pode subir o mês de novo: o pedido é atualizado, nunca somado.</p>
+        {% elif cn.chave == 'magalu' %}
         <p>Do FINANCEIRO POR PERÍODO: tira os <b>cancelados</b> e a linha de total; comissão do sistema = <b>% + R$/pedido da tabela de Parâmetros</b> (Magalu 11% + R$ 5) sobre o valor pago pelo cliente; comissão real = <b>Serviços do marketplace (1+2+3+4) + Tarifa fixa</b>; a diferença é o rebate de comissão.</p>
         <p>Rebate em R$ = coparticipação de descontos <b>paga pelo Magalu</b> (desconto à vista + preço promocional) + subsídio de cupom pago pelo Magalu. Coparticipação de frete vai para a conta logística, não é rebate. OC do ERP casa tirando o sufixo "-1/-2".</p>
         {% else %}

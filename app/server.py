@@ -20,10 +20,10 @@ from flask import (Flask, abort, flash, jsonify, redirect, render_template, requ
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
-from motor import meli, erp, magalu
+from motor import meli, erp, magalu, shopee
 import planilhas
 
-VERSAO = "2026-09-12d"
+VERSAO = "2026-09-12e"
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(RAIZ), "dados")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -50,7 +50,9 @@ CANAIS = [
     {"chave": "cbahia",   "nome": "Casas Bahia",     "ativo": False},
     {"chave": "amazon",   "nome": "Amazon",          "ativo": False},
     {"chave": "webcont",  "nome": "Webcontinental",  "ativo": False},
-    {"chave": "shopee",   "nome": "Shopee",          "ativo": False},
+    {"chave": "shopee",   "nome": "Shopee",          "ativo": True,
+     "arquivo": "ORDER.ALL (Meus pedidos → Exportar)", "arquivo_sub": "export do portal Shopee · 1 linha por item · dia 01 a 31",
+     "extra": None},
 ]
 CANAIS_BASE = CANAIS
 
@@ -444,7 +446,7 @@ def comissao_cadastrada(nomes: tuple[str, ...], padrao: tuple[float, float]) -> 
     nomes = pedaços que identificam a linha (ex.: 'MAGAZINE', 'MAGALU')."""
     for lin in parametros().get("comissoes") or COMISSAO_PADRAO:
         nome = unidecode_lower(lin.get("canal", ""))
-        if any(unidecode_lower(n) in nome for n in nomes) and "full" not in nome:
+        if any(unidecode_lower(n) in nome for n in nomes) and "full" not in nome and "xpress" not in nome:
             try:
                 pct = float(str(lin.get("comissao", "0")).replace("%", "").replace(",", ".") or 0) / 100
                 taxa = float(str(lin.get("taxa", "0")).replace("R$", "").replace(",", ".").strip() or 0)
@@ -613,6 +615,50 @@ def processar_magalu(destino: str, nome: str, quem: str) -> str:
     return f"Magazine Luiza lido. {txt}. Cancelados fora: {diag['cancelados']}.{extra}"
 
 
+def recalcular_shopee(comp: str):
+    r = rodada("shopee", comp)
+    if not r:
+        return None
+    df, diag = shopee.ler(r["arquivo"]["caminho"])
+    df = df[df["competencia"] == comp]
+    pct, taxa = comissao_cadastrada(("SHOPEE",), (0.12, 12.0))
+    linhas = shopee.calcular(df, pct, taxa, erp_ler()["ocs"])
+    r["linhas"] = linhas
+    r["resumo"] = shopee.resumo(linhas, int(df["cancelado"].sum()))
+    r["sistema"] = {"nome": f"Parâmetros · {pct * 100:.2f}% + R$ {taxa:.2f}/item", "quando": agora().isoformat(),
+                    "diag": {"linhas": len(linhas), "modo": "tabela de comissões (Parâmetros)"}}
+    r["sistema_diag"] = r["sistema"]["diag"]
+    r["recalculado"] = agora().isoformat()
+    _json_gravar(rodada_caminho("shopee", comp), r)
+    return r
+
+
+def processar_shopee(destino: str, nome: str, quem: str) -> str:
+    df, diag = shopee.ler(destino)
+    comps = diag["competencias"]
+    principal = max(comps, key=comps.get)
+    pct, taxa = comissao_cadastrada(("SHOPEE",), (0.12, 12.0))
+    feitos = []
+    fora = 0
+    for comp, n in comps.items():
+        if comp != principal and n < 0.3 * comps[principal]:
+            fora += n
+            continue
+        sub = df[df["competencia"] == comp]
+        linhas = shopee.calcular(sub, pct, taxa, erp_ler()["ocs"])
+        r = {"canal": "shopee", "competencia": comp, "quando": agora().isoformat(), "quem": quem,
+             "arquivo": {"nome": nome, "caminho": destino, "diag": {k: v for k, v in diag.items() if k != "competencias"}},
+             "sistema": {"nome": f"Parâmetros · {pct * 100:.2f}% + R$ {taxa:.2f}/item", "quando": agora().isoformat(),
+                         "diag": {"linhas": len(linhas), "modo": "tabela de comissões (Parâmetros)"}},
+             "linhas": linhas, "resumo": shopee.resumo(linhas, int(sub["cancelado"].sum()))}
+        r["sistema_diag"] = r["sistema"]["diag"]
+        _json_gravar(rodada_caminho("shopee", comp), r)
+        feitos.append((comp, len(linhas), r["resumo"]["rebate_total"]))
+    txt = " · ".join(f"{f_mesano(c)}: {n} pedidos, R$ {f_brl(t)}" for c, n, t in feitos)
+    extra = f" {fora} linha(s) de outro mês ficaram de fora." if fora else ""
+    return f"Shopee lida. {txt}. Cancelados fora: {diag['cancelados']} · {diag['itens']} itens → {diag['linhas']} pedidos.{extra}"
+
+
 def recalcular_canais(comp: str) -> list[str]:
     feitos = []
     r = recalcular_meli(comp)
@@ -621,6 +667,9 @@ def recalcular_canais(comp: str) -> list[str]:
     r = recalcular_magalu(comp)
     if r:
         feitos.append(f"Magazine Luiza {f_mesano(comp)}: R$ {f_brl(r['resumo']['rebate_total'])}")
+    r = recalcular_shopee(comp)
+    if r:
+        feitos.append(f"Shopee {f_mesano(comp)}: R$ {f_brl(r['resumo']['rebate_total'])}")
     return feitos
 
 
@@ -756,6 +805,8 @@ def canal(chave):
         _json_gravar(rodada_caminho("meli", comp), r)
     if chave == "magalu":
         return render_template("canal_magalu.html", c=c, r=r)
+    if chave == "shopee":
+        return render_template("canal_shopee.html", c=c, r=r)
     return render_template("canal.html", c=c, r=r)
 
 
@@ -784,6 +835,21 @@ LINHA_COLS = {
         ("Desc. à vista Magalu", "desc_vista_magalu", "n"), ("Preço promo Magalu", "promo_magalu", "n"), ("Cupom Magalu", "cupom_magalu", "n"),
         ("Desc. à vista seller", "desc_vista_seller", "n"), ("Cupom seller", "cupom_seller", "n"),
         ("Copart. frete (logística)", "copart_frete", "n"), ("Custos logísticos", "custos_log", "n"), ("Repasse", "repasse", "n"), ("Líquido a receber", "liquido", "n"),
+        ("Rebate R$", "rebate_rs", "n"), ("Rebate comissão", "rebate_comissao", "n"), ("Rebate frete", "rebate_frete", "n"),
+        ("REBATE TOTAL", "rebate_total", "n"),
+    ],
+    "shopee": [
+        ("Data", "data", "d"), ("OC / ID do pedido", "pedido_mkt", "t"), ("Pedido Any", "pedido_any", "t"), ("Rastreio", "id_mkt", "t"),
+        ("Status", "status", "t"), ("Opção de envio", "envio", "t"), ("UF", "uf", "t"),
+        ("SKU", "sku", "t"), ("Descrição", "descricao", "t"), ("SKUs do pedido", "anuncio", "t"), ("Itens", "itens", "n"), ("Qtd", "qtd", "n"),
+        ("Subtotal produto", "valor_prod", "n"), ("Desc. vendedor", "desc_vendedor", "n"),
+        ("Comissão bruta", "comissao_bruta", "n"), ("Serviço bruta", "servico_bruta", "n"), ("Ajuste ação comercial", "ajuste", "n"),
+        ("Comissão real R$", "tarifa", "n"), ("% real", "pct_comissao", "p"),
+        ("Comissão sistema R$", "sis_rs", "n"), ("% sistema", "sis_pct", "p"), ("R$/item sistema", "sis_taxa", "n"),
+        ("Diferença = rebate comissão", "diferenca", "n"),
+        ("Incentivo Shopee (ação)", "incentivo", "n"), ("Incentivo de cupom", "cupom_shopee", "n"), ("Cupom vendedor", "cupom_seller", "n"), ("Moedas (qtd)", "moedas", "n"),
+        ("Frete estimado", "frete", "n"), ("Frete pago comprador", "frete_comprador", "n"),
+        ("Taxa transação", "taxa_transacao", "n"), ("Total global", "total_global", "n"),
         ("Rebate R$", "rebate_rs", "n"), ("Rebate comissão", "rebate_comissao", "n"), ("Rebate frete", "rebate_frete", "n"),
         ("REBATE TOTAL", "rebate_total", "n"),
     ],
@@ -1115,6 +1181,8 @@ def pend_processar(chave: str | None = None) -> list[str]:
                 m = processar_meli(x["tipo"], x["caminho"], x["nome"], x["quem"])
             elif x["chave"] == "magalu":
                 m = processar_magalu(x["caminho"], x["nome"], x["quem"])
+            elif x["chave"] == "shopee":
+                m = processar_shopee(x["caminho"], x["nome"], x["quem"])
             else:
                 m = f"{x['nome']}: o box {x['chave']} ainda não tem motor."
         except Exception as e:  # noqa: BLE001
