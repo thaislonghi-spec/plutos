@@ -128,7 +128,9 @@ tr.nova td{background:var(--sup2)}
 table.cols-12{min-width:1560px}
 .okum{background:var(--sup);border:1px solid var(--linha2);color:var(--tinta);font:700 11px Archivo,sans-serif;padding:5px 10px;border-radius:2px;cursor:pointer}
 .okum:hover{border-color:var(--ouro);color:#8A6508} .okum.feito{background:var(--bom);border-color:var(--bom);color:#fff}
-tr.feito td{background:#F1F8F4}
+tr.feito td{background:#F5F5F4;color:var(--tinta3)}
+tr.feito .tag.ok2{background:#E9E9E7;color:var(--tinta3)}
+tr.feito input{background:#FAFAF9;color:var(--tinta3)}
 thead th.ord{cursor:pointer}
 
 /* Faltante: colunas com larguras próprias — Obs inteira, valor e OK compactos */
@@ -305,3 +307,4 @@ table.cols-coletas-m{min-width:1300px} table.cols-coletas-m th:nth-child(5){widt
 .kpi .mf-total{display:block;font-size:15px;font-weight:600;color:#2B6CB0}
 .kpi .v .pv{font-style:normal;font-size:12px;font-weight:600;color:var(--tinta3);margin-left:8px;vertical-align:baseline;white-space:nowrap}
 .kpi .mf-total .pv{font-size:10.5px;margin-left:6px;color:var(--tinta3)}
+.chip small{font:600 10px "IBM Plex Mono",monospace;margin-left:6px;opacity:.75}

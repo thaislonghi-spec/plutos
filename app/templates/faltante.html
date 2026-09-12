@@ -23,6 +23,11 @@
     {% if PODE.faltante %}<span style="display:flex;gap:6px">
       <button class="bt pri" name="acao" value="gravar" type="submit" data-tip="Grava tudo que está digitado na tabela">Gravar valores</button></span>{% endif %}
   </div>
+  <div class="chips" id="fchips" style="margin-bottom:8px">
+    <span class="chip on" data-st="todos">Todos <small>{{ itens|length }}</small></span>
+    <span class="chip" data-st="pendente">Pendente <small>{{ itens|selectattr('faltante_status','equalto','pendente')|list|length }}</small></span>
+    <span class="chip" data-st="preenchido">Preenchido <small>{{ itens|rejectattr('faltante_status','equalto','pendente')|list|length }}</small></span>
+  </div>
   <div class="barra-massa">
     <input type="search" id="fbusca" placeholder="buscar em qualquer campo: OC, SKU, MLB, valor, obs…" class="obs" style="width:320px">
     <span class="nota" style="margin:0" id="fconta"></span>
@@ -40,7 +45,7 @@
     <tbody>
     {% for i in itens %}
     {% set ped = i.pedido_mkt %}
-    <tr data-ped="{{ ped }}" class="{{ 'pend' if i.faltante_status == 'pendente' and not i.sugestao }}{{ 'sug' if i.sugestao is not none and i.faltante_status == 'pendente' }}">
+    <tr data-ped="{{ ped }}" class="{{ 'pend' if i.faltante_status == 'pendente' and not i.sugestao }}{{ 'sug' if i.sugestao is not none and i.faltante_status == 'pendente' }}{{ 'feito' if i.faltante_status != 'pendente' }}">
       <td class="chk">{% if PODE.faltante %}<input type="checkbox" class="sel">{% endif %}</td>
       <td data-ord="{{ '1' if i.faltante_status == 'pendente' else '2' }}" class="st">{% if i.faltante_status == 'pendente' %}<span class="tag pend">pendente</span>{% else %}<span class="tag ok2">preenchido</span>{% endif %}</td>
       <td data-ord="{{ i.data }}">{{ i.data|dia }}</td><td class="n">{{ ped }}</td><td class="n">{{ i.sku }}</td><td class="n">{{ i.anuncio }}</td>
@@ -76,7 +81,7 @@
       var st = tr.querySelector('td.st');
       st.innerHTML = j.status === 'preenchido' ? '<span class="tag ok2">preenchido</span>' : '<span class="tag pend">pendente</span>';
       st.setAttribute('data-ord', j.status === 'preenchido' ? '2' : '1');
-      tr.classList.remove('pend','sug'); tr.classList.add(j.status === 'preenchido' ? 'feito' : 'pend');
+      tr.classList.remove('pend','sug'); tr.classList.add(j.status === 'preenchido' ? 'feito' : 'pend'); if(typeof filtrar==='function') filtrar();
       var qq = tr.querySelector('td.qq'); if(qq && j.status === 'preenchido') qq.textContent = j.quem + ' · ' + j.quando;
       bt.classList.add('feito'); setTimeout(function(){ bt.classList.remove('feito'); }, 1200);
     }).catch(function(){ bt.disabled = false; bt.textContent = 'erro'; });
@@ -99,11 +104,18 @@
     tr.querySelectorAll('input').forEach(function(i){ if(i.type !== 'checkbox') t += ' ' + i.value; });
     return t.toLowerCase();
   }
+  var estado = 'todos';
+  function estadoDe(tr){ return tr.classList.contains('feito') ? 'preenchido' : 'pendente'; }
   function filtrar(){
     var q = (busca.value || '').trim().toLowerCase(), n = 0, tot = 0;
-    linhas().forEach(function(tr){ tot++; var ok = !q || texto(tr).indexOf(q) >= 0; tr.style.display = ok ? '' : 'none'; if(ok) n++; });
-    conta.textContent = q ? (n + ' de ' + tot + ' pedidos') : (tot + ' pedidos');
+    linhas().forEach(function(tr){ tot++; var ok = (!q || texto(tr).indexOf(q) >= 0) && (estado === 'todos' || estadoDe(tr) === estado); tr.style.display = ok ? '' : 'none'; if(ok) n++; });
+    conta.textContent = (q || estado !== 'todos') ? (n + ' de ' + tot + ' pedidos') : (tot + ' pedidos');
+    var np = 0, nf = 0; linhas().forEach(function(tr){ if(estadoDe(tr) === 'pendente') np++; else nf++; });
+    document.querySelectorAll('#fchips .chip').forEach(function(c){ var s = c.querySelector('small'); if(!s) return;
+      s.textContent = c.dataset.st === 'todos' ? tot : (c.dataset.st === 'pendente' ? np : nf); });
   }
+  document.querySelectorAll('#fchips .chip').forEach(function(c){ c.addEventListener('click', function(){
+    estado = c.dataset.st; document.querySelectorAll('#fchips .chip').forEach(function(x){ x.classList.toggle('on', x === c); }); filtrar(); }); });
   if(busca){ busca.addEventListener('input', filtrar); filtrar(); }
 
   // ---- seleção e ações em massa (só preenchem os campos; gravar é o OK)
@@ -132,7 +144,7 @@
         var td = tr.querySelector('td.st');
         td.innerHTML = st === 'preenchido' ? '<span class="tag ok2">preenchido</span>' : '<span class="tag pend">pendente</span>';
         td.setAttribute('data-ord', st === 'preenchido' ? '2' : '1');
-        tr.classList.remove('pend','sug'); tr.classList.add(st === 'preenchido' ? 'feito' : 'pend');
+        tr.classList.remove('pend','sug'); tr.classList.add(st === 'preenchido' ? 'feito' : 'pend'); if(typeof filtrar==='function') filtrar();
         var qq = tr.querySelector('td.qq'); if(qq && st === 'preenchido') qq.textContent = j.quem + ' · ' + j.quando;
         var c = tr.querySelector('input.sel'); if(c) c.checked = false;
       });

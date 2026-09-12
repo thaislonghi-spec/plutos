@@ -23,7 +23,7 @@ from werkzeug.utils import secure_filename
 from motor import meli, erp, magalu, shopee, madeira, webcont
 import planilhas
 
-VERSAO = "2026-09-12q"
+VERSAO = "2026-09-12s"
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(RAIZ), "dados")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -2068,13 +2068,16 @@ def baixar(qual):
     abort(404)
 
 
-FRETE_CANAL = {"magalu": "custos_log", "meli": "frete"}   # canais que INFORMAM o frete cobrado (coluna da linha)
+# "Frete cobrado pelo canal" = o frete que o CLIENTE pagou ao canal (receita de frete), definição da Thaís 12/09.
+# Só entra quando o arquivo do canal traz esse valor: Meli = "Frete Pedido" (Tabela Geral).
+# Magalu (Financeiro por período) NÃO traz o frete pago pelo cliente — só "Custos logísticos" (o que o Magalu
+# cobra de nós) e a coparticipação → fica EM BRANCO. Shopee/Madeira/Webcont idem.
+FRETE_CANAL = {"meli": "frete"}
 
 
 def frete_cobrado_canal(chave: str, l: dict):
-    """Frete cobrado pelo canal, em R$. Só quando o canal informa (Magalu = Custos logísticos,
-    Meli = Frete Pedido). Nos demais devolve None → célula EM BRANCO no export (branco ≠ zero:
-    o Tropa usa CT-e/tabela quando está em branco)."""
+    """Frete pago pelo cliente ao canal, em R$, quando o canal informa; senão None → célula
+    EM BRANCO no export (branco ≠ zero: o Tropa usa a NF/CT-e quando está em branco)."""
     campo = FRETE_CANAL.get(chave)
     if not campo:
         return None

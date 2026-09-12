@@ -230,8 +230,8 @@ def export_rebates_xlsx(linhas: list[dict], quando) -> io.BytesIO:
               "Comissão SISTEMA = a de tabela (Parâmetros / ERP) · Comissão REAL = a que o canal cobrou de fato · % real = REAL ÷ base.",
               "Comissão REAL NÃO é rebate: fica fora das três formas e fora do Rebate TOTAL (o Tropa lê para a margem).",
               "Rebate comissão = SISTEMA − REAL. O Tropa/ORION devem partir da comissão SISTEMA para não contar o rebate duas vezes.",
-              "Frete cobrado pelo canal = o que o canal informou por pedido: Magalu = Custos logísticos · Mercado Livre = Frete Pedido.",
-              "EM BRANCO = o canal não informa (Shopee, Madeira, Webcontinental…): o Tropa usa CT-e/tabela. Branco ≠ zero (zero = o canal cobrou zero).",
+              "Frete cobrado pelo canal = o frete que o CLIENTE pagou ao canal (receita de frete), por pedido: Mercado Livre = Frete Pedido.",
+              "EM BRANCO = o arquivo do canal não traz esse valor (Magalu, Shopee, Madeira, Webcontinental): o Tropa usa a NF/CT-e. Branco ≠ zero (zero = o cliente pagou zero).",
               "Faltante campanha 'pendente' = pedido de tarifa zero ainda sem o valor pesquisado no portal (não soma)."]:
         ws3.append([t])
     ws3.column_dimensions["A"].width = 110
