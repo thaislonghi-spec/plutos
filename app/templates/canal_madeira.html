@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block conteudo %}
+{% if not r %}
+<div class="aviso"><b>Sem rodada de {{ c.nome }} em {{ comp|mesano }}.</b> Suba o relatório de pedidos do portal em <a href="{{ url_for('arquivos', mes=comp) }}">Arquivos</a> (Subir e rodar).</div>
+{% else %}
+{% set s = r.resumo %}
+<div class="kpis cinco">
+  <div class="kpi bom"><span class="l">Rebate em R$</span><span class="v">R$ 0</span><span class="o">o relatório do Madeira não traz incentivo nem cupom</span></div>
+  <div class="kpi preto"><span class="l">Rebate em comissão</span><span class="v">R$ {{ s.rebate_comissao|brl(0) }}</span><span class="o">17% × valor do pedido − comissão cobrada · {{ s.dif_pos }} a favor · {{ s.dif_neg }} contra</span></div>
+  <div class="kpi preto"><span class="l">Rebate em frete</span><span class="v">R$ 0</span><span class="o">sem subsídio de frete no relatório</span></div>
+  <div class="kpi {{ 'crit' if s.cancelados else 'bom' }}"><span class="l">Cancelados (fora)</span><span class="v">{{ s.cancelados }}</span><span class="o">{{ s.erp_ok }} de {{ s.pedidos }} com par no ERP</span></div>
+  <div class="kpi ouro"><span class="l">Rebate total</span><span class="v">R$ {{ s.rebate_total|brl(0) }}</span><span class="o">{{ s.pct_sobre_venda|brl(2) }}% de R$ {{ s.venda|brl(0) }} (GMV c/ frete) · {{ s.pedidos }} pedidos</span></div>
+</div>
+<div class="kpis tres-com">
+  <div class="kpi preto"><span class="l">Comissão sistema (deveria ser)</span><span class="v">R$ {{ s.com_sistema|brl(0) }}</span><span class="o">{{ s.com_sistema_pct|brl(2) }}% do GMV · {{ r.sistema.nome }}</span></div>
+  <div class="kpi crit"><span class="l">Comissão real (cobrada pelo Madeira)</span><span class="v">R$ {{ s.com_real|brl(0) }}</span><span class="o">{{ s.com_real_pct|brl(2) }}% · coluna "Comissão" do relatório</span></div>
+  <div class="kpi bom"><span class="l">Sistema − real = rebate de comissão</span><span class="v">R$ {{ s.com_dif|brl(0) }}</span><span class="o">{{ (s.com_sistema_pct - s.com_real_pct)|brl(2) }} p.p.</span></div>
+</div>
+
+<div class="bloco">
+  <h2>Dia a dia · {{ comp|mesano }}</h2>
+  {% set maxd = s.por_dia.values()|map(attribute='total')|max if s.por_dia else 1 %}
+  <div class="barras">
+    {% for d, v in s.por_dia.items() %}
+    <div class="b" style="height:{{ (100 * v.total / maxd) if maxd else 0 }}%" data-tip="{{ d|dia }} · R$ {{ v.total|brl }} · {{ v.pedidos }} pedidos"><i>{{ d[8:10] }}</i></div>
+    {% endfor %}
+  </div>
+  <div class="rol" style="max-height:50vh;margin-top:18px"><table class="cols-7">
+    <thead><tr><th>Dia</th><th class="n">Pedidos</th><th class="n">Valor pedido (GMV)</th><th class="n">Comissão sistema</th><th class="n">Comissão cobrada</th><th class="n">Rebate comissão</th><th class="n">% da venda</th></tr></thead>
+    <tbody>
+    {% for d, v in s.por_dia.items() %}
+    <tr><td>{{ d|dia }}</td><td class="n">{{ v.pedidos }}</td><td class="n">{{ v.venda|brl(0) }}</td><td class="n">{{ (v.venda * s.com_sistema_pct / 100)|brl }}</td><td class="n">{{ (v.venda * s.com_sistema_pct / 100 - v.comissao)|brl }}</td><td class="n"><b>{{ v.comissao|brl }}</b></td><td class="n">{{ (100 * v.total / v.venda)|brl(2) if v.venda else '—' }}%</td></tr>
+    {% endfor %}
+    <tr class="linha-total"><td><b>Total</b></td><td class="n"><b>{{ s.pedidos }}</b></td><td class="n"><b>{{ s.venda|brl(0) }}</b></td><td class="n"><b>{{ s.com_sistema|brl }}</b></td><td class="n"><b>{{ s.com_real|brl }}</b></td><td class="n"><b>{{ s.rebate_comissao|brl }}</b></td><td class="n"><b>{{ s.pct_sobre_venda|brl(2) }}%</b></td></tr>
+    </tbody></table></div>
+</div>
+
+<div class="dois-blocos">
+<div class="bloco">
+  <h2>O box · como o rebate nasce no {{ c.nome }}</h2>
+  <div class="rol fit"><table data-sem-ordenar>
+    <thead><tr><th>Rebate</th><th>Forma</th><th>Origem</th><th>Automático?</th></tr></thead>
+    <tbody>
+      <tr><td>Diferença de comissão</td><td><span class="tag ouro">Comissão</span></td><td>17% × "Valor Pedido" (GMV com frete, Parâmetros) − coluna "Comissão"</td><td>sim</td></tr>
+      <tr><td>Dinheiro</td><td><span class="tag mk-cinza">—</span></td><td>o relatório não traz incentivo nem cupom</td><td>não existe</td></tr>
+      <tr><td>Frete</td><td><span class="tag mk-cinza">—</span></td><td>o relatório não traz subsídio de frete</td><td>não existe</td></tr>
+    </tbody></table></div>
+  <div class="nota">Entrada: relatório de pedidos do portal Madeira (csv ";", 1 linha por item → 1 por pedido). Cancelados fora (a comissão não zera no cancelado). Chave: Pedido = OC do ERP. Competência: Data Pedido. No ERP, os 21% = 17% comissão + 4% taxa financeira (antecipação) — os 4% são custo financeiro, fora do rebate.</div>
+</div>
+<div class="bloco">
+  <h2>Sinais desta rodada</h2>
+  <div class="rol fit"><table data-sem-ordenar><tbody>
+    <tr><td>Arquivo</td><td class="n">{{ r.arquivo.nome }}</td></tr>
+    <tr><td>Período no arquivo</td><td class="n">{{ r.arquivo.diag.de|dia }} a {{ r.arquivo.diag.ate|dia }}</td></tr>
+    <tr><td>Itens → pedidos</td><td class="n">{{ r.arquivo.diag.itens }} itens → {{ r.arquivo.diag.linhas }} pedidos ({{ s.multi_item }} com mais de um item)</td></tr>
+    <tr><td>Cancelados (fora)</td><td class="n">{{ s.cancelados }}</td></tr>
+    <tr><td>Status</td><td class="n">{% for k, v in r.arquivo.diag.status.items() %}{{ k }} {{ v }}{% if not loop.last %} · {% endif %}{% endfor %}</td></tr>
+    <tr><td>Pagamento</td><td class="n">{% for k, v in s.pagamentos.items() %}{{ k }} {{ v }}{% if not loop.last %} · {% endif %}{% endfor %}</td></tr>
+    <tr><td>Comissão do sistema</td><td class="n">{{ r.sistema.nome }}</td></tr>
+    <tr><td>Valor dos itens (sem frete)</td><td class="n">R$ {{ s.valor_itens|brl }}</td></tr>
+    <tr><td>Diferença positiva (rebate)</td><td class="n">{{ s.dif_pos }} pedidos · R$ {{ s.dif_pos_rs|brl }}</td></tr>
+    <tr><td>Diferença negativa (cobrou mais)</td><td class="n">{{ s.dif_neg }} pedidos · R$ {{ s.dif_neg_rs|brl }}</td></tr>
+  </tbody></table></div>
+  <a class="bt sec" href="{{ url_for('linha', chave='madeira', mes=comp) }}" style="margin-top:10px">Linha a linha Madeira Madeira →</a>
+</div>
+</div>
+{% endif %}
+{% endblock %}

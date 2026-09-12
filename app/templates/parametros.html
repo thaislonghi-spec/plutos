@@ -6,6 +6,7 @@
     <input type="hidden" name="acao" value="geral">
     <label style="font-size:12px;color:var(--tinta3)">Empresa<br><input name="empresa" value="{{ PARAM.empresa }}" class="obs" {{ '' if PODE.parametros else 'disabled' }}></label>
     <label style="font-size:12px;color:var(--tinta3)" data-tip="Diferença de comissão (sistema − cobrada) abaixo disso é arredondamento, não rebate">Tolerância da diferença de comissão (R$)<br><input name="tolerancia" value="{{ PARAM.tolerancia_comissao|brl }}" class="val" {{ '' if PODE.parametros else 'disabled' }}></label>
+    <label style="font-size:12px;color:var(--tinta3)" data-tip="Madeira Madeira: o ERP traz 21% = 17% de comissão + 4% de taxa financeira (antecipação). O Linha a linha separa as duas.">Tx financeira Madeira Madeira (%)<br><input name="tx_madeira" value="{{ (PARAM.tx_financeira or {}).get('madeira', 4)|brl(1) }}" class="val" {{ '' if PODE.parametros else 'disabled' }}></label>
     {% if PODE.parametros %}<button class="bt pri" type="submit">Gravar e recalcular</button>{% endif %}
   </form>
   <div class="nota">As REGRAS ficam dentro do PLUTOS; aqui só o que muda de empresa para empresa.</div>

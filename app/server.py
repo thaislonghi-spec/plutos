@@ -20,10 +20,10 @@ from flask import (Flask, abort, flash, jsonify, redirect, render_template, requ
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
-from motor import meli, erp, magalu, shopee
+from motor import meli, erp, magalu, shopee, madeira
 import planilhas
 
-VERSAO = "2026-09-12f"
+VERSAO = "2026-09-12h"
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(RAIZ), "dados")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -45,7 +45,9 @@ CANAIS = [
     {"chave": "magalu",   "nome": "Magazine Luiza",  "ativo": True,
      "arquivo": "FINANCEIRO POR PERÍODO", "arquivo_sub": "export do portal Magalu · 1 linha por pedido · dia 01 a 31",
      "extra": None},
-    {"chave": "madeira",  "nome": "Madeira Madeira", "ativo": False},
+    {"chave": "madeira",  "nome": "Madeira Madeira", "ativo": True,
+     "arquivo": "RELATÓRIO DE PEDIDOS (portal Madeira)", "arquivo_sub": "MadeiraMadeira_<seller>-report_pedido_… · csv ; · 1 linha por item · dia 01 a 31",
+     "extra": None},
     {"chave": "colombo",  "nome": "Colombo",         "ativo": False},
     {"chave": "cbahia",   "nome": "Casas Bahia",     "ativo": False},
     {"chave": "amazon",   "nome": "Amazon",          "ativo": False},
@@ -203,7 +205,10 @@ COMISSAO_CAMPOS = ["codigo", "canal", "gestor", "comissao", "taxa", "tipo"]
 def parametros() -> dict:
     padrao = {"empresa": "Multimóveis", "tolerancia_comissao": 0.50,
               "canais_ativos": [c["chave"] for c in CANAIS_BASE if c["ativo"]],
-              "comissoes": COMISSAO_PADRAO}
+              "comissoes": COMISSAO_PADRAO,
+              # canais em que o % do ERP embute uma taxa financeira (antecipação):
+              # o Linha a linha separa "Comissão canal" e "Tx financeira canal"
+              "tx_financeira": {"madeira": 4.0}}
     p = _json_ler(pasta("parametros.json"), {})
     return {**padrao, **p}
 
@@ -743,6 +748,50 @@ def processar_shopee(destino: str, nome: str, quem: str) -> str:
     return f"Shopee lida — {_txt_upsert(res)}. {txt}. Cancelados fora: {diag['cancelados']} · {diag['itens']} itens → {diag['linhas']} pedidos.{extra}"
 
 
+def recalcular_madeira(comp: str):
+    r = rodada("madeira", comp)
+    if not r:
+        return None
+    df = base_df("madeira", comp)
+    if df is None:
+        df, diag = madeira.ler(r["arquivo"]["caminho"])
+        df = df[df["competencia"] == comp]
+    pct, _ = comissao_cadastrada(("MADEIRA",), (0.17, 0.0))
+    linhas = madeira.calcular(df, pct, erp_ler()["ocs"])
+    r["linhas"] = linhas
+    r["resumo"] = madeira.resumo(linhas, int(df["cancelado"].sum()))
+    r["sistema"] = {"nome": f"Parâmetros · {pct * 100:.2f}% do valor do pedido (GMV)", "quando": agora().isoformat(),
+                    "diag": {"linhas": len(linhas), "modo": "tabela de comissões (Parâmetros)"}}
+    r["sistema_diag"] = r["sistema"]["diag"]
+    r["recalculado"] = agora().isoformat()
+    _json_gravar(rodada_caminho("madeira", comp), r)
+    return r
+
+
+def processar_madeira(destino: str, nome: str, quem: str) -> str:
+    df, diag = madeira.ler(destino)
+    comps = diag["competencias"]
+    principal = max(comps, key=comps.get)
+    fora = 0
+    for comp, n in list(comps.items()):
+        if comp != principal and n < 0.3 * comps[principal]:
+            fora += n
+            df = df[df["competencia"] != comp]
+    res = base_upsert("madeira", df, "pedido", nome, destino, quem)
+    feitos = []
+    for comp in res:
+        r = rodada("madeira", comp) or {"canal": "madeira", "competencia": comp}
+        r.update({"quando": agora().isoformat(), "quem": quem,
+                  "arquivo": {"nome": nome, "caminho": destino, "diag": {k: v for k, v in diag.items() if k != "competencias"}},
+                  "linhas": [], "resumo": {}})
+        _json_gravar(rodada_caminho("madeira", comp), r)
+        r = recalcular_madeira(comp)
+        feitos.append((comp, r["resumo"]["pedidos"], r["resumo"]["rebate_total"]))
+    txt = " · ".join(f"{f_mesano(c)}: {n} pedidos, R$ {f_brl(t)}" for c, n, t in feitos)
+    extra = f" {fora} linha(s) de outro mês ficaram de fora." if fora else ""
+    return f"Madeira Madeira lido — {_txt_upsert(res)}. {txt}. Cancelados fora: {diag['cancelados']} · {diag['itens']} itens → {diag['linhas']} pedidos.{extra}"
+
+
 def recalcular_canais(comp: str) -> list[str]:
     feitos = []
     r = recalcular_meli(comp)
@@ -754,6 +803,9 @@ def recalcular_canais(comp: str) -> list[str]:
     r = recalcular_shopee(comp)
     if r:
         feitos.append(f"Shopee {f_mesano(comp)}: R$ {f_brl(r['resumo']['rebate_total'])}")
+    r = recalcular_madeira(comp)
+    if r:
+        feitos.append(f"Madeira Madeira {f_mesano(comp)}: R$ {f_brl(r['resumo']['rebate_total'])}")
     return feitos
 
 
@@ -891,6 +943,8 @@ def canal(chave):
         return render_template("canal_magalu.html", c=c, r=r)
     if chave == "shopee":
         return render_template("canal_shopee.html", c=c, r=r)
+    if chave == "madeira":
+        return render_template("canal_madeira.html", c=c, r=r)
     return render_template("canal.html", c=c, r=r)
 
 
@@ -937,6 +991,17 @@ LINHA_COLS = {
         ("Rebate R$", "rebate_rs", "n"), ("Rebate comissão", "rebate_comissao", "n"), ("Rebate frete", "rebate_frete", "n"),
         ("REBATE TOTAL", "rebate_total", "n"),
     ],
+    "madeira": [
+        ("Data", "data", "d"), ("OC / Pedido", "pedido_mkt", "t"), ("Pedido Site MM", "pedido_canal", "t"), ("Pedido Any", "pedido_any", "t"),
+        ("Status", "status", "t"), ("Pagamento", "pagamento", "t"), ("Parcelas", "parcelas", "n"), ("UF", "uf", "t"), ("Cidade", "cidade", "t"),
+        ("SKU", "sku", "t"), ("Descrição", "descricao", "t"), ("SKUs do pedido", "anuncio", "t"), ("Itens", "itens", "n"), ("Qtd", "qtd", "n"),
+        ("Valor pedido (GMV c/ frete)", "valor_prod", "n"), ("Valor itens", "valor_itens", "n"),
+        ("Comissão cobrada R$", "tarifa", "n"), ("% real", "pct_comissao", "p"),
+        ("Comissão sistema R$", "sis_rs", "n"), ("% sistema", "sis_pct", "p"), ("Diferença = rebate comissão", "diferenca", "n"),
+        ("NF", "nf", "t"), ("Data NF", "data_nf", "t"), ("Transportadora", "transportadora", "t"),
+        ("Rebate R$", "rebate_rs", "n"), ("Rebate comissão", "rebate_comissao", "n"), ("Rebate frete", "rebate_frete", "n"),
+        ("REBATE TOTAL", "rebate_total", "n"),
+    ],
 }
 
 
@@ -951,6 +1016,27 @@ ERP_COLS = [
 ]
 ERP_SO_COLS = [("Data", "data", "d"), ("OC", "oc", "t"), ("Canal (ERP)", "canal_erp", "t")] + \
     [(rot.replace("ERP · ", ""), k[4:], t) for rot, k, t in ERP_COLS if k not in ("erp_data",)]
+
+
+def separar_tx_financeira(chave: str, linhas: list[dict]) -> list[dict]:
+    """Madeira Madeira: o ERP traz 21% = 17% de comissão + 4% de taxa financeira
+    (antecipação). Cada linha ganha % e R$ separados; a base é a do ERP (valor produtos)."""
+    tx = (parametros().get("tx_financeira") or {}).get(chave)
+    if not tx:
+        return linhas
+    tx = float(tx) / 100.0
+    for l in linhas:
+        pct = l.get("pct_comissao") or 0.0
+        base = l.get("valor_prod") or 0.0
+        l["pct_canal"] = round(max(0.0, pct - tx), 6)
+        l["pct_tx_fin"] = tx
+        l["comissao_canal_rs"] = round(base * l["pct_canal"], 2)
+        l["tx_fin_rs"] = round(base * tx, 2)
+    return linhas
+
+
+TX_FIN_COLS = [("Comissão canal %", "pct_canal", "p"), ("Comissão canal R$", "comissao_canal_rs", "n"),
+               ("Tx financeira canal %", "pct_tx_fin", "p"), ("Tx financeira canal R$", "tx_fin_rs", "n")]
 
 
 @app.route("/linha/<chave>")
@@ -977,6 +1063,10 @@ def linha(chave):
     else:
         cols = ERP_SO_COLS
         linhas = erp_linhas(chave, comp)
+        if (parametros().get("tx_financeira") or {}).get(chave):
+            linhas = separar_tx_financeira(chave, [dict(l) for l in linhas])
+            i = next(i for i, (_, k, _) in enumerate(cols) if k == "comissao_erp_rs") + 1
+            cols = cols[:i] + TX_FIN_COLS + cols[i:]
         origem = "só ERP"
     if q:
         linhas = [l for l in linhas if q in " ".join(str(l.get(k) or "") for _, k, _ in cols).lower()]
@@ -1291,6 +1381,8 @@ def pend_processar(chave: str | None = None) -> list[str]:
                 m = processar_magalu(x["caminho"], x["nome"], x["quem"])
             elif x["chave"] == "shopee":
                 m = processar_shopee(x["caminho"], x["nome"], x["quem"])
+            elif x["chave"] == "madeira":
+                m = processar_madeira(x["caminho"], x["nome"], x["quem"])
             else:
                 m = f"{x['nome']}: o box {x['chave']} ainda não tem motor."
         except Exception as e:  # noqa: BLE001
@@ -1653,6 +1745,8 @@ def parametros_tela():
         p["empresa"] = (request.form.get("empresa") or p["empresa"]).strip()
         try:
             p["tolerancia_comissao"] = float((request.form.get("tolerancia") or "0.5").replace(",", "."))
+            p["tx_financeira"] = {**(p.get("tx_financeira") or {"madeira": 4.0}),
+                                  "madeira": float((request.form.get("tx_madeira") or "4").replace("%", "").replace(",", "."))}
         except ValueError:
             pass
         _json_gravar(pasta("parametros.json"), p)
@@ -1892,7 +1986,12 @@ def baixar(qual):
                 m.update({k: (e.get(k[4:]) if e else None) for _, k, _ in ERP_COLS}); linhas.append(m)
             bio = planilhas.linha_xlsx({"linhas": linhas}, LINHA_COLS.get(chave, []) + ERP_COLS, canal_por_chave()[chave]["nome"], comp)
         else:
-            bio = planilhas.linha_xlsx({"linhas": erp_linhas(chave, comp)}, ERP_SO_COLS, canal_por_chave()[chave]["nome"], comp)
+            cols_so, linhas_so = ERP_SO_COLS, erp_linhas(chave, comp)
+            if (parametros().get("tx_financeira") or {}).get(chave):
+                linhas_so = separar_tx_financeira(chave, [dict(l) for l in linhas_so])
+                i = next(i for i, (_, k, _) in enumerate(cols_so) if k == "comissao_erp_rs") + 1
+                cols_so = cols_so[:i] + TX_FIN_COLS + cols_so[i:]
+            bio = planilhas.linha_xlsx({"linhas": linhas_so}, cols_so, canal_por_chave()[chave]["nome"], comp)
         return send_file(bio, as_attachment=True,
                          download_name=f"PLUTOS_LinhaALinha_{chave.upper()}_{comp.replace('-', '')}.xlsx",
                          mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
