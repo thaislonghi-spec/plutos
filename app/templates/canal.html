@@ -7,11 +7,11 @@
 {% else %}
 {% set s = r.resumo %}
 <div class="kpis cinco">
-  <div class="kpi ouro"><span class="l">Rebate total</span><span class="v">R$ {{ s.rebate_total|brl(0) }}</span><span class="o">{{ s.pct_sobre_venda|brl(2) }}% de R$ {{ s.venda|brl(0) }} de produto</span></div>
-  <div class="kpi bom"><span class="l">R$ · Cupom Meli</span><span class="v">R$ {{ s.cupom_meli|brl(0) }}</span><span class="o">cupom bancado pelo Meli (coluna do export)</span></div>
-  <div class="kpi bom"><span class="l">R$ · Faltante campanha</span><span class="v">R$ {{ s.faltante|brl(0) }}</span><span class="o">{{ s.faltante_preenchidos }} de {{ s.tarifa_zero }} pedidos de tarifa zero apurados</span></div>
-  <div class="kpi preto"><span class="l">Comissão · Diferença</span><span class="v">R$ {{ s.rebate_comissao|brl(0) }}</span><span class="o">{% if r.sistema %}sistema − cobrada · {{ s.dif_pos }} pedidos{% else %}aguardando o ERP (box 0){% endif %}</span></div>
+  <div class="kpi bom"><span class="l">Rebate em R$</span><span class="v">R$ {{ s.rebate_rs|brl(0) }}</span><span class="o">Cupom Meli R$ {{ s.cupom_meli|brl(0) }} + Faltante campanha R$ {{ s.faltante|brl(0) }}</span></div>
+  <div class="kpi preto"><span class="l">Rebate em comissão</span><span class="v">R$ {{ s.rebate_comissao|brl(0) }}</span><span class="o">{% if r.sistema %}comissão sistema − cobrada · {{ s.dif_pos }} pedidos{% else %}aguardando o ERP{% endif %}</span></div>
+  <div class="kpi preto"><span class="l">Rebate em frete</span><span class="v">R$ 0</span><span class="o">Meli não pratica — frete do Coletas é custo nosso</span></div>
   <div class="kpi {{ 'crit' if s.faltante_pendentes else 'bom' }}"><span class="l">A apurar</span><span class="v">{{ s.faltante_pendentes }}</span><span class="o">{% if s.faltante_pendentes %}<a href="{{ url_for('faltante', mes=comp) }}">abrir a tabela manual</a>{% else %}nada pendente{% endif %}</span></div>
+  <div class="kpi ouro"><span class="l">Rebate total</span><span class="v">R$ {{ s.rebate_total|brl(0) }}</span><span class="o">{{ s.pct_sobre_venda|brl(2) }}% de R$ {{ s.venda|brl(0) }} de produto · {{ s.pedidos }} pedidos</span></div>
 </div>
 {% if r.sistema and s.com_sistema is defined %}
 <div class="kpis tres-com">

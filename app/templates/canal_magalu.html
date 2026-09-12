@@ -5,11 +5,11 @@
 {% else %}
 {% set s = r.resumo %}
 <div class="kpis cinco">
-  <div class="kpi ouro"><span class="l">Rebate total</span><span class="v">R$ {{ s.rebate_total|brl(0) }}</span><span class="o">{{ s.pct_sobre_venda|brl(2) }}% de R$ {{ s.venda|brl(0) }} pagos pelo cliente</span></div>
-  <div class="kpi bom"><span class="l">R$ · Desconto à vista (Magalu)</span><span class="v">R$ {{ s.desc_vista_magalu|brl(0) }}</span><span class="o">coparticipação paga pelo Magalu</span></div>
-  <div class="kpi bom"><span class="l">R$ · Preço promo + Cupom (Magalu)</span><span class="v">R$ {{ (s.promo_magalu + s.cupom_magalu)|brl(0) }}</span><span class="o">promo R$ {{ s.promo_magalu|brl(0) }} · cupom R$ {{ s.cupom_magalu|brl(0) }}</span></div>
-  <div class="kpi preto"><span class="l">Comissão · Diferença</span><span class="v">R$ {{ s.rebate_comissao|brl(0) }}</span><span class="o">sistema − cobrada · {{ s.dif_pos }} a favor · {{ s.dif_neg }} contra</span></div>
-  <div class="kpi {{ 'crit' if s.cancelados else 'preto' }}"><span class="l">Cancelados (fora)</span><span class="v">{{ s.cancelados }}</span><span class="o">{{ s.pedidos }} pedidos válidos · {{ s.erp_ok }} com par no ERP</span></div>
+  <div class="kpi bom"><span class="l">Rebate em R$</span><span class="v">R$ {{ s.rebate_rs|brl(0) }}</span><span class="o">à vista R$ {{ s.desc_vista_magalu|brl(0) }} + promo R$ {{ s.promo_magalu|brl(0) }} + cupom R$ {{ s.cupom_magalu|brl(0) }} (pagos pelo Magalu)</span></div>
+  <div class="kpi preto"><span class="l">Rebate em comissão</span><span class="v">R$ {{ s.rebate_comissao|brl(0) }}</span><span class="o">comissão sistema − cobrada · {{ s.dif_pos }} a favor · {{ s.dif_neg }} contra</span></div>
+  <div class="kpi preto"><span class="l">Rebate em frete</span><span class="v">R$ 0</span><span class="o">coparticipação de frete vai para a conta logística</span></div>
+  <div class="kpi {{ 'crit' if s.cancelados else 'bom' }}"><span class="l">Cancelados (fora)</span><span class="v">{{ s.cancelados }}</span><span class="o">{{ s.erp_ok }} de {{ s.pedidos }} com par no ERP</span></div>
+  <div class="kpi ouro"><span class="l">Rebate total</span><span class="v">R$ {{ s.rebate_total|brl(0) }}</span><span class="o">{{ s.pct_sobre_venda|brl(2) }}% de R$ {{ s.venda|brl(0) }} pagos pelo cliente · {{ s.pedidos }} pedidos</span></div>
 </div>
 <div class="kpis tres-com">
   <div class="kpi preto"><span class="l">Comissão sistema (deveria ser)</span><span class="v">R$ {{ s.com_sistema|brl(0) }}</span><span class="o">{{ s.com_sistema_pct|brl(2) }}% do pago · {{ r.sistema.nome }}</span></div>
