@@ -126,7 +126,9 @@
       </div>
       {% endif %}
       <details class="ajuda2"><summary>O que o PLUTOS faz com isso</summary>
-        {% if cn.chave == 'madeira' %}
+        {% if cn.chave == 'webcont' %}
+        <p>Do RELATÓRIO DE PEDIDOS do portal (aba Pedidos, 1 linha por pedido, valores "527,99"): tira <b>Cancelado</b>, <b>Cancelado isento</b> e <b>Não Autorizado</b>; comissão do sistema = <b>19% × Total do Pedido</b> (GMV com frete, tabela de Parâmetros); comissão real = Valor de Comissão Retido; a diferença é o rebate de comissão. Rebate em R$ e em frete = 0. Chave: Pedido Parceiro (acumula); Pedido ERP = OC do ERP.</p>
+        {% elif cn.chave == 'madeira' %}
         <p>Do RELATÓRIO DE PEDIDOS do portal (csv ";", 1 linha por item, pode vir sem extensão): tira os <b>cancelados</b> (no Madeira a comissão não zera no cancelado), junta em 1 por pedido (Valor Pedido e Comissão repetem por item; Valor do item soma); comissão do sistema = <b>17% × Valor Pedido</b> (GMV com frete, tabela de Parâmetros); comissão real = coluna Comissão; a diferença é o rebate de comissão. Rebate em R$ e em frete = 0 (o relatório não traz incentivo, cupom nem subsídio). Chave: Pedido = OC do ERP.</p>
         {% elif cn.chave == 'shopee' %}
         <p>Do ORDER.ALL (1 linha por item): junta em 1 por pedido, tira os <b>cancelados</b>; comissão do sistema = <b>% × subtotal + R$/item × quantidade</b> (Parâmetros: Shopee 12% + R$ 12); comissão real = comissão bruta + serviço bruta − ajuste por ação comercial; a diferença é o rebate de comissão.</p>

@@ -179,15 +179,23 @@ def linha_xlsx(r, cols, nome_canal: str, comp: str) -> io.BytesIO:
 
 
 def export_rebates_xlsx(linhas: list[dict], quando) -> io.BytesIO:
-    """A saída única para os outros apps: 1 linha por OC, 7 colunas fixas + apoio."""
+    """A saída única para os outros apps: 1 linha por OC, 7 colunas fixas + apoio.
+    'Frete cobrado pelo canal' fica EM BRANCO (não zero) quando o canal não informa."""
     wb = Workbook()
     wb.remove(wb.active)
     cab = ["OC", "Data", "Canal", "Rebate R$", "Rebate comissão", "Rebate frete", "Rebate TOTAL",
+           "Comissão SISTEMA R$", "Comissão REAL R$", "Frete cobrado pelo canal R$", "% real", "Base (venda)",
            "Competência", "SKU", "Pedido canal", "Faltante campanha"]
     ls = [[l["oc"], datetime.fromisoformat(l["data"]), l["canal"], l["rebate_rs"], l["rebate_comissao"],
-           l["rebate_frete"], l["rebate_total"], l["competencia"], l["sku"], l["pedido_canal"], l["faltante_status"]]
+           l["rebate_frete"], l["rebate_total"], l.get("sis_rs"), l.get("tarifa"), l.get("frete_canal"),
+           l.get("pct_real"), l.get("venda"),
+           l["competencia"], l["sku"], l["pedido_canal"], l["faltante_status"]]
           for l in linhas]
-    ws = _aba(wb, "REBATES", cab, ls, [22, 12, 18, 13, 16, 13, 14, 12, 16, 20, 16], moeda=(4, 5, 6, 7))
+    ws = _aba(wb, "REBATES", cab, ls, [22, 12, 18, 13, 16, 13, 14, 18, 16, 20, 9, 14, 12, 16, 20, 16],
+              moeda=(4, 5, 6, 7, 8, 9, 10, 12))
+    for row in ws.iter_rows(min_row=2, min_col=11, max_col=11):
+        for c in row:
+            c.number_format = "0.00%"
     for row in ws.iter_rows(min_row=2, min_col=2, max_col=2):
         for c in row:
             c.number_format = "DD/MM/YYYY"
@@ -198,20 +206,35 @@ def export_rebates_xlsx(linhas: list[dict], quando) -> io.BytesIO:
     res: dict[tuple, list] = {}
     for l in linhas:
         k = (l["competencia"], l["canal"])
-        a = res.setdefault(k, [0, 0.0, 0.0, 0.0, 0.0])
+        a = res.setdefault(k, [0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0])
         a[0] += 1; a[1] += l["rebate_rs"]; a[2] += l["rebate_comissao"]; a[3] += l["rebate_frete"]; a[4] += l["rebate_total"]
-    l2 = [[k[0], k[1], v[0], round(v[1], 2), round(v[2], 2), round(v[3], 2), round(v[4], 2)] for k, v in sorted(res.items())]
-    _aba(wb, "Resumo", ["Competência", "Canal", "Pedidos", "Rebate R$", "Rebate comissão", "Rebate frete", "Rebate TOTAL"],
-         l2, [12, 18, 10, 14, 16, 14, 14], moeda=(4, 5, 6, 7))
+        a[5] += l.get("sis_rs") or 0.0; a[6] += l.get("tarifa") or 0.0; a[7] += l.get("venda") or 0.0
+        if l.get("frete_canal") is not None:
+            a[8] += l["frete_canal"]; a[9] += 1
+    l2 = [[k[0], k[1], v[0], round(v[1], 2), round(v[2], 2), round(v[3], 2), round(v[4], 2), round(v[5], 2), round(v[6], 2),
+           (round(v[8], 2) if v[9] else None), v[9],
+           (round(v[6] / v[7], 4) if v[7] else None), round(v[7], 2)] for k, v in sorted(res.items())]
+    ws2 = _aba(wb, "Resumo", ["Competência", "Canal", "Pedidos", "Rebate R$", "Rebate comissão", "Rebate frete", "Rebate TOTAL",
+                              "Comissão SISTEMA R$", "Comissão REAL R$", "Frete cobrado pelo canal R$", "OCs com frete informado",
+                              "% real", "Base (venda)"],
+               l2, [12, 18, 10, 14, 16, 14, 14, 18, 16, 20, 14, 9, 14], moeda=(4, 5, 6, 7, 8, 9, 10, 13))
+    for row in ws2.iter_rows(min_row=2, min_col=12, max_col=12):
+        for c in row:
+            c.number_format = "0.00%"
     ws3 = wb.create_sheet("Como_ler")
     for t in [f"PLUTOS · EXPORT REBATES · gerado em {quando.strftime('%d/%m/%Y %H:%M')} (Brasília)",
               "", "Uma linha por OC com o rebate nas três formas. É este arquivo que os outros apps",
               "(Tropa de Elite, ORION, Hércules, ATLAS) importam.",
               "OC = pedido do marketplace (a Ordem de compra do ERP), sempre texto.",
               "Rebate R$ = volta em dinheiro · Rebate comissão = paga-se menos · Rebate frete = o canal ajuda no frete.",
+              "Comissão SISTEMA = a de tabela (Parâmetros / ERP) · Comissão REAL = a que o canal cobrou de fato · % real = REAL ÷ base.",
+              "Comissão REAL NÃO é rebate: fica fora das três formas e fora do Rebate TOTAL (o Tropa lê para a margem).",
+              "Rebate comissão = SISTEMA − REAL. O Tropa/ORION devem partir da comissão SISTEMA para não contar o rebate duas vezes.",
+              "Frete cobrado pelo canal = o que o canal informou por pedido: Magalu = Custos logísticos · Mercado Livre = Frete Pedido.",
+              "EM BRANCO = o canal não informa (Shopee, Madeira, Webcontinental…): o Tropa usa CT-e/tabela. Branco ≠ zero (zero = o canal cobrou zero).",
               "Faltante campanha 'pendente' = pedido de tarifa zero ainda sem o valor pesquisado no portal (não soma)."]:
         ws3.append([t])
-    ws3.column_dimensions["A"].width = 100
+    ws3.column_dimensions["A"].width = 110
     ws3["A1"].font = Font(bold=True, size=13)
     bio = io.BytesIO(); wb.save(bio); bio.seek(0)
     return bio

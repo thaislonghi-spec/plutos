@@ -20,10 +20,10 @@ from flask import (Flask, abort, flash, jsonify, redirect, render_template, requ
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
-from motor import meli, erp, magalu, shopee, madeira
+from motor import meli, erp, magalu, shopee, madeira, webcont
 import planilhas
 
-VERSAO = "2026-09-12h"
+VERSAO = "2026-09-12o"
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(RAIZ), "dados")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -51,7 +51,9 @@ CANAIS = [
     {"chave": "colombo",  "nome": "Colombo",         "ativo": False},
     {"chave": "cbahia",   "nome": "Casas Bahia",     "ativo": False},
     {"chave": "amazon",   "nome": "Amazon",          "ativo": False},
-    {"chave": "webcont",  "nome": "Webcontinental",  "ativo": False},
+    {"chave": "webcont",  "nome": "Webcontinental",  "ativo": True,
+     "arquivo": "RELATÓRIO DE PEDIDOS (portal Webcontinental)", "arquivo_sub": "relatorio_pedidos_webcontinental_DDMMateDDMMAA.xlsx · aba Pedidos · 1 linha por pedido · dia 01 a 31",
+     "extra": None},
     {"chave": "shopee",   "nome": "Shopee",          "ativo": True,
      "arquivo": "ORDER.ALL (Meus pedidos → Exportar)", "arquivo_sub": "export do portal Shopee · 1 linha por item · dia 01 a 31",
      "extra": None},
@@ -208,7 +210,7 @@ def parametros() -> dict:
               "comissoes": COMISSAO_PADRAO,
               # canais em que o % do ERP embute uma taxa financeira (antecipação):
               # o Linha a linha separa "Comissão canal" e "Tx financeira canal"
-              "tx_financeira": {"madeira": 4.0}}
+              "tx_financeira": {"madeira": 4.0, "webcont": 1.0}}
     p = _json_ler(pasta("parametros.json"), {})
     return {**padrao, **p}
 
@@ -792,6 +794,50 @@ def processar_madeira(destino: str, nome: str, quem: str) -> str:
     return f"Madeira Madeira lido — {_txt_upsert(res)}. {txt}. Cancelados fora: {diag['cancelados']} · {diag['itens']} itens → {diag['linhas']} pedidos.{extra}"
 
 
+def recalcular_webcont(comp: str):
+    r = rodada("webcont", comp)
+    if not r:
+        return None
+    df = base_df("webcont", comp)
+    if df is None:
+        df, diag = webcont.ler(r["arquivo"]["caminho"])
+        df = df[df["competencia"] == comp]
+    pct, _ = comissao_cadastrada(("WEBCONTINENTAL", "WEBCONT"), (0.19, 0.0))
+    linhas = webcont.calcular(df, pct, erp_ler()["ocs"])
+    r["linhas"] = linhas
+    r["resumo"] = webcont.resumo(linhas, int(df["cancelado"].sum()))
+    r["sistema"] = {"nome": f"Parâmetros · {pct * 100:.2f}% do total do pedido (GMV)", "quando": agora().isoformat(),
+                    "diag": {"linhas": len(linhas), "modo": "tabela de comissões (Parâmetros)"}}
+    r["sistema_diag"] = r["sistema"]["diag"]
+    r["recalculado"] = agora().isoformat()
+    _json_gravar(rodada_caminho("webcont", comp), r)
+    return r
+
+
+def processar_webcont(destino: str, nome: str, quem: str) -> str:
+    df, diag = webcont.ler(destino)
+    comps = diag["competencias"]
+    principal = max(comps, key=comps.get)
+    fora = 0
+    for comp, n in list(comps.items()):
+        if comp != principal and n < 0.3 * comps[principal]:
+            fora += n
+            df = df[df["competencia"] != comp]
+    res = base_upsert("webcont", df, "pedido", nome, destino, quem)
+    feitos = []
+    for comp in res:
+        r = rodada("webcont", comp) or {"canal": "webcont", "competencia": comp}
+        r.update({"quando": agora().isoformat(), "quem": quem,
+                  "arquivo": {"nome": nome, "caminho": destino, "diag": {k: v for k, v in diag.items() if k != "competencias"}},
+                  "linhas": [], "resumo": {}})
+        _json_gravar(rodada_caminho("webcont", comp), r)
+        r = recalcular_webcont(comp)
+        feitos.append((comp, r["resumo"]["pedidos"], r["resumo"]["rebate_total"]))
+    txt = " · ".join(f"{f_mesano(c)}: {n} pedidos, R$ {f_brl(t)}" for c, n, t in feitos)
+    extra = f" {fora} linha(s) de outro mês ficaram de fora." if fora else ""
+    return f"Webcontinental lida — {_txt_upsert(res)}. {txt}. Cancelados fora: {diag['cancelados']}.{extra}"
+
+
 def recalcular_canais(comp: str) -> list[str]:
     feitos = []
     r = recalcular_meli(comp)
@@ -806,6 +852,9 @@ def recalcular_canais(comp: str) -> list[str]:
     r = recalcular_madeira(comp)
     if r:
         feitos.append(f"Madeira Madeira {f_mesano(comp)}: R$ {f_brl(r['resumo']['rebate_total'])}")
+    r = recalcular_webcont(comp)
+    if r:
+        feitos.append(f"Webcontinental {f_mesano(comp)}: R$ {f_brl(r['resumo']['rebate_total'])}")
     return feitos
 
 
@@ -917,7 +966,7 @@ def painel():
         if r:
             s = r["resumo"]
             por_canal.append({**c, "res": s, "quando": r["quando"]})
-            tot["rs"] += s["rebate_rs"]; tot["com"] += s["rebate_comissao"]; tot["frete"] += 0.0
+            tot["rs"] += s["rebate_rs"]; tot["com"] += s["rebate_comissao"]; tot["frete"] += s.get("rebate_frete", 0.0) or 0.0
             tot["total"] += s["rebate_total"]; tot["venda"] += s["venda"]; tot["pedidos"] += s["pedidos"]
             tot["pend"] += s["faltante_pendentes"]
         else:
@@ -945,6 +994,8 @@ def canal(chave):
         return render_template("canal_shopee.html", c=c, r=r)
     if chave == "madeira":
         return render_template("canal_madeira.html", c=c, r=r)
+    if chave == "webcont":
+        return render_template("canal_webcont.html", c=c, r=r)
     return render_template("canal.html", c=c, r=r)
 
 
@@ -999,6 +1050,17 @@ LINHA_COLS = {
         ("Comissão cobrada R$", "tarifa", "n"), ("% real", "pct_comissao", "p"),
         ("Comissão sistema R$", "sis_rs", "n"), ("% sistema", "sis_pct", "p"), ("Diferença = rebate comissão", "diferenca", "n"),
         ("NF", "nf", "t"), ("Data NF", "data_nf", "t"), ("Transportadora", "transportadora", "t"),
+        ("Rebate R$", "rebate_rs", "n"), ("Rebate comissão", "rebate_comissao", "n"), ("Rebate frete", "rebate_frete", "n"),
+        ("REBATE TOTAL", "rebate_total", "n"),
+    ],
+    "webcont": [
+        ("Data", "data", "d"), ("OC / Pedido ERP", "pedido_mkt", "t"), ("Pedido Parceiro", "pedido_canal", "t"), ("Pedido Site", "id_mkt", "t"), ("Pedido Any", "pedido_any", "t"),
+        ("Status", "status", "t"), ("Pagamento", "pagamento", "t"), ("UF", "uf", "t"), ("Cidade", "cidade", "t"),
+        ("SKU", "sku", "t"), ("Descrição", "descricao", "t"), ("Qtd", "qtd", "n"),
+        ("Total do pedido (GMV c/ frete)", "valor_prod", "n"), ("Valor produtos", "valor_itens", "n"), ("Valor frete", "frete", "n"), ("Desconto", "desconto", "n"), ("Valor repasse", "repasse", "n"),
+        ("Comissão retida R$", "tarifa", "n"), ("% real", "pct_comissao", "p"),
+        ("Comissão sistema R$", "sis_rs", "n"), ("% sistema", "sis_pct", "p"), ("Diferença = rebate comissão", "diferenca", "n"),
+        ("NF", "nf", "t"), ("Transportadora", "transportadora", "t"),
         ("Rebate R$", "rebate_rs", "n"), ("Rebate comissão", "rebate_comissao", "n"), ("Rebate frete", "rebate_frete", "n"),
         ("REBATE TOTAL", "rebate_total", "n"),
     ],
@@ -1383,6 +1445,8 @@ def pend_processar(chave: str | None = None) -> list[str]:
                 m = processar_shopee(x["caminho"], x["nome"], x["quem"])
             elif x["chave"] == "madeira":
                 m = processar_madeira(x["caminho"], x["nome"], x["quem"])
+            elif x["chave"] == "webcont":
+                m = processar_webcont(x["caminho"], x["nome"], x["quem"])
             else:
                 m = f"{x['nome']}: o box {x['chave']} ainda não tem motor."
         except Exception as e:  # noqa: BLE001
@@ -1745,8 +1809,9 @@ def parametros_tela():
         p["empresa"] = (request.form.get("empresa") or p["empresa"]).strip()
         try:
             p["tolerancia_comissao"] = float((request.form.get("tolerancia") or "0.5").replace(",", "."))
-            p["tx_financeira"] = {**(p.get("tx_financeira") or {"madeira": 4.0}),
-                                  "madeira": float((request.form.get("tx_madeira") or "4").replace("%", "").replace(",", "."))}
+            p["tx_financeira"] = {**(p.get("tx_financeira") or {"madeira": 4.0, "webcont": 1.0}),
+                                  "madeira": float((request.form.get("tx_madeira") or "4").replace("%", "").replace(",", ".")),
+                                  "webcont": float((request.form.get("tx_webcont") or "1").replace("%", "").replace(",", "."))}
         except ValueError:
             pass
         _json_gravar(pasta("parametros.json"), p)
@@ -2003,6 +2068,20 @@ def baixar(qual):
     abort(404)
 
 
+FRETE_CANAL = {"magalu": "custos_log", "meli": "frete"}   # canais que INFORMAM o frete cobrado (coluna da linha)
+
+
+def frete_cobrado_canal(chave: str, l: dict):
+    """Frete cobrado pelo canal, em R$. Só quando o canal informa (Magalu = Custos logísticos,
+    Meli = Frete Pedido). Nos demais devolve None → célula EM BRANCO no export (branco ≠ zero:
+    o Tropa usa CT-e/tabela quando está em branco)."""
+    campo = FRETE_CANAL.get(chave)
+    if not campo:
+        return None
+    v = l.get(campo)
+    return None if v is None else round(float(v), 2)
+
+
 @app.route("/export-rebates")
 @logado
 @exige("exportar")
@@ -2017,9 +2096,13 @@ def export_rebates():
             if not r:
                 continue
             for l in r["linhas"]:
+                base = l.get("valor_prod") or 0.0
                 linhas.append({"oc": l["pedido_mkt"], "data": l["data"], "canal": c["nome"],
                                "rebate_rs": l["rebate_rs"], "rebate_comissao": l["rebate_comissao"],
                                "rebate_frete": l["rebate_frete"], "rebate_total": l["rebate_total"],
+                               "sis_rs": l.get("sis_rs"), "tarifa": l.get("tarifa"),
+                               "frete_canal": frete_cobrado_canal(c["chave"], l),
+                               "pct_real": ((l.get("tarifa") or 0.0) / base if base else None), "venda": base,
                                "competencia": comp, "sku": l.get("sku", ""), "pedido_canal": l.get("pedido_canal", ""),
                                "faltante_status": l.get("faltante_status", "")})
     if not linhas:
@@ -2049,6 +2132,8 @@ def api_rebates(comp):
                           "pedido_any": l["pedido_any"], "data": l["data"], "sku": l["sku"],
                           "rebate_rs": l["rebate_rs"], "rebate_comissao": l["rebate_comissao"],
                           "rebate_frete": l["rebate_frete"], "rebate_total": l["rebate_total"],
+                          "comissao_sistema": l.get("sis_rs"), "comissao_real": l.get("tarifa"), "base_venda": l.get("valor_prod"),
+                          "frete_canal": frete_cobrado_canal(c["chave"], l),
                           "faltante_status": l["faltante_status"]})
     return jsonify({"competencia": comp, "gerado": agora().isoformat(), "versao": VERSAO,
                     "pedidos": len(saida), "linhas": saida})

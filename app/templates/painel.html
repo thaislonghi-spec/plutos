@@ -7,7 +7,7 @@
   <div class="kpi ouro"><span class="l">Rebate total · {{ comp|mesano }}</span><span class="v">R$ {{ tot.total|brl(0) }}</span><span class="o">{{ tot.pct|brl(2) }}% da venda de produto · {{ tot.pedidos|brl(0) }} pedidos</span></div>
   <div class="kpi bom"><span class="l">1 · Rebate em R$</span><span class="v">R$ {{ tot.rs|brl(0) }}</span><span class="o">volta em dinheiro na conta</span></div>
   <div class="kpi preto"><span class="l">2 · Rebate em comissão</span><span class="v">R$ {{ tot.com|brl(0) }}</span><span class="o">paga-se menos — não volta dinheiro</span></div>
-  <div class="kpi preto"><span class="l">3 · Rebate em frete</span><span class="v">R$ {{ tot.frete|brl(0) }}</span><span class="o">nenhum canal ativo pratica ainda</span></div>
+  <div class="kpi preto"><span class="l">3 · Rebate em frete</span><span class="v">R$ {{ tot.frete|brl(0) }}</span><span class="o">{% if tot.frete %}Shopee: Frete Grátis (frete estimado − pago pelo comprador){% else %}nenhum canal ativo pratica ainda{% endif %}</span></div>
   <div class="kpi {{ 'crit' if tot.pend else 'bom' }}"><span class="l">A apurar (faltante campanha)</span><span class="v">{{ tot.pend }}</span><span class="o">{% if tot.pend %}pedidos de tarifa zero sem valor — <a href="{{ url_for('faltante', mes=comp) }}">preencher</a>{% else %}tudo apurado{% endif %}</span></div>
 </div>
 
@@ -20,7 +20,7 @@
       <h3>{{ c.nome }} <span class="tag ok2">rodado</span></h3>
       <div class="g">R$ {{ c.res.rebate_total|brl(0) }}</div>
       <div class="m">{{ c.res.pct_sobre_venda|brl(2) }}% da venda · {{ c.res.pedidos|brl(0) }} pedidos</div>
-      <div class="m">R$ {{ c.res.rebate_rs|brl(0) }} em dinheiro · R$ {{ c.res.rebate_comissao|brl(0) }} em comissão</div>
+      <div class="m">R$ {{ c.res.rebate_rs|brl(0) }} em R$ · R$ {{ c.res.rebate_comissao|brl(0) }} em comissão · R$ {{ (c.res.rebate_frete or 0)|brl(0) }} em frete</div>
       {% if c.res.faltante_pendentes %}<div class="m"><span class="tag pend">{{ c.res.faltante_pendentes }} a apurar</span></div>{% endif %}
       {% if c.res.sem_sistema == c.res.pedidos %}<div class="m"><span class="tag aten">sem comissão do ERP</span></div>{% endif %}
       <div class="m" style="margin-top:auto">rodada {{ c.quando|quando }}</div>
