@@ -13,6 +13,7 @@ import secrets
 import shutil
 from datetime import datetime, timedelta, timezone
 from functools import wraps
+from typing import Any
 
 from flask import (Flask, abort, flash, jsonify, redirect, render_template, request,
                    send_file, session, url_for)
@@ -22,7 +23,7 @@ from werkzeug.utils import secure_filename
 from motor import meli, erp, magalu
 import planilhas
 
-VERSAO = "2026-09-11f"
+VERSAO = "2026-09-12c"
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(RAIZ), "dados")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -115,12 +116,32 @@ def agora():
     return datetime.now(BRT)
 
 
+# Cache dos JSONs em memória, por (caminho, mtime, tamanho): cada tela lia o
+# índice do ERP, as rodadas, a Planilha 2 e o cadastro várias vezes por
+# requisição — no Render (512 MB) isso derrubava o worker (502). Quem altera
+# um JSON sempre grava em seguida (_json_gravar), que invalida a entrada.
+_CACHE: dict[str, tuple[tuple, Any]] = {}
+_CACHE_LOCK = __import__("threading").Lock()
+
+
 def _json_ler(caminho, padrao):
     try:
+        st = os.stat(caminho)
+    except OSError:
+        return padrao
+    chave = (st.st_mtime_ns, st.st_size)
+    with _CACHE_LOCK:
+        hit = _CACHE.get(caminho)
+        if hit and hit[0] == chave:
+            return hit[1]
+    try:
         with open(caminho, encoding="utf-8") as f:
-            return json.load(f)
+            dado = json.load(f)
     except Exception:
         return padrao
+    with _CACHE_LOCK:
+        _CACHE[caminho] = (chave, dado)
+    return dado
 
 
 def _json_gravar(caminho, dado):
@@ -129,6 +150,8 @@ def _json_gravar(caminho, dado):
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(dado, f, ensure_ascii=False, indent=1, default=str)
     os.replace(tmp, caminho)
+    with _CACHE_LOCK:
+        _CACHE.pop(caminho, None)
 
 
 def empresa_atual() -> str:
@@ -328,24 +351,28 @@ def ok_quando_pagina():
     if not session.get("usuario") or not request:
         return None
     ep = request.endpoint or ""
+    # devolve "" quando a aba TEM tabela mas ainda não recebeu nada (a pílula
+    # aparece sempre: verde com a data, ou cinza "sem dados")
     if ep in ("mlbs", "custo_coletas", "coletas"):
         ups = mlbs_ler()["uploads"]
-        return ups[-1]["quando"] if ups else None
+        return ups[-1]["quando"] if ups else ""
     if ep in ("canal", "linha", "faltante", "pedidos", "painel"):
         chave = request.view_args.get("chave", "meli") if request.view_args else "meli"
         r = rodada(chave, comp_atual())
         if r:
             return r["quando"]
+        if ep in ("canal", "linha", "faltante"):
+            return ""
         u = ultima_rodada_info()
-        return u["quando"] if u else None
+        return u["quando"] if u else ""
     if ep == "parametros_tela":
         cad = descricoes_ler()
         ts = [v["quando"] for k, v in cad.items() if isinstance(v, dict) and k in ("anymarket", "custos") and v.get("quando")]
         if parametros().get("comissoes_quando"):
             ts.append(parametros()["comissoes_quando"])
-        return max(ts) if ts else None
+        return max(ts) if ts else ""
     if ep == "arquivos":
-        return ultima_atualizacao()
+        return ultima_atualizacao() or ""
     return None
 
 
@@ -1123,7 +1150,7 @@ def subir(chave):
     if request.form.get("rodar"):
         for m in pend_processar(chave):
             flash(m)
-        return redirect(url_for("arquivos"))
+        return redirect(url_for("canal", chave=chave, mes=comp_atual()) if chave != "meli" or tipo == "base" else url_for("mlbs") if tipo == "rebates" else url_for("arquivos"))
     n = len([x for x in lista if x["chave"] == chave])
     flash(f"{nome} guardado no box {c['nome']} — {n} arquivo(s) aguardando. Clique ▶ Rodar {c['nome']} ou ▶ Rodar o PLUTOS.")
     return redirect(url_for("arquivos"))

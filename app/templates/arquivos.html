@@ -37,7 +37,7 @@
       {% if PODE.arquivos %}
       <form method="post" action="{{ url_for('subir_erp') }}" enctype="multipart/form-data" class="ca-pe" id="ferp">
         {% if erp_idx.uploads %}<a href="#" class="ca-excluir" id="erp-limpar">excluir todos</a>{% else %}<span></span>{% endif %}
-        <input type="file" name="arquivo" accept=".xlsx,.xls,.csv,.txt" id="erp-arq" hidden required>
+        <input type="hidden" name="rodar" value="1"><input type="file" name="arquivo" accept=".xlsx,.xls,.csv,.txt" id="erp-arq" hidden required>
         <button type="button" class="bt sec ca-incluir" id="erp-incluir">Incluir arquivo</button>
         <button type="submit" class="bt pri ca-ok" id="erp-ok" disabled>OK</button>
       </form>
@@ -45,7 +45,7 @@
       <form method="post" action="{{ url_for('erp_limpar') }}" id="ferp-limpar" hidden></form>
       <div class="ca-escolhido" id="erp-escolhido"></div>
       {% endif %}
-      {% if erp_idx.uploads %}<div class="ok-canto"><span class="pill-ok">ok · {{ erp_idx.uploads[-1].quando|quando }}</span></div>{% endif %}
+      <div class="ok-canto">{% if erp_idx.uploads %}<span class="pill-ok">ok · {{ erp_idx.uploads[-1].quando|quando }}</span>{% else %}<span class="pill-nao">sem arquivo</span>{% endif %}</div>
     </div>
     <div>
       <div class="arq-sub">Export "Pedidos_Marketplace_DDMMateDDMMAAAA_HHMM" em <b>.csv</b> ou <b>.xlsx</b> — tanto faz, o app lê os dois igual. A OC é texto e é a chave de tudo; a coluna T diz o canal (sem o "MP - "); a coluna AB é o % de comissão do ERP. <b>Nunca soma duas vezes:</b> pode subir o mês inteiro de novo — OC que já existe é ignorada (ou atualizada se mudou), só as novas entram.</div>
@@ -85,11 +85,11 @@
           <span class="arq-n">comissão do sistema: {% if r_meli.sistema %}<span class="ok">ERP</span> {{ r_meli.sistema_diag.linhas }} OCs{% else %}<span class="tag pend">suba o ERP (arquivo principal)</span>{% endif %}</span>{% else %}<span class="arq-n">ainda não subiu nesta competência</span>{% endif %}
           {% if PODE.arquivos %}
           <form method="post" action="{{ url_for('subir', chave=cn.chave) }}" enctype="multipart/form-data" class="upl">
-            <input type="hidden" name="tipo" value="base"><input type="file" name="arquivo" accept=".xlsx,.xls,.csv" required>
-            <button class="bt pri" type="submit" style="padding:7px 14px">Subir</button>
+            <input type="hidden" name="tipo" value="base"><input type="hidden" name="rodar" value="1"><input type="file" name="arquivo" accept=".xlsx,.xls,.csv" required>
+            <button class="bt pri" type="submit" style="padding:7px 14px">Subir e rodar</button>
           </form>
           {% for x in pend_por.get(cn.chave, []) if x.tipo == 'base' %}<span class="arq-n espera-n">⏳ {{ x.nome }} · aguardando ▶ rodar</span>{% endfor %}
-          {% if r_meli %}<div class="ok-canto"><span class="pill-ok">ok · {{ r_meli.quando|quando }}</span></div>{% endif %}
+          <div class="ok-canto">{% if r_meli %}<span class="pill-ok">ok · {{ r_meli.quando|quando }}</span>{% else %}<span class="pill-nao">sem arquivo · {{ comp|mesano }}</span>{% endif %}</div>
           {% endif %}
         </div>
         <div class="upl-box">
@@ -100,11 +100,11 @@
           <span class="arq-n">Lista de MLB's: <b>{{ mlbs_total }}</b> anúncios — <a href="{{ url_for('mlbs') }}">abrir</a></span>{% else %}<span class="arq-n">ainda não subiu — a Lista de MLB's nasce daqui</span>{% endif %}
           {% if PODE.arquivos %}
           <form method="post" action="{{ url_for('subir', chave=cn.chave) }}" enctype="multipart/form-data" class="upl">
-            <input type="hidden" name="tipo" value="rebates"><input type="file" name="arquivo" accept=".xlsx,.xls" required>
-            <button class="bt pri" type="submit" style="padding:7px 14px">Subir</button>
+            <input type="hidden" name="tipo" value="rebates"><input type="hidden" name="rodar" value="1"><input type="file" name="arquivo" accept=".xlsx,.xls" required>
+            <button class="bt pri" type="submit" style="padding:7px 14px">Subir e rodar</button>
           </form>
           {% for x in pend_por.get(cn.chave, []) if x.tipo == 'rebates' %}<span class="arq-n espera-n">⏳ {{ x.nome }} · aguardando ▶ rodar</span>{% endfor %}
-          {% if mlbs_ult %}<div class="ok-canto"><span class="pill-ok">ok · {{ mlbs_ult.quando|quando }}</span></div>{% endif %}
+          <div class="ok-canto">{% if mlbs_ult %}<span class="pill-ok">ok · {{ mlbs_ult.quando|quando }}</span>{% else %}<span class="pill-nao">sem arquivo</span>{% endif %}</div>
           {% endif %}
         </div>
       </div>
@@ -117,11 +117,11 @@
         <span class="arq-n">comissão do sistema: <span class="ok">{{ rc.sistema.nome }}</span></span>{% else %}<span class="arq-n">ainda não subiu nesta competência</span>{% endif %}
         {% if PODE.arquivos %}
         <form method="post" action="{{ url_for('subir', chave=cn.chave) }}" enctype="multipart/form-data" class="upl">
-          <input type="hidden" name="tipo" value="base"><input type="file" name="arquivo" accept=".xlsx,.xls,.csv" required>
-          <button class="bt pri" type="submit" style="padding:7px 14px">Subir</button>
+          <input type="hidden" name="tipo" value="base"><input type="hidden" name="rodar" value="1"><input type="file" name="arquivo" accept=".xlsx,.xls,.csv" required>
+          <button class="bt pri" type="submit" style="padding:7px 14px">Subir e rodar</button>
         </form>
         {% for x in pend_por.get(cn.chave, []) %}<span class="arq-n espera-n">⏳ {{ x.nome }} · aguardando ▶ rodar</span>{% endfor %}
-        {% if rc %}<div class="ok-canto"><span class="pill-ok">ok · {{ rc.quando|quando }}</span></div>{% endif %}
+        <div class="ok-canto">{% if rc %}<span class="pill-ok">ok · {{ rc.quando|quando }}</span>{% else %}<span class="pill-nao">sem arquivo · {{ comp|mesano }}</span>{% endif %}</div>
         {% endif %}
       </div>
       {% endif %}

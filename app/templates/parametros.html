@@ -61,7 +61,7 @@
     <button class="bt sec" type="submit">Subir / atualizar</button>
   </form>
   <div class="nota">Export do Anymarket "Cadastros … Skus x Descrição": chave = <b>CÓDIGO FORNECEDOR / SKU INTERNO</b>, descrição = <b>TÍTULO SKU</b>. Vale para todos os canais.</div>
-  {% if DESC.anymarket %}<div class="cad-st ok">{{ DESC.anymarket.n }} SKUs · {{ DESC.anymarket.arquivo }} · por {{ DESC.anymarket.quem }}</div><div class="ok-canto"><span class="pill-ok">ok · {{ DESC.anymarket.quando|quando }}</span></div>{% else %}<div class="cad-st pend">Ainda sem cadastro</div>{% endif %}
+  {% if DESC.anymarket %}<div class="cad-st ok">{{ DESC.anymarket.n }} SKUs · {{ DESC.anymarket.arquivo }} · por {{ DESC.anymarket.quem }}</div><div class="ok-canto"><span class="pill-ok">ok · {{ DESC.anymarket.quando|quando }}</span></div>{% else %}<div class="ok-canto"><span class="pill-nao">sem cadastro</span></div>{% endif %}
 </div>
 <div class="bloco">
   <h2>Tabela de Custos MUL (peso oficial)</h2>
@@ -71,7 +71,7 @@
     <button class="bt sec" type="submit">Subir / atualizar</button>
   </form>
   <div class="nota">Planilha "CustoProduto_MUL…": <b>MODELO · Descricao · Peso · Cubagem · CUSTO TOTAL</b>. O <b>peso daqui é o oficial</b> (R$/kg do Coletas); o do Anymarket só vale para SKU sem peso aqui.</div>
-  {% if DESC.custos %}<div class="cad-st ok">{{ DESC.custos.n }} SKUs · {{ DESC.custos.arquivo }} · por {{ DESC.custos.quem }}</div><div class="ok-canto"><span class="pill-ok">ok · {{ DESC.custos.quando|quando }}</span></div>{% else %}<div class="cad-st pend">Ainda sem tabela de custos</div>{% endif %}
+  {% if DESC.custos %}<div class="cad-st ok">{{ DESC.custos.n }} SKUs · {{ DESC.custos.arquivo }} · por {{ DESC.custos.quem }}</div><div class="ok-canto"><span class="pill-ok">ok · {{ DESC.custos.quando|quando }}</span></div>{% else %}<div class="ok-canto"><span class="pill-nao">sem tabela de custos</span></div>{% endif %}
 </div>
 </div>
 {% endif %}

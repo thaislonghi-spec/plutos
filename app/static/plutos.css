@@ -297,3 +297,4 @@ table.linha-base td.col-descricao{white-space:normal;line-height:1.25;font-size:
 .card-arq{position:relative}
 .kpi .v .v-sub{font-style:normal;font-size:15px;color:var(--tinta3);font-weight:500}
 table.cols-coletas-m{min-width:1300px} table.cols-coletas-m th:nth-child(5){width:110px}
+.pill-nao{display:inline-block;font:700 10px "IBM Plex Mono",monospace;letter-spacing:.06em;text-transform:uppercase;background:#E4E4E1;color:#6B6E71;padding:4px 9px;border-radius:2px}
