@@ -26,7 +26,7 @@ from werkzeug.utils import secure_filename
 from motor import meli, erp, magalu, shopee, madeira, webcont, colombo
 import planilhas
 
-VERSAO = "2026-09-14r"
+VERSAO = "2026-09-14s"
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(RAIZ), "dados")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -1457,7 +1457,9 @@ def faltante():
     itens = meli.sugestoes_faltante(r["linhas"], faltante_ler("meli")) if r else []
     pend = sum(1 for i in itens if i["faltante_status"] == "pendente")
     sug = sum(1 for i in itens if i["sugestao"] is not None and i["faltante_status"] == "pendente")
-    contas = sorted({(i.get("conta") or "") for i in itens if i.get("conta")})
+    # todas as contas do mês no Meli (não só as que têm tarifa zero) — assim a
+    # barra de filtro mostra a divisão real, mesmo quando uma conta está zerada
+    contas = sorted({(l.get("conta") or "") for l in (r["linhas"] if r else []) if l.get("conta")})
     return render_template("faltante.html", itens=itens, r=r, pend=pend, sug=sug, contas=contas)
 
 

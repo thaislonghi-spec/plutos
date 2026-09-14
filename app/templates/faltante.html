@@ -28,7 +28,7 @@
     <span class="chip" data-st="pendente">Pendente <small>{{ itens|selectattr('faltante_status','equalto','pendente')|list|length }}</small></span>
     <span class="chip" data-st="preenchido">Preenchido <small>{{ itens|rejectattr('faltante_status','equalto','pendente')|list|length }}</small></span>
   </div>
-  {% if contas|length > 1 %}
+  {% if contas %}
   <div class="chips" id="cchips" style="margin-bottom:8px">
     <span class="chip on" data-conta="todas">Todas as contas <small>{{ itens|length }}</small></span>
     {% for ct in contas %}<span class="chip" data-conta="{{ ct }}">{{ ct|contanome }} <small>{{ itens|selectattr('conta','equalto',ct)|list|length }}</small></span>{% endfor %}
