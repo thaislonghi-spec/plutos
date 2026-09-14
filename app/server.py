@@ -26,7 +26,7 @@ from werkzeug.utils import secure_filename
 from motor import meli, erp, magalu, shopee, madeira, webcont
 import planilhas
 
-VERSAO = "2026-09-14a"
+VERSAO = "2026-09-14c"
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(RAIZ), "dados")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -431,18 +431,31 @@ def _gravar_resumo(canal, comp, r) -> dict:
 
 def rodada_gravar(canal, comp, r):
     """Grava a rodada e, ao lado, o resumo leve (sem as linhas) que as telas usam."""
-    rodada_gravar(canal, comp, r)
+    _json_gravar(rodada_caminho(canal, comp), r)
     _gravar_resumo(canal, comp, r)
 
 
-def rodada_res(canal, comp) -> dict | None:
-    """Só o cabeçalho + resumo da rodada — não carrega as linhas na memória.
-    Se o resumo leve ainda não existir (rodada de versão anterior), cria uma vez."""
+def _resumo_pronto(r) -> bool:
+    """Rodada só conta quando o resumo está completo. Um recálculo interrompido
+    (ex.: faltou memória) deixa 'resumo': {} — isso não pode derrubar as telas."""
+    return bool(r) and bool((r.get("resumo") or {}).get("rebate_total") is not None)
+
+
+def rodada_cab(canal, comp) -> dict | None:
+    """O cabeçalho da rodada (arquivo, quem, quando, resumo) SEM as linhas.
+    Serve para recalcular: aqui o resumo pode estar vazio (recálculo em curso)."""
     leve = _json_ler(rodada_res_caminho(canal, comp), None)
     if leve:
         return leve
     cheia = _json_ler(rodada_caminho(canal, comp), None)
     return _gravar_resumo(canal, comp, cheia) if cheia else None
+
+
+def rodada_res(canal, comp) -> dict | None:
+    """O que as telas usam: só vale com o resumo completo. Um recálculo
+    interrompido (faltou memória) deixa o box como 'sem dados' em vez de quebrar."""
+    cab = rodada_cab(canal, comp)
+    return cab if _resumo_pronto(cab) else None
 
 
 def competencias() -> list[str]:
@@ -682,9 +695,11 @@ def _txt_upsert(res: dict) -> str:
 def recalcular_meli(comp: str):
     """Recalcula a rodada do Meli daquela competência a partir dos arquivos
     guardados (usado quando a tabela manual muda ou o ADC002 chega)."""
-    r = rodada("meli", comp)
+    r = rodada_cab("meli", comp)   # só o cabeçalho: as linhas são refeitas abaixo
     if not r:
         return None
+    r = dict(r)
+    r.pop("linhas_n", None)
     df = base_df("meli", comp)
     if df is None:
         df, diag = meli.ler_tabela_geral(r["arquivo"]["caminho"])
@@ -705,9 +720,11 @@ def recalcular_meli(comp: str):
 
 
 def recalcular_magalu(comp: str):
-    r = rodada("magalu", comp)
+    r = rodada_cab("magalu", comp)   # só o cabeçalho: as linhas são refeitas abaixo
     if not r:
         return None
+    r = dict(r)
+    r.pop("linhas_n", None)
     df = base_df("magalu", comp)
     if df is None:
         df, diag = magalu.ler(r["arquivo"]["caminho"])
@@ -736,12 +753,14 @@ def processar_magalu(destino: str, nome: str, quem: str) -> str:
     res = base_upsert("magalu", df, "pedido", nome, destino, quem)
     feitos = []
     for comp in res:
-        r = rodada("magalu", comp) or {"canal": "magalu", "competencia": comp}
+        r = dict(rodada_cab("magalu", comp) or {"canal": "magalu", "competencia": comp}); r.pop("linhas_n", None)
         r.update({"quando": agora().isoformat(), "quem": quem,
                   "arquivo": {"nome": nome, "caminho": destino, "diag": {k: v for k, v in diag.items() if k != "competencias"}},
                   "linhas": [], "resumo": {}})
         rodada_gravar("magalu", comp, r)
         r = recalcular_magalu(comp)
+        if not _resumo_pronto(r):
+            continue
         feitos.append((comp, r["resumo"]["pedidos"], r["resumo"]["rebate_total"]))
     txt = " · ".join(f"{f_mesano(c)}: {n} pedidos, R$ {f_brl(t)}" for c, n, t in feitos)
     extra = f" {fora} linha(s) de outro mês ficaram de fora." if fora else ""
@@ -749,9 +768,11 @@ def processar_magalu(destino: str, nome: str, quem: str) -> str:
 
 
 def recalcular_shopee(comp: str):
-    r = rodada("shopee", comp)
+    r = rodada_cab("shopee", comp)   # só o cabeçalho: as linhas são refeitas abaixo
     if not r:
         return None
+    r = dict(r)
+    r.pop("linhas_n", None)
     df = base_df("shopee", comp)
     if df is None:
         df, diag = shopee.ler(r["arquivo"]["caminho"])
@@ -780,12 +801,14 @@ def processar_shopee(destino: str, nome: str, quem: str) -> str:
     res = base_upsert("shopee", df, "pedido", nome, destino, quem)
     feitos = []
     for comp in res:
-        r = rodada("shopee", comp) or {"canal": "shopee", "competencia": comp}
+        r = dict(rodada_cab("shopee", comp) or {"canal": "shopee", "competencia": comp}); r.pop("linhas_n", None)
         r.update({"quando": agora().isoformat(), "quem": quem,
                   "arquivo": {"nome": nome, "caminho": destino, "diag": {k: v for k, v in diag.items() if k != "competencias"}},
                   "linhas": [], "resumo": {}})
         rodada_gravar("shopee", comp, r)
         r = recalcular_shopee(comp)
+        if not _resumo_pronto(r):
+            continue
         feitos.append((comp, r["resumo"]["pedidos"], r["resumo"]["rebate_total"]))
     txt = " · ".join(f"{f_mesano(c)}: {n} pedidos, R$ {f_brl(t)}" for c, n, t in feitos)
     extra = f" {fora} linha(s) de outro mês ficaram de fora." if fora else ""
@@ -793,9 +816,11 @@ def processar_shopee(destino: str, nome: str, quem: str) -> str:
 
 
 def recalcular_madeira(comp: str):
-    r = rodada("madeira", comp)
+    r = rodada_cab("madeira", comp)   # só o cabeçalho: as linhas são refeitas abaixo
     if not r:
         return None
+    r = dict(r)
+    r.pop("linhas_n", None)
     df = base_df("madeira", comp)
     if df is None:
         df, diag = madeira.ler(r["arquivo"]["caminho"])
@@ -824,12 +849,14 @@ def processar_madeira(destino: str, nome: str, quem: str) -> str:
     res = base_upsert("madeira", df, "pedido", nome, destino, quem)
     feitos = []
     for comp in res:
-        r = rodada("madeira", comp) or {"canal": "madeira", "competencia": comp}
+        r = dict(rodada_cab("madeira", comp) or {"canal": "madeira", "competencia": comp}); r.pop("linhas_n", None)
         r.update({"quando": agora().isoformat(), "quem": quem,
                   "arquivo": {"nome": nome, "caminho": destino, "diag": {k: v for k, v in diag.items() if k != "competencias"}},
                   "linhas": [], "resumo": {}})
         rodada_gravar("madeira", comp, r)
         r = recalcular_madeira(comp)
+        if not _resumo_pronto(r):
+            continue
         feitos.append((comp, r["resumo"]["pedidos"], r["resumo"]["rebate_total"]))
     txt = " · ".join(f"{f_mesano(c)}: {n} pedidos, R$ {f_brl(t)}" for c, n, t in feitos)
     extra = f" {fora} linha(s) de outro mês ficaram de fora." if fora else ""
@@ -837,9 +864,11 @@ def processar_madeira(destino: str, nome: str, quem: str) -> str:
 
 
 def recalcular_webcont(comp: str):
-    r = rodada("webcont", comp)
+    r = rodada_cab("webcont", comp)   # só o cabeçalho: as linhas são refeitas abaixo
     if not r:
         return None
+    r = dict(r)
+    r.pop("linhas_n", None)
     df = base_df("webcont", comp)
     if df is None:
         df, diag = webcont.ler(r["arquivo"]["caminho"])
@@ -868,12 +897,14 @@ def processar_webcont(destino: str, nome: str, quem: str) -> str:
     res = base_upsert("webcont", df, "pedido", nome, destino, quem)
     feitos = []
     for comp in res:
-        r = rodada("webcont", comp) or {"canal": "webcont", "competencia": comp}
+        r = dict(rodada_cab("webcont", comp) or {"canal": "webcont", "competencia": comp}); r.pop("linhas_n", None)
         r.update({"quando": agora().isoformat(), "quem": quem,
                   "arquivo": {"nome": nome, "caminho": destino, "diag": {k: v for k, v in diag.items() if k != "competencias"}},
                   "linhas": [], "resumo": {}})
         rodada_gravar("webcont", comp, r)
         r = recalcular_webcont(comp)
+        if not _resumo_pronto(r):
+            continue
         feitos.append((comp, r["resumo"]["pedidos"], r["resumo"]["rebate_total"]))
     txt = " · ".join(f"{f_mesano(c)}: {n} pedidos, R$ {f_brl(t)}" for c, n, t in feitos)
     extra = f" {fora} linha(s) de outro mês ficaram de fora." if fora else ""
@@ -1017,12 +1048,13 @@ def painel():
     tot = {"rs": 0.0, "com": 0.0, "frete": 0.0, "total": 0.0, "venda": 0.0, "pedidos": 0, "pend": 0}
     for c in canais():
         r = rodada_res(c["chave"], comp) if c["ativo"] else None
-        if r:
+        if _resumo_pronto(r):
             s = r["resumo"]
             por_canal.append({**c, "res": s, "quando": r["quando"]})
-            tot["rs"] += s["rebate_rs"]; tot["com"] += s["rebate_comissao"]; tot["frete"] += s.get("rebate_frete", 0.0) or 0.0
-            tot["total"] += s["rebate_total"]; tot["venda"] += s["venda"]; tot["pedidos"] += s["pedidos"]
-            tot["pend"] += s["faltante_pendentes"]
+            v = lambda k: (s.get(k) or 0.0)  # noqa: E731 — resumo de versão antiga pode não ter tudo
+            tot["rs"] += v("rebate_rs"); tot["com"] += v("rebate_comissao"); tot["frete"] += v("rebate_frete")
+            tot["total"] += v("rebate_total"); tot["venda"] += v("venda"); tot["pedidos"] += v("pedidos")
+            tot["pend"] += v("faltante_pendentes")
         else:
             por_canal.append({**c, "res": None})
     tot["pct"] = (100 * tot["total"] / tot["venda"]) if tot["venda"] else 0
@@ -1038,7 +1070,9 @@ def canal(chave):
     c = canal_por_chave().get(chave) or abort(404)
     comp = comp_atual()
     r = rodada_res(chave, comp) if c["ativo"] else None
-    if r and chave == "meli" and "com_sistema" not in r["resumo"]:
+    if not _resumo_pronto(r):
+        r = None
+    if r and chave == "meli" and "com_sistema" not in (r.get("resumo") or {}):
         # rodada gravada por versão anterior: completa o resumo sem exigir rodar de novo
         cheia = rodada("meli", comp)
         if cheia:
@@ -1357,7 +1391,8 @@ def arquivos():
         if r:
             hist.append({"canal": r["canal"], "comp": r["competencia"], "quando": r["quando"],
                          "quem": r.get("quem"), "arquivo": r["arquivo"]["nome"],
-                         "pedidos": r["resumo"]["pedidos"], "total": r["resumo"]["rebate_total"],
+                         "pedidos": (r.get("resumo") or {}).get("pedidos", 0),
+                         "total": (r.get("resumo") or {}).get("rebate_total", 0),
                          "sistema": bool(r.get("sistema"))})
     hist.sort(key=lambda h: h["quando"], reverse=True)
     idx = erp_ler()
@@ -1436,12 +1471,14 @@ def processar_meli(tipo: str, destino: str, nome: str, quem: str) -> str:
     res = base_upsert("meli", df, "pedido_mkt", nome, destino, quem)
     feitos = []
     for comp in res:
-        r = rodada("meli", comp) or {"canal": "meli", "competencia": comp}
+        r = dict(rodada_cab("meli", comp) or {"canal": "meli", "competencia": comp}); r.pop("linhas_n", None)
         r.update({"quando": agora().isoformat(), "quem": quem,
                   "arquivo": {"nome": nome, "caminho": destino, "diag": {k: v for k, v in diag.items() if k != "competencias"}},
                   "linhas": [], "resumo": {}})
         rodada_gravar("meli", comp, r)
         r = recalcular_meli(comp)
+        if not _resumo_pronto(r):
+            continue
         feitos.append((comp, r["resumo"]["pedidos"], r["resumo"]["rebate_total"]))
     txt = " · ".join(f"{f_mesano(c)}: {n} pedidos, R$ {f_brl(t)}" for c, n, t in feitos)
     extra = f" {fora} linha(s) de outro mês ficaram de fora (filtro do BI)." if fora else ""
