@@ -26,7 +26,7 @@ from werkzeug.utils import secure_filename
 from motor import meli, erp, magalu, shopee, madeira, webcont, colombo
 import planilhas
 
-VERSAO = "2026-09-14n"
+VERSAO = "2026-09-14o"
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(RAIZ), "dados")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -779,6 +779,9 @@ def recalcular_shopee(comp: str):
     if df is None:
         df, diag = shopee.ler(r["arquivo"]["caminho"])
         df = df[df["competencia"] == comp]
+    # as regras de exclusão valem também sobre o que já está na base (cancelado,
+    # não pago, devolução aprovada) — assim "▶ Rodar" corrige sem subir o arquivo de novo
+    df = shopee.marcar_fora(df)
     pct, taxa = comissao_cadastrada(("SHOPEE",), (0.12, 12.0))
     linhas = shopee.calcular(df, pct, taxa, erp_ler()["ocs"])
     r["linhas"] = linhas

@@ -99,6 +99,32 @@ def _mapear(colunas) -> dict:
     return mapa
 
 
+def fora_da_conta(status, devolucao="") -> bool:
+    """FORA DA CONTA (regra oficial da Thaís, 14/09/2026), três casos:
+       1. Status do pedido = Cancelado
+       2. Status do pedido = Não pago — quando for pago, o arquivo seguinte atualiza
+          o status e o pedido entra sozinho no rebate
+       3. Status da Devolução / Reembolso = Solicitação aprovada (a venda voltou)
+    Vale na leitura E no recálculo: assim a regra alcança o que já está na base,
+    sem precisar subir o arquivo de novo."""
+    st = _norm(status)
+    return bool("cancelado" in st or st.startswith("nao pago")
+                or "solicitacao aprovada" in _norm(devolucao))
+
+
+def marcar_fora(ped: pd.DataFrame) -> pd.DataFrame:
+    """Recalcula as marcas de exclusão a partir do status (e da devolução, quando o
+    arquivo tem a coluna). Aplicado também na base já gravada."""
+    if "devolucao" not in ped:
+        ped["devolucao"] = ""
+    st = ped["status"].map(_norm)
+    dev = ped["devolucao"].fillna("").map(_norm)
+    ped["devolvido"] = dev.str.contains("solicitacao aprovada")
+    ped["nao_pago"] = st.str.startswith("nao pago")
+    ped["cancelado"] = st.str.contains("cancelado") | ped["nao_pago"] | ped["devolvido"]
+    return ped
+
+
 def ler(caminho: str) -> tuple[pd.DataFrame, dict]:
     """Lê o export Order.all (1 linha por item) e devolve 1 linha por PEDIDO."""
     xl = pd.ExcelFile(caminho)
@@ -131,16 +157,7 @@ def ler(caminho: str) -> tuple[pd.DataFrame, dict]:
     somas = df.groupby("pedido", sort=False).agg(subtotal=("subtotal", "sum"), qtd=("qtd", "sum"), itens=("sku", "size"),
                                                   skus=("sku", lambda s: ", ".join(dict.fromkeys(x for x in s if x))))
     ped = primeira.drop(columns=["subtotal", "qtd"]).join(somas).reset_index()
-    # FORA DA CONTA (regra oficial da Thaís, 14/09/2026), três casos:
-    #   1. Status do pedido = Cancelado
-    #   2. Status do pedido = Não pago (quando for pago, o arquivo seguinte atualiza
-    #      o status e o pedido entra sozinho no rebate)
-    #   3. Status da Devolução / Reembolso = Solicitação aprovada (a venda voltou)
-    st = ped["status"].map(_norm)
-    dev = ped["devolucao"].map(_norm)
-    ped["devolvido"] = dev.str.contains("solicitacao aprovada")
-    ped["nao_pago"] = st.str.startswith("nao pago")
-    ped["cancelado"] = st.str.contains("cancelado") | ped["nao_pago"] | ped["devolvido"]
+    ped = marcar_fora(ped)
     ped["competencia"] = ped["data"].map(lambda d: f"{d.year}-{d.month:02d}")
     diag: dict[str, Any] = {
         "aba": escolhida, "linhas_brutas": itens, "itens": itens, "linhas": int(len(ped)),
@@ -157,7 +174,7 @@ def calcular(df: pd.DataFrame, pct: float, taxa_item: float, erp_idx: dict | Non
     out = []
     erp_idx = erp_idx or {}
     for r in df.itertuples(index=False):
-        if r.cancelado:
+        if fora_da_conta(getattr(r, "status", ""), getattr(r, "devolucao", "")):
             continue
         # REGRA OFICIAL DA THAÍS (14/09/2026):
         #   comissão REAL Shopee = Taxa de comissão bruta (AY) + Taxa de serviço bruta (BA)
