@@ -23,10 +23,10 @@ from flask import (Flask, abort, flash, jsonify, redirect, render_template, requ
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
-from motor import meli, erp, magalu, shopee, madeira, webcont
+from motor import meli, erp, magalu, shopee, madeira, webcont, colombo
 import planilhas
 
-VERSAO = "2026-09-14c"
+VERSAO = "2026-09-14d"
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(RAIZ), "dados")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -51,7 +51,9 @@ CANAIS = [
     {"chave": "madeira",  "nome": "Madeira Madeira", "ativo": True,
      "arquivo": "RELATÓRIO DE PEDIDOS (portal Madeira)", "arquivo_sub": "MadeiraMadeira_<seller>-report_pedido_… · csv ; · 1 linha por item · dia 01 a 31",
      "extra": None},
-    {"chave": "colombo",  "nome": "Colombo",         "ativo": False},
+    {"chave": "colombo",  "nome": "Colombo",         "ativo": True,
+     "arquivo": "RELATÓRIO DE PEDIDOS (portal Colombo)", "arquivo_sub": "Colombo_Pedidos_DDMMateDDMMAA.csv · csv ; · 1 linha por item · dia 01 a 31",
+     "extra": None},
     {"chave": "cbahia",   "nome": "Casas Bahia",     "ativo": False},
     {"chave": "amazon",   "nome": "Amazon",          "ativo": False},
     {"chave": "webcont",  "nome": "Webcontinental",  "ativo": True,
@@ -197,7 +199,7 @@ COMISSAO_PADRAO = [
     {"codigo": "749", "canal": "MP - BANCO INTER", "gestor": "William Henzel", "comissao": "18,5", "taxa": "0", "tipo": "GMV"},
     {"codigo": "713", "canal": "MP - CARREFOUR", "gestor": "Bruna Colares", "comissao": "16", "taxa": "0", "tipo": "GMV"},
     {"codigo": "712", "canal": "MP - CASAS BAHIA", "gestor": "William Henzel", "comissao": "13", "taxa": "0", "tipo": "GMV"},
-    {"codigo": "705", "canal": "MP - COLOMBO", "gestor": "Bruna Colares", "comissao": "9", "taxa": "0", "tipo": "GMV"},
+    {"codigo": "705", "canal": "MP - COLOMBO", "gestor": "Bruna Colares", "comissao": "7", "taxa": "0", "tipo": "GMV"},
     {"codigo": "776", "canal": "MP - IMPERIO", "gestor": "William Henzel", "comissao": "20", "taxa": "0", "tipo": "GMV"},
     {"codigo": "711", "canal": "MP - LEROY MERLIN", "gestor": "William Henzel", "comissao": "16", "taxa": "", "tipo": "GMV"},
     {"codigo": "795", "canal": "MP - LOJAS KOERICH", "gestor": "", "comissao": "5", "taxa": "", "tipo": "Produto"},
@@ -911,6 +913,59 @@ def processar_webcont(destino: str, nome: str, quem: str) -> str:
     return f"Webcontinental lida — {_txt_upsert(res)}. {txt}. Cancelados fora: {diag['cancelados']}.{extra}"
 
 
+def recalcular_colombo(comp: str):
+    r = rodada_cab("colombo", comp)   # só o cabeçalho: as linhas são refeitas abaixo
+    if not r:
+        return None
+    r = dict(r)
+    r.pop("linhas_n", None)
+    df = base_df("colombo", comp)
+    if df is None:
+        df, diag = colombo.ler(r["arquivo"]["caminho"])
+        df = df[df["competencia"] == comp]
+    pct, _ = comissao_cadastrada(("COLOMBO",), (0.07, 0.0))
+    linhas = colombo.calcular(df, pct, erp_ler()["ocs"])
+    r["linhas"] = linhas
+    r["resumo"] = colombo.resumo(linhas, int(df["cancelado"].sum()))
+    r["sistema"] = {"nome": f"Parâmetros · {pct * 100:.2f}% do total do pedido", "quando": agora().isoformat(),
+                    "diag": {"linhas": len(linhas), "modo": "tabela de comissões (Parâmetros)"}}
+    r["sistema_diag"] = r["sistema"]["diag"]
+    r["recalculado"] = agora().isoformat()
+    rodada_gravar("colombo", comp, r)
+    return r
+
+
+def processar_colombo(destino: str, nome: str, quem: str) -> str:
+    df, diag = colombo.ler(destino)
+    comps = diag["competencias"]
+    principal = max(comps, key=comps.get)
+    fora = 0
+    for comp, n in list(comps.items()):
+        if comp != principal and n < 0.3 * comps[principal]:
+            fora += n
+            df = df[df["competencia"] != comp]
+    res = base_upsert("colombo", df, "pedido", nome, destino, quem)
+    feitos = []
+    for comp in res:
+        r = dict(rodada_cab("colombo", comp) or {"canal": "colombo", "competencia": comp}); r.pop("linhas_n", None)
+        r.update({"quando": agora().isoformat(), "quem": quem,
+                  "arquivo": {"nome": nome, "caminho": destino, "diag": {k: v for k, v in diag.items() if k != "competencias"}},
+                  "linhas": [], "resumo": {}})
+        rodada_gravar("colombo", comp, r)
+        r = recalcular_colombo(comp)
+        if not _resumo_pronto(r):
+            continue
+        feitos.append((comp, r["resumo"]["pedidos"], r["resumo"]["rebate_total"]))
+    txt = " · ".join(f"{f_mesano(c)}: {n} pedidos, R$ {f_brl(t)}" for c, n, t in feitos)
+    extra = f" {fora} linha(s) de outro mês ficaram de fora." if fora else ""
+    dup = f" {diag['itens_duplicados']} linha(s) duplicada(s) do export ignorada(s)." if diag["itens_duplicados"] else ""
+    pct, _ = comissao_cadastrada(("COLOMBO",), (0.07, 0.0))
+    alerta = ("" if abs(pct - 0.07) < 0.0005 else
+              f" ATENÇÃO: a tabela de Parâmetros está com {pct * 100:.2f}% para o Colombo, mas o portal e o ERP "
+              f"trabalham com 7% — corrija em Parâmetros ou o rebate sai inflado.")
+    return (f"Colombo lido — {_txt_upsert(res)}. {txt}. Fora (Cancelado/Incluído): {diag['cancelados']} · "
+            f"{diag['itens']} itens → {diag['linhas']} pedidos ({diag['multi_item']} com mais de 1 item).{dup}{extra}{alerta}")
+
 def recalcular_canais(comp: str) -> list[str]:
     """Recalcula um canal de cada vez e SOLTA a memória entre eles (o Render tem
     512 MB: dois canais grandes juntos na memória derrubavam o app)."""
@@ -938,6 +993,11 @@ def recalcular_canais(comp: str) -> list[str]:
     r = recalcular_webcont(comp)
     if r:
         feitos.append(f"Webcontinental {f_mesano(comp)}: R$ {f_brl(r['resumo']['rebate_total'])}")
+    r = None
+    gc.collect()
+    r = recalcular_colombo(comp)
+    if r:
+        feitos.append(f"Colombo {f_mesano(comp)}: R$ {f_brl(r['resumo']['rebate_total'])}")
     r = None
     gc.collect()
     return feitos
@@ -1089,6 +1149,8 @@ def canal(chave):
         return render_template("canal_madeira.html", c=c, r=r)
     if chave == "webcont":
         return render_template("canal_webcont.html", c=c, r=r)
+    if chave == "colombo":
+        return render_template("canal_colombo.html", c=c, r=r)
     return render_template("canal.html", c=c, r=r)
 
 
@@ -1156,8 +1218,20 @@ LINHA_COLS = {
         ("NF", "nf", "t"), ("Transportadora", "transportadora", "t"),
         ("Rebate R$", "rebate_rs", "n"), ("Rebate comissão", "rebate_comissao", "n"), ("Rebate frete", "rebate_frete", "n"),
         ("REBATE TOTAL", "rebate_total", "n"),
+        ],
+    "colombo": [
+        ("Data", "data", "d"), ("OC / Entrega", "pedido_mkt", "t"), ("Pedido Colombo", "pedido_canal", "t"), ("Pedido Any", "pedido_any", "t"),
+        ("Status", "status", "t"), ("Pagamento", "pagamento", "t"), ("Parcelas", "parcelas", "n"), ("UF", "uf", "t"), ("Cidade", "cidade", "t"),
+        ("SKU", "sku", "t"), ("Descrição", "descricao", "t"), ("SKUs do pedido", "anuncio", "t"), ("Itens", "itens", "n"), ("Qtd", "qtd", "n"),
+        ("Total do pedido", "valor_prod", "n"), ("Valor mercadorias", "valor_itens", "n"), ("Valor frete", "frete", "n"), ("Desconto", "desconto", "n"),
+        ("% do item", "tipo", "t"), ("Comissão cobrada R$", "tarifa", "n"), ("% real", "pct_comissao", "p"),
+        ("Comissão sistema R$", "sis_rs", "n"), ("% sistema", "sis_pct", "p"), ("Diferença = rebate comissão", "diferenca", "n"),
+        ("Data entrega", "data_nf", "d"), ("Cliente", "cliente", "t"),
+        ("Rebate R$", "rebate_rs", "n"), ("Rebate comissão", "rebate_comissao", "n"), ("Rebate frete", "rebate_frete", "n"),
+        ("REBATE TOTAL", "rebate_total", "n"),
     ],
 }
+
 
 
 ERP_COLS = [
@@ -1545,6 +1619,8 @@ def pend_processar(chave: str | None = None) -> list[str]:
                 m = processar_madeira(x["caminho"], x["nome"], x["quem"])
             elif x["chave"] == "webcont":
                 m = processar_webcont(x["caminho"], x["nome"], x["quem"])
+            elif x["chave"] == "colombo":
+                m = processar_colombo(x["caminho"], x["nome"], x["quem"])
             else:
                 m = f"{x['nome']}: o box {x['chave']} ainda não tem motor."
         except Exception as e:  # noqa: BLE001
