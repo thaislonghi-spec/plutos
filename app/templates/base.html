@@ -25,7 +25,19 @@
   .cartao button{width:100%;border:1px solid;padding:14px;font:700 15px Archivo,sans-serif;cursor:pointer;border-radius:2px;margin-top:2px}
   .cartao .obs{color:#7A7D80;font-size:11.5px;margin-top:15px}
   .cartao .flash{margin-top:20px;text-align:left;background:#2A1614;border:1px solid #5A2420;border-left:3px solid var(--crit);color:#E8938C}
-  .cartao input:-webkit-autofill,.cartao input:-webkit-autofill:focus{-webkit-text-fill-color:#F2F2F0;-webkit-box-shadow:0 0 0 40px #0B0B0C inset;caret-color:#F2F2F0}
+  /* o Chrome pinta de AMARELO o campo preenchido pelo gerenciador de senhas e
+     o texto fica ilegível no fundo preto. background-clip:text + a sombra interna
+     devolvem o fundo escuro; a transition longa segura a cor durante o preview. */
+  .cartao input:-webkit-autofill,
+  .cartao input:-webkit-autofill:hover,
+  .cartao input:-webkit-autofill:focus,
+  .cartao input:-webkit-autofill:active{
+    -webkit-text-fill-color:#F2F2F0!important;
+    -webkit-background-clip:text!important;background-clip:text!important;
+    -webkit-box-shadow:0 0 0 40px #0B0B0C inset!important;box-shadow:0 0 0 40px #0B0B0C inset!important;
+    transition:background-color 100000s ease-in-out 0s!important;
+    caret-color:#F2F2F0;border-color:#2C2C2E;font:500 14.5px Archivo,sans-serif}
+  .cartao input:-webkit-autofill:focus{border-color:var(--ouro)}
   a.bt{text-decoration:none;display:inline-block}
 </style>
 </head>

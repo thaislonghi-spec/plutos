@@ -308,3 +308,9 @@ table.cols-coletas-m{min-width:1300px} table.cols-coletas-m th:nth-child(5){widt
 .kpi .v .pv{font-style:normal;font-size:12px;font-weight:600;color:var(--tinta3);margin-left:8px;vertical-align:baseline;white-space:nowrap}
 .kpi .mf-total .pv{font-size:10.5px;margin-left:6px;color:var(--tinta3)}
 .chip small{font:600 10px "IBM Plex Mono",monospace;margin-left:6px;opacity:.75}
+
+/* campos do app: o Chrome pinta de amarelo o que o gerenciador de senhas preenche */
+input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus{
+  -webkit-text-fill-color:var(--tinta)!important;-webkit-background-clip:text!important;background-clip:text!important;
+  -webkit-box-shadow:0 0 0 40px var(--sup) inset!important;box-shadow:0 0 0 40px var(--sup) inset!important;
+  transition:background-color 100000s ease-in-out 0s!important}
