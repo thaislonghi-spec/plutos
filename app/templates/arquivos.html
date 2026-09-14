@@ -74,7 +74,7 @@
   {% for cn in CANAIS %}
     {% if cn.ativo %}
     <div class="arq arq-largo">
-      <div class="arq-top"><b>{{ loop.index }} · {{ cn.nome|upper }}</b><span class="arq-top-dir">{% if pend_por.get(cn.chave) and PODE.arquivos %}<form method="post" action="{{ url_for('rodar_box', chave=cn.chave) }}" style="margin:0"><button class="bt pri" type="submit" style="padding:5px 11px" data-tip="Roda só este box agora">▶ Rodar {{ cn.nome }} ({{ pend_por[cn.chave]|length }})</button></form>{% endif %}{% if rods.get(cn.chave) %}<span class="ok">rodado {{ comp|mesano }}</span>{% endif %}</span></div>
+      <div class="arq-top"><b>{{ loop.index }} · {{ cn.nome|upper }}</b><span class="arq-top-dir">{% if cn.chave == 'shopee' and rods.get(cn.chave) and PODE.exportar %}<a class="bt-excel" href="{{ url_for('baixar_shopee_gabi', mes=comp) }}" data-tip="A planilha da Shopee no formato da Gabi (aba novo + Planilha1 com as fórmulas dela), já preenchida com o que o PLUTOS gerou no mês">↓ EXCEL · planilha da Gabi</a>{% endif %}{% if pend_por.get(cn.chave) and PODE.arquivos %}<form method="post" action="{{ url_for('rodar_box', chave=cn.chave) }}" style="margin:0"><button class="bt pri" type="submit" style="padding:5px 11px" data-tip="Roda só este box agora">▶ Rodar {{ cn.nome }} ({{ pend_por[cn.chave]|length }})</button></form>{% endif %}{% if rods.get(cn.chave) %}<span class="ok">rodado {{ comp|mesano }}</span>{% endif %}</span></div>
       {% if cn.chave == 'meli' %}
       <div class="dois-upl">
         <div class="upl-box">
