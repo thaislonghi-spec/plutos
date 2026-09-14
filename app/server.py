@@ -26,7 +26,7 @@ from werkzeug.utils import secure_filename
 from motor import meli, erp, magalu, shopee, madeira, webcont, colombo
 import planilhas
 
-VERSAO = "2026-09-14k"
+VERSAO = "2026-09-14n"
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(RAIZ), "dados")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -815,7 +815,8 @@ def processar_shopee(destino: str, nome: str, quem: str) -> str:
         feitos.append((comp, r["resumo"]["pedidos"], r["resumo"]["rebate_total"]))
     txt = " · ".join(f"{f_mesano(c)}: {n} pedidos, R$ {f_brl(t)}" for c, n, t in feitos)
     extra = f" {fora} linha(s) de outro mês ficaram de fora." if fora else ""
-    return f"Shopee lida — {_txt_upsert(res)}. {txt}. Cancelados fora: {diag['cancelados']} · {diag['itens']} itens → {diag['linhas']} pedidos.{extra}"
+    fora = f"Fora: {diag['cancelados']} (cancelados, {diag.get('nao_pagos', 0)} não pagos, {diag.get('devolvidos', 0)} com devolução aprovada)"
+    return f"Shopee lida — {_txt_upsert(res)}. {txt}. {fora} · {diag['itens']} itens → {diag['linhas']} pedidos.{extra}"
 
 
 def recalcular_madeira(comp: str):
@@ -1189,9 +1190,8 @@ LINHA_COLS = {
         ("SKU", "sku", "t"), ("Descrição", "descricao", "t"), ("SKUs do pedido", "anuncio", "t"), ("Itens", "itens", "n"), ("Qtd", "qtd", "n"),
         ("Subtotal produto", "valor_prod", "n"), ("Desc. vendedor", "desc_vendedor", "n"),
         ("Comissão bruta", "comissao_bruta", "n"), ("Serviço bruta", "servico_bruta", "n"), ("Ajuste ação comercial", "ajuste", "n"),
-        ("Taxa fixa R$/un (dentro do serviço)", "taxa_fixa", "n"),
         ("Comissão real R$ = bruta + serviço − ajuste", "tarifa", "n"), ("% real", "pct_comissao", "p"),
-        ("Comissão sistema R$", "sis_rs", "n"), ("% sistema", "sis_pct", "p"), ("R$/un da tabela", "sis_taxa", "n"),
+        ("Comissão sistema R$", "sis_rs", "n"), ("% sistema", "sis_pct", "p"),
         ("Diferença = rebate comissão", "diferenca", "n"),
         ("Incentivo Shopee (ação)", "incentivo", "n"), ("Incentivo de cupom", "cupom_shopee", "n"), ("Cupom vendedor", "cupom_seller", "n"), ("Moedas (qtd)", "moedas", "n"),
         ("Frete estimado", "frete", "n"), ("Frete pago comprador", "frete_comprador", "n"),
@@ -2302,8 +2302,7 @@ def export_rebates():
                                "rebate_rs": l["rebate_rs"], "rebate_comissao": l["rebate_comissao"],
                                "rebate_frete": l["rebate_frete"], "rebate_total": l["rebate_total"],
                                "sis_rs": l.get("sis_rs"), "tarifa": l.get("tarifa"),
-                               "frete_canal": frete_cobrado_canal(c["chave"], l), "taxa_fixa": l.get("taxa_fixa"),
-                               "taxa_fixa": l.get("taxa_fixa"),
+                               "frete_canal": frete_cobrado_canal(c["chave"], l),
                                "pct_real": ((l.get("tarifa") or 0.0) / base if base else None), "venda": base,
                                "competencia": comp, "sku": l.get("sku", ""), "pedido_canal": l.get("pedido_canal", ""),
                                "faltante_status": l.get("faltante_status", "")})
@@ -2337,7 +2336,7 @@ def api_rebates(comp):
                           "rebate_rs": l["rebate_rs"], "rebate_comissao": l["rebate_comissao"],
                           "rebate_frete": l["rebate_frete"], "rebate_total": l["rebate_total"],
                           "comissao_sistema": l.get("sis_rs"), "comissao_real": l.get("tarifa"), "base_venda": l.get("valor_prod"),
-                          "frete_canal": frete_cobrado_canal(c["chave"], l), "taxa_fixa": l.get("taxa_fixa"),
+                          "frete_canal": frete_cobrado_canal(c["chave"], l),
                           "faltante_status": l["faltante_status"]})
     return jsonify({"competencia": comp, "gerado": agora().isoformat(), "versao": VERSAO,
                     "pedidos": len(saida), "linhas": saida})

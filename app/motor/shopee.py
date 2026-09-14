@@ -5,6 +5,8 @@ Entrada: export do portal Shopee "Order.all.order_creation_date.AAAAMMDD_AAAAMMD
 (66 colunas, UMA LINHA POR ITEM do pedido).
 
 - Status "Cancelado" fica fora (taxas zeradas, não gera rebate).
+- FORA: Status "Cancelado", Status "Não pago" (entra quando for pago) e
+  Status da Devolução / Reembolso = "Solicitação aprovada" (a venda voltou).
 - Uma linha por PEDIDO: taxas, frete, incentivo e cupom se repetem em cada item
   → vale a primeira linha; Subtotal do produto e Quantidade são SOMADOS.
 - COMISSÃO SISTEMA = % × subtotal + R$/item × quantidade (Parâmetros: Shopee 12% + R$ 12,00).
@@ -69,6 +71,7 @@ def _data(v):
 
 COLS = {
     "id do pedido": "pedido", "status do pedido": "status", "opcao de envio": "envio",
+    "status da devolucao / reembolso": "devolucao", "status da devolucao/reembolso": "devolucao",
     "data de criacao do pedido": "data", "numero de rastreamento": "rastreio",
     "n de referencia do sku principal": "sku", "nome do produto": "produto", "quantidade": "qtd",
     "preco original": "preco_original", "preco acordado": "preco", "subtotal do produto": "subtotal",
@@ -114,7 +117,7 @@ def ler(caminho: str) -> tuple[pd.DataFrame, dict]:
     for k in COLS.values():
         if k not in df:
             df[k] = None
-    for k in ("pedido", "status", "envio", "sku", "produto", "uf", "rastreio"):
+    for k in ("pedido", "status", "envio", "sku", "produto", "uf", "rastreio", "devolucao"):
         df[k] = df[k].fillna("").astype(str).str.strip()
     for k in ("qtd", "preco_original", "preco", "subtotal", "desc_vendedor", "incentivo", "ajuste", "cupom_vendedor",
               "cupom_total", "cupom_shopee", "moedas", "valor_total", "frete_comprador", "taxa_transacao",
@@ -128,11 +131,21 @@ def ler(caminho: str) -> tuple[pd.DataFrame, dict]:
     somas = df.groupby("pedido", sort=False).agg(subtotal=("subtotal", "sum"), qtd=("qtd", "sum"), itens=("sku", "size"),
                                                   skus=("sku", lambda s: ", ".join(dict.fromkeys(x for x in s if x))))
     ped = primeira.drop(columns=["subtotal", "qtd"]).join(somas).reset_index()
-    ped["cancelado"] = ped["status"].map(_norm).str.contains("cancelado")
+    # FORA DA CONTA (regra oficial da Thaís, 14/09/2026), três casos:
+    #   1. Status do pedido = Cancelado
+    #   2. Status do pedido = Não pago (quando for pago, o arquivo seguinte atualiza
+    #      o status e o pedido entra sozinho no rebate)
+    #   3. Status da Devolução / Reembolso = Solicitação aprovada (a venda voltou)
+    st = ped["status"].map(_norm)
+    dev = ped["devolucao"].map(_norm)
+    ped["devolvido"] = dev.str.contains("solicitacao aprovada")
+    ped["nao_pago"] = st.str.startswith("nao pago")
+    ped["cancelado"] = st.str.contains("cancelado") | ped["nao_pago"] | ped["devolvido"]
     ped["competencia"] = ped["data"].map(lambda d: f"{d.year}-{d.month:02d}")
     diag: dict[str, Any] = {
         "aba": escolhida, "linhas_brutas": itens, "itens": itens, "linhas": int(len(ped)),
         "cancelados": int(ped["cancelado"].sum()), "multi_item": int((ped["itens"] > 1).sum()),
+        "nao_pagos": int(ped["nao_pago"].sum()), "devolvidos": int(ped["devolvido"].sum()),
         "status": ped["status"].value_counts().to_dict(), "envio": ped["envio"].value_counts().to_dict(),
         "competencias": ped["competencia"].value_counts().sort_index().to_dict(),
         "de": str(ped["data"].min()), "ate": str(ped["data"].max()),
