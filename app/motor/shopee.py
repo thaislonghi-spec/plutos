@@ -10,6 +10,9 @@ Entrada: export do portal Shopee "Order.all.order_creation_date.AAAAMMDD_AAAAMMD
 - COMISSÃO SISTEMA = % × subtotal + R$/item × quantidade (Parâmetros: Shopee 12% + R$ 12,00).
 - COMISSÃO REAL = Taxa de comissão bruta + Taxa de serviço bruta − Ajuste por participação em ação comercial.
 - REBATE COMISSÃO = sistema − real.
+- COMISSÃO SISTEMA = % da tabela (12%) × Subtotal do produto (= valor produto + IPI).
+- COMISSÃO REAL = comissão bruta + serviço bruta − ajuste (a taxa fixa de R$ 12,00/un já vem
+  dentro da "Taxa de serviço bruta" e fica na conta: reduz o rebate).
 - REBATE R$ = Incentivo Shopee para ação comercial + Incentivo de cupom (NÃO a coluna "Cupom").
 - REBATE FRETE = Valor estimado do frete − Taxa de envio pagas pelo comprador (programa Frete Grátis, teto R$ 40).
 - Chave com o ERP: ID do pedido = OC.
@@ -143,8 +146,19 @@ def calcular(df: pd.DataFrame, pct: float, taxa_item: float, erp_idx: dict | Non
     for r in df.itertuples(index=False):
         if r.cancelado:
             continue
-        sis_rs = round(r.subtotal * pct + taxa_item * r.qtd, 2)
+        # REGRA OFICIAL DA THAÍS (14/09/2026):
+        #   comissão REAL Shopee = Taxa de comissão bruta (AY) + Taxa de serviço bruta (BA)
+        #                          − Ajuste por participação em ação comercial (AE)
+        #   comissão SISTEMA (Promob) = % da tabela × Subtotal do produto (= produto + IPI)
+        #   REBATE EM COMISSÃO = sistema − real
+        # A taxa fixa de R$ 12,00/un JÁ ESTÁ dentro da Taxa de serviço bruta (conferido:
+        # tirando 12 × quantidade, o serviço vira exatamente 2,00% do subtotal) e NÃO é
+        # somada à comissão do sistema — ela reduz o rebate, como custo que o Promob não
+        # previu. O campo taxa_fixa guarda o valor só para consulta.
+        fixo = round(taxa_item * (r.qtd or 0), 2)
+        sis_rs = round(r.subtotal * pct, 2)
         real = round(r.comissao_bruta + r.servico_bruta - r.ajuste, 2)
+        real_cheia = real
         reb_com = round(sis_rs - real, 2)
         reb_rs = round(r.incentivo + r.cupom_shopee, 2)
         reb_frete = round(max(0.0, r.frete_estimado - r.frete_comprador), 2)
@@ -158,10 +172,12 @@ def calcular(df: pd.DataFrame, pct: float, taxa_item: float, erp_idx: dict | Non
             "valor_prod": r.subtotal, "tarifa": real, "frete": r.frete_estimado, "frete_comprador": r.frete_comprador,
             "cupom_seller": r.cupom_vendedor, "cupom_meli": 0.0, "desc_vendedor": r.desc_vendedor,
             "pct_comissao": (real / r.subtotal if r.subtotal else 0.0),
+            "pct_comissao_cheia": (real_cheia / r.subtotal if r.subtotal else 0.0),
             "comissao_bruta": r.comissao_bruta, "servico_bruta": r.servico_bruta, "ajuste": r.ajuste,
             "comissao_liquida": r.comissao_liquida, "servico_liquida": r.servico_liquida, "taxa_transacao": r.taxa_transacao,
             "incentivo": r.incentivo, "cupom_shopee": r.cupom_shopee, "moedas": r.moedas, "total_global": r.total_global,
             "sis_pct": pct, "sis_taxa": taxa_item, "sis_rs": sis_rs, "diferenca": reb_com,
+            "taxa_fixa": fixo, "tarifa_cheia": real_cheia,
             "tarifa_zero": bool(r.ajuste >= r.comissao_bruta - 0.005 and r.comissao_bruta > 0), "faltante": 0.0, "faltante_status": "", "sem_sistema": False,
             "rebate_rs": reb_rs, "rebate_comissao": reb_com, "rebate_frete": reb_frete,
             "rebate_total": round(reb_rs + reb_com + reb_frete, 2),
@@ -196,6 +212,7 @@ def resumo(linhas: list[dict], cancelados: int = 0) -> dict:
         "cupom_meli": 0.0, "cupom_seller": s("cupom_seller"), "faltante": 0.0,
         "incentivo": s("incentivo"), "cupom_shopee": s("cupom_shopee"), "frete_comprador": s("frete_comprador"),
         "comissao_bruta": s("comissao_bruta"), "servico_bruta": s("servico_bruta"), "ajuste": s("ajuste"),
+        "taxa_fixa": s("taxa_fixa"), "tarifa_cheia": s("tarifa_cheia"),
         "rebate_rs": s("rebate_rs"), "rebate_comissao": s("rebate_comissao"), "rebate_frete": s("rebate_frete"),
         "rebate_total": s("rebate_total"),
         "pct_sobre_venda": (round(100 * s("rebate_total") / venda, 2) if venda else 0.0),

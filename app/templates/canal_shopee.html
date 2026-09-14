@@ -16,7 +16,7 @@
 </div>
 <div class="kpis tres-com">
   <div class="kpi preto"><span class="l">Comissão sistema (deveria ser)</span><span class="v">R$ {{ s.com_sistema|brl(0) }}</span><span class="o">{{ s.com_sistema_pct|brl(2) }}% do subtotal · {{ r.sistema.nome }}</span></div>
-  <div class="kpi crit"><span class="l">Comissão real (cobrada pela Shopee)</span><span class="v">R$ {{ s.com_real|brl(0) }}</span><span class="o">{{ s.com_real_pct|brl(2) }}% · comissão bruta + serviço bruta − ajuste por ação comercial</span></div>
+  <div class="kpi crit"><span class="l">Comissão real (cobrada pela Shopee)</span><span class="v">R$ {{ s.com_real|brl(0) }}</span><span class="o">{{ s.com_real_pct|brl(2) }}% · comissão bruta + serviço bruta − ajuste (com a taxa fixa de R$ {{ s.taxa_fixa|brl(0) }} dentro)</span></div>
   <div class="kpi bom"><span class="l">Sistema − real = rebate de comissão</span><span class="v">R$ {{ s.com_dif|brl(0) }}</span><span class="o">{{ (s.com_sistema_pct - s.com_real_pct)|brl(2) }} p.p.</span></div>
 </div>
 
@@ -61,6 +61,8 @@
     <tr><td>Opção de envio</td><td class="n">{% for k, v in s.envios.items() %}{{ k }} {{ v }}{% if not loop.last %} · {% endif %}{% endfor %}</td></tr>
     <tr><td>Comissão do sistema</td><td class="n">{{ r.sistema.nome }}</td></tr>
     <tr><td>Comissão bruta + serviço bruta</td><td class="n">R$ {{ s.comissao_bruta|brl }} + R$ {{ s.servico_bruta|brl }}</td></tr>
+    <tr><td>Dentro do serviço bruta: taxa fixa R$ 12/un</td><td class="n">R$ {{ s.taxa_fixa|brl }}</td></tr>
+
     <tr><td>Ajuste por ação comercial (devolvido)</td><td class="n">R$ {{ s.ajuste|brl }}</td></tr>
     <tr><td>Comissão zerada pelo ajuste</td><td class="n">{{ s.tarifa_zero }} pedidos</td></tr>
     <tr><td>Frete estimado − pago pelo comprador</td><td class="n">R$ {{ s.frete|brl }} − R$ {{ s.frete_comprador|brl }}</td></tr>

@@ -184,16 +184,16 @@ def export_rebates_xlsx(linhas: list[dict], quando) -> io.BytesIO:
     wb = Workbook()
     wb.remove(wb.active)
     cab = ["OC", "Data", "Canal", "Rebate R$", "Rebate comissão", "Rebate frete", "Rebate TOTAL",
-           "Comissão SISTEMA R$", "Comissão REAL R$", "Frete cobrado pelo canal R$", "% real", "Base (venda)",
+           "Comissão SISTEMA R$", "Comissão REAL R$", "Taxa fixa do canal R$", "Frete cobrado pelo canal R$", "% real", "Base (venda)",
            "Competência", "SKU", "Pedido canal", "Faltante campanha"]
     ls = [[l["oc"], datetime.fromisoformat(l["data"]), l["canal"], l["rebate_rs"], l["rebate_comissao"],
-           l["rebate_frete"], l["rebate_total"], l.get("sis_rs"), l.get("tarifa"), l.get("frete_canal"),
+           l["rebate_frete"], l["rebate_total"], l.get("sis_rs"), l.get("tarifa"), l.get("taxa_fixa"), l.get("frete_canal"),
            l.get("pct_real"), l.get("venda"),
            l["competencia"], l["sku"], l["pedido_canal"], l["faltante_status"]]
           for l in linhas]
-    ws = _aba(wb, "REBATES", cab, ls, [22, 12, 18, 13, 16, 13, 14, 18, 16, 20, 9, 14, 12, 16, 20, 16],
-              moeda=(4, 5, 6, 7, 8, 9, 10, 12))
-    for row in ws.iter_rows(min_row=2, min_col=11, max_col=11):
+    ws = _aba(wb, "REBATES", cab, ls, [22, 12, 18, 13, 16, 13, 14, 18, 16, 15, 20, 9, 14, 12, 16, 20, 16],
+              moeda=(4, 5, 6, 7, 8, 9, 10, 11, 13))
+    for row in ws.iter_rows(min_row=2, min_col=12, max_col=12):
         for c in row:
             c.number_format = "0.00%"
     for row in ws.iter_rows(min_row=2, min_col=2, max_col=2):
@@ -228,6 +228,8 @@ def export_rebates_xlsx(linhas: list[dict], quando) -> io.BytesIO:
               "OC = pedido do marketplace (a Ordem de compra do ERP), sempre texto.",
               "Rebate R$ = volta em dinheiro · Rebate comissão = paga-se menos · Rebate frete = o canal ajuda no frete.",
               "Comissão SISTEMA = a de tabela (Parâmetros / ERP) · Comissão REAL = a que o canal cobrou de fato · % real = REAL ÷ base.",
+              "Taxa fixa do canal = tarifa por unidade que NÃO é comissão (Shopee: R$ 12,00/un, já embutida na taxa de serviço).",
+              "Ela fica FORA do rebate, mas É CUSTO: o custo total do canal = Comissão REAL + Taxa fixa do canal.",
               "Comissão REAL NÃO é rebate: fica fora das três formas e fora do Rebate TOTAL (o Tropa lê para a margem).",
               "Rebate comissão = SISTEMA − REAL. O Tropa/ORION devem partir da comissão SISTEMA para não contar o rebate duas vezes.",
               "Frete cobrado pelo canal = o frete que o CLIENTE pagou ao canal (receita de frete), por pedido: Mercado Livre = Frete Pedido.",
@@ -332,7 +334,7 @@ SHOPEE_GABI_COLS = [
     ("Coin Cashback Voucher Amount Sponsored by Seller", None), ("CUPOM GERAL", None),
     ("CUPOM SHOPEE", "cupom_shopee"), ("ps_csv_pix_discount_br", None),
     ("Indicador da Leve Mais por Menos", None), ("Desconto Shopee da Leve Mais por Menos", None),
-    ("Desconto da Leve Mais por Menos do vendedor", None), ("Compensar", "moedas"),
+    ("Desconto da Leve Mais por Menos do vendedor", None), ("Compensar", None),   # SEMPRE zero: a Shopee não paga mais moedas (decisão da Thaís 14/09)
     ("Total descontado Cartão de Crédito", None), ("Valor Total", None),
     ("Taxa de envio pagas pelo comprador", "frete_comprador"), ("", None), ("Taxa de Envio Reversa", None),
     ("Taxa de transação", "taxa_transacao"), ("Taxa de comissão bruta", "comissao_bruta"),
@@ -341,7 +343,7 @@ SHOPEE_GABI_COLS = [
     ("Valor estimado do frete", "frete"), ("Nome de usuário (comprador)", None), ("Nome do destinatário", None),
     ("Telefone", None), ("Endereço de entrega", None), ("Cidade", None), ("Bairro", None), ("Cidade ", None),
     ("UF", "uf"), ("País", None), ("CEP", None), ("Observação do comprador", None), ("Nota", None),
-    ("FRETE", "rebate_frete"),
+    ("FRETE", "rebate_frete"), ("TAXA FIXA R$/un", "taxa_fixa"),
 ]
 
 
@@ -367,6 +369,8 @@ def shopee_gabi_xlsx(linhas: list[dict], comp: str, pct: float, quando) -> io.By
                 linha.append(f"=A{i}*AA{i}")
             elif campo == "data":
                 linha.append(datetime.fromisoformat(l["data"]))
+            elif cab == "Compensar":
+                linha.append(0)          # sempre zero
             elif campo is None:
                 linha.append(None)
             else:
@@ -410,7 +414,8 @@ def shopee_gabi_xlsx(linhas: list[dict], comp: str, pct: float, quando) -> io.By
     bloco(11, "DIFERENÇA COMISSÃO", [("COMISSÃO PROMOB", "B"), ("Taxa de comissão bruta", "AY"),
                                      ("Taxa de serviço bruta", "BA"),
                                      ("Ajuste por participação em ação comercial", "AE"),
-                                     ("Coin Cashback Voucher Amount Sponsored by Seller", "AK")], 11)
+                                     ("Coin Cashback Voucher Amount Sponsored by Seller", "AK"),
+                                     ("Taxa fixa R$/un dentro do serviço (só informação)", "BR")], 11)
     p1.cell(18, 1, "Diferença a lançar").font = Font(bold=True)
     for j, _ in enumerate(dias, start=2):
         L = get_column_letter(j)
@@ -453,6 +458,30 @@ def shopee_gabi_xlsx(linhas: list[dict], comp: str, pct: float, quando) -> io.By
         for c in row:
             c.number_format = "DD/MM/YYYY"
 
+    mapa = [
+        ["O que é", "Coluna do relatório da Shopee (Order.all)", "Conta do PLUTOS", "Entra em"],
+        ["Pedido (chave)", "ID do pedido", "1 linha por pedido; o export vem 1 por item e taxas/incentivos repetem", "chave = OC do ERP"],
+        ["Competência", "Data de criação do pedido", "mês da venda", "todos"],
+        ["Fora da conta", "Status do pedido = Cancelado", "não soma nada", "—"],
+        ["Venda (base)", "Subtotal do produto", "soma dos itens do pedido", "base do % e do % sobre venda"],
+        ["Quantidade", "Quantidade", "soma dos itens", "R$ 12,00 por ITEM"],
+        ["COMISSÃO SISTEMA (Promob)", "— (tabela de Parâmetros)", "12% × Subtotal do produto (= produto + IPI)", "comissão sistema"],
+        ["COMISSÃO REAL (Shopee)", "Taxa de comissão bruta (AY) + Taxa de serviço bruta (BA) − Ajuste por participação em ação comercial (AE)",
+         "o que a Shopee cobrou de fato; o ajuste é desconto da campanha e entra subtraindo", "comissão real"],
+        ["Taxa fixa R$ 12,00/un", "está DENTRO da Taxa de serviço bruta (BA)", "12,00 × Quantidade — conferido: tirando isso, o serviço vira 2,00% exatos; fica na conta e reduz o rebate", "só informação"],
+        ["REBATE EM COMISSÃO", "as duas linhas acima", "sistema − real", "Rebate em comissão"],
+        ["REBATE EM R$ (1ª parte)", "Incentivo Shopee para ação comercial", "soma", "Rebate em R$"],
+        ["REBATE EM R$ (2ª parte)", "Incentivo de cupom", "soma — é ESTA coluna, NÃO a coluna 'Cupom'", "Rebate em R$"],
+        ["REBATE EM FRETE", "Valor estimado do frete − Taxa de envio pagas pelo comprador",
+         "o que sobra é o Frete Grátis que a Shopee banca (nunca negativo)", "Rebate em frete"],
+        ["Compensar moedas", "Compensar Moedas Shopee", "SEMPRE ZERO — a Shopee não paga mais moedas", "não entra"],
+        ["Cupom do vendedor", "Cupom do vendedor", "guardado para consulta — é desconto NOSSO", "não é rebate"],
+        ["Coluna 'Cupom'", "Cupom", "NÃO usar: é o cupom total (nosso + Shopee)", "não entra"],
+        ["Comissão/serviço líquida", "Taxa de comissão líquida · Taxa de serviço líquida", "guardadas para conferência", "não entram na conta"],
+        ["Tarifa zero", "Ajuste ≥ Taxa de comissão bruta", "a campanha cobriu toda a comissão", "marcação"],
+    ]
+    _aba(wb, "De_onde_vem", mapa[0], mapa[1:], [26, 62, 66, 24])
+
     ws4 = wb.create_sheet("Como_ler")
     for t in [f"PLUTOS · SHOPEE no formato da Gabi · {comp} · gerado em {quando.strftime('%d/%m/%Y %H:%M')} (Brasília)",
               "",
@@ -463,13 +492,14 @@ def shopee_gabi_xlsx(linhas: list[dict], comp: str, pct: float, quando) -> io.By
               "aba 'Planilha1' = os mesmos blocos e as mesmas fórmulas SUMIFS do fechamento dela, um dia por coluna.",
               "aba 'PLUTOS_por_dia' = o número oficial do app para conferir.",
               "",
-              "ÚNICA diferença de método: a COMISSÃO PROMOB da Planilha1 é 12% do subtotal (a conta dela).",
-              "O PLUTOS usa 12% + R$ 12,00 por ITEM, que é a tabela oficial — por isso o rebate de comissão",
-              "do app é maior. A coluna 'Comissão sistema' da aba PLUTOS_por_dia mostra esse valor.",
+              "CONTA OFICIAL: comissão real Shopee = comissão bruta (AY) + serviço bruta (BA) − ajuste (AE);",
+              "comissão Promob = 12% do Subtotal do produto (= produto + IPI); rebate = Promob − real.",
+              "A taxa fixa de R$ 12,00/un JÁ VEM dentro da 'Taxa de serviço bruta' (conferido: tirando 12 ×",
+              "quantidade, o serviço vira exatamente 2,00% do subtotal) e FICA na conta — por isso ela reduz o",
+              "rebate. A linha 17 mostra quanto é, só para consulta; não entra na 'Diferença a lançar'.",
               "",
-              "ATENÇÃO na linha 'Compensar moedas': aqui a coluna AR vem PREENCHIDA (quantidade de moedas),",
-              "então a fórmula ×0,01 mostra um valor em R$ — na planilha antiga essa linha ficava zerada.",
-              "O rebate oficial do PLUTOS NÃO conta moedas; se não quiser contar, é só zerar essa linha.",
+              "Compensar moedas: SEMPRE ZERO (a Shopee não paga mais moedas para a Multimóveis) — a coluna AR",
+              "sai zerada de propósito e o rebate do PLUTOS também não conta moedas.",
               ]:
         ws4.append([t])
     ws4.column_dimensions["A"].width = 105
