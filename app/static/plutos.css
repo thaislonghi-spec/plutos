@@ -168,13 +168,16 @@ table.cols-12 td input.obs{width:100%;box-sizing:border-box} table.cols-12 td in
 .barra-massa b{font-size:12px;color:var(--tinta2)}
 .barra-massa input.val{width:110px}
 .mini.ok-sel{background:var(--ouro);border-color:var(--ouro);color:#0B0B0C}
-table.cols-13{table-layout:fixed;min-width:1740px}
-table.cols-13 th.chk,table.cols-13 td.chk{width:34px;text-align:center;padding:4px}
-table.cols-13 th:nth-child(2){width:118px} table.cols-13 th:nth-child(3){width:95px} table.cols-13 th:nth-child(4){width:170px}
-table.cols-13 th:nth-child(5){width:120px} table.cols-13 th:nth-child(6){width:130px} table.cols-13 th:nth-child(7){width:95px}
-table.cols-13 th:nth-child(8){width:110px} table.cols-13 th:nth-child(9){width:150px} table.cols-13 th:nth-child(10){width:60px}
-table.cols-13 th:nth-child(11){width:300px} table.cols-13 th:nth-child(12){width:170px} table.cols-13 th:nth-child(13){width:190px}
-table.cols-13 td input.obs{width:100%;box-sizing:border-box} table.cols-13 td input.val{width:100%;max-width:none;box-sizing:border-box}
+/* Faltante campanha: 14 colunas (a 3ª é a CONTA — Loja Principal / Loja RS) */
+table.cols-14{table-layout:fixed;min-width:1840px}
+table.cols-14 th.chk,table.cols-14 td.chk{width:34px;text-align:center;padding:4px}
+table.cols-14 th:nth-child(2){width:118px} table.cols-14 th:nth-child(3){width:110px} table.cols-14 th:nth-child(4){width:95px}
+table.cols-14 th:nth-child(5){width:170px} table.cols-14 th:nth-child(6){width:120px} table.cols-14 th:nth-child(7){width:130px}
+table.cols-14 th:nth-child(8){width:95px} table.cols-14 th:nth-child(9){width:110px} table.cols-14 th:nth-child(10){width:150px}
+table.cols-14 th:nth-child(11){width:60px} table.cols-14 th:nth-child(12){width:300px} table.cols-14 th:nth-child(13){width:170px}
+table.cols-14 th:nth-child(14){width:190px}
+table.cols-14 td.ct{font-size:11.5px;color:var(--tinta2)}
+table.cols-14 td input.obs{width:100%;box-sizing:border-box} table.cols-14 td input.val{width:100%;max-width:none;box-sizing:border-box}
 /* barra de massa numa linha só: busca menor, campos compactos, nada quebra */
 .barra-massa{flex-wrap:nowrap;overflow-x:auto;white-space:nowrap}
 .barra-massa #fbusca{width:220px;flex:0 0 220px}

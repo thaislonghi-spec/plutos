@@ -26,7 +26,7 @@ from werkzeug.utils import secure_filename
 from motor import meli, erp, magalu, shopee, madeira, webcont, colombo
 import planilhas
 
-VERSAO = "2026-09-14o"
+VERSAO = "2026-09-14r"
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(RAIZ), "dados")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -227,7 +227,38 @@ def parametros() -> dict:
               # o Linha a linha separa "Comissão canal" e "Tx financeira canal"
               "tx_financeira": {"madeira": 4.0, "webcont": 1.0}}
     p = _json_ler(pasta("parametros.json"), {})
+    p = _corrigir_comissoes(p)
     return {**padrao, **p}
+
+
+# Correções de cadastro que o app aplica UMA VEZ na tabela salva (e registra em
+# "correcoes" para nunca repetir — se ela editar depois, o valor dela vale).
+CORRECOES_COMISSAO = {
+    # chave da correção: (pedaço do nome do canal, valor errado, valor certo, porquê)
+    "colombo_7": ("COLOMBO", "9", "7", "o portal e o ERP trabalham com 7% (conferido em 100% dos pedidos)"),
+}
+
+
+def _corrigir_comissoes(p: dict) -> dict:
+    feitas = list(p.get("correcoes") or [])
+    linhas = p.get("comissoes")
+    if not linhas:
+        return p
+    mudou = False
+    for chave, (nome, errado, certo, _por) in CORRECOES_COMISSAO.items():
+        if chave in feitas:
+            continue
+        for lin in linhas:
+            if unidecode_lower(nome) in unidecode_lower(lin.get("canal", "")):
+                atual = str(lin.get("comissao", "")).replace("%", "").replace(",", ".").strip()
+                if atual in (errado, errado + ".0", errado + ".00"):
+                    lin["comissao"] = certo
+                    mudou = True
+        feitas.append(chave)
+    if mudou or feitas != list(p.get("correcoes") or []):
+        p["correcoes"] = feitas
+        _json_gravar(pasta("parametros.json"), p)
+    return p
 
 
 def _num_br(v) -> float:
@@ -520,6 +551,22 @@ def comissao_cadastrada(nomes: tuple[str, ...], padrao: tuple[float, float]) -> 
     return padrao
 
 
+def comissao_tipo(nomes: tuple[str, ...], padrao: str = "GMV") -> str:
+    """TIPO da tabela de comissões — regra oficial da casa (14/09/2026):
+       Produto = comissão sobre valor produto + IPI
+       GMV     = comissão sobre produto + IPI + frete (o valor total da NF)"""
+    for lin in parametros().get("comissoes") or COMISSAO_PADRAO:
+        nome = unidecode_lower(lin.get("canal", ""))
+        if any(unidecode_lower(n) in nome for n in nomes) and "full" not in nome and "xpress" not in nome:
+            t = (lin.get("tipo") or "").strip().upper()
+            return "Produto" if t.startswith("PROD") else "GMV"
+    return padrao
+
+
+def base_do_tipo(tipo: str) -> str:
+    return "produto + IPI" if tipo == "Produto" else "produto + IPI + frete = total da NF"
+
+
 def erp_por_base(box: str) -> dict:
     """OC do ERP sem o sufixo -N → linha do ERP (o Magalu grava 'LU-…-1', 'LU-…-2')."""
     out = {}
@@ -735,7 +782,9 @@ def recalcular_magalu(comp: str):
     linhas = magalu.calcular(df, pct, taxa, erp_por_base("magalu"))
     r["linhas"] = linhas
     r["resumo"] = magalu.resumo(linhas, int(df["cancelado"].sum()))
-    r["sistema"] = {"nome": f"Parâmetros · {pct * 100:.2f}% + R$ {taxa:.2f}/pedido", "quando": agora().isoformat(),
+    tipo = comissao_tipo(("MAGAZINE", "MAGALU"))
+    r["sistema"] = {"nome": f"Parâmetros · {pct * 100:.2f}% + R$ {taxa:.2f}/pedido · {tipo} ({base_do_tipo(tipo)})",
+                    "quando": agora().isoformat(),
                     "diag": {"linhas": len(linhas), "modo": "tabela de comissões (Parâmetros)"}}
     r["sistema_diag"] = r["sistema"]["diag"]
     r["recalculado"] = agora().isoformat()
@@ -786,7 +835,8 @@ def recalcular_shopee(comp: str):
     linhas = shopee.calcular(df, pct, taxa, erp_ler()["ocs"])
     r["linhas"] = linhas
     r["resumo"] = shopee.resumo(linhas, int(df["cancelado"].sum()))
-    r["sistema"] = {"nome": f"Parâmetros · {pct * 100:.2f}% do bruto (produto + IPI)",
+    tipo = comissao_tipo(("SHOPEE",), "Produto")
+    r["sistema"] = {"nome": f"Parâmetros · {pct * 100:.2f}% do {tipo} ({base_do_tipo(tipo)})",
                     "quando": agora().isoformat(),
                     "diag": {"linhas": len(linhas), "modo": "tabela de comissões (Parâmetros)"}}
     r["sistema_diag"] = r["sistema"]["diag"]
@@ -836,7 +886,8 @@ def recalcular_madeira(comp: str):
     linhas = madeira.calcular(df, pct, erp_ler()["ocs"])
     r["linhas"] = linhas
     r["resumo"] = madeira.resumo(linhas, int(df["cancelado"].sum()))
-    r["sistema"] = {"nome": f"Parâmetros · {pct * 100:.2f}% do valor do pedido (GMV)", "quando": agora().isoformat(),
+    tipo = comissao_tipo(("MADEIRA",))
+    r["sistema"] = {"nome": f"Parâmetros · {pct * 100:.2f}% do {tipo} ({base_do_tipo(tipo)})", "quando": agora().isoformat(),
                     "diag": {"linhas": len(linhas), "modo": "tabela de comissões (Parâmetros)"}}
     r["sistema_diag"] = r["sistema"]["diag"]
     r["recalculado"] = agora().isoformat()
@@ -884,7 +935,8 @@ def recalcular_webcont(comp: str):
     linhas = webcont.calcular(df, pct, erp_ler()["ocs"])
     r["linhas"] = linhas
     r["resumo"] = webcont.resumo(linhas, int(df["cancelado"].sum()))
-    r["sistema"] = {"nome": f"Parâmetros · {pct * 100:.2f}% do total do pedido (GMV)", "quando": agora().isoformat(),
+    tipo = comissao_tipo(("WEBCONTINENTAL", "WEBCONT"))
+    r["sistema"] = {"nome": f"Parâmetros · {pct * 100:.2f}% do {tipo} ({base_do_tipo(tipo)})", "quando": agora().isoformat(),
                     "diag": {"linhas": len(linhas), "modo": "tabela de comissões (Parâmetros)"}}
     r["sistema_diag"] = r["sistema"]["diag"]
     r["recalculado"] = agora().isoformat()
@@ -932,7 +984,8 @@ def recalcular_colombo(comp: str):
     linhas = colombo.calcular(df, pct, erp_ler()["ocs"])
     r["linhas"] = linhas
     r["resumo"] = colombo.resumo(linhas, int(df["cancelado"].sum()))
-    r["sistema"] = {"nome": f"Parâmetros · {pct * 100:.2f}% do total do pedido", "quando": agora().isoformat(),
+    tipo = comissao_tipo(("COLOMBO",))
+    r["sistema"] = {"nome": f"Parâmetros · {pct * 100:.2f}% do {tipo} ({base_do_tipo(tipo)})", "quando": agora().isoformat(),
                     "diag": {"linhas": len(linhas), "modo": "tabela de comissões (Parâmetros)"}}
     r["sistema_diag"] = r["sistema"]["diag"]
     r["recalculado"] = agora().isoformat()
@@ -1348,6 +1401,17 @@ def pedidos():
                            paginas=max(1, -(-total // por)), q=q, so=so, canal_f=canal_f)
 
 
+CONTA_APELIDO = {"loja_principal": "Loja Principal", "coletas_rs": "Loja RS"}
+
+
+@app.template_filter("contanome")
+def f_conta(v) -> str:
+    """Nome da conta do Meli do jeito que a casa fala (LOJA_PRINCIPAL = Loja
+    Principal · COLETAS_RS = Loja RS); conta nova aparece como veio no arquivo."""
+    t = str(v or "").strip()
+    return CONTA_APELIDO.get(unidecode_lower(t).replace(" ", "_"), t.replace("_", " ").title() or "—")
+
+
 @app.route("/faltante", methods=["GET", "POST"])
 @logado
 def faltante():
@@ -1393,7 +1457,8 @@ def faltante():
     itens = meli.sugestoes_faltante(r["linhas"], faltante_ler("meli")) if r else []
     pend = sum(1 for i in itens if i["faltante_status"] == "pendente")
     sug = sum(1 for i in itens if i["sugestao"] is not None and i["faltante_status"] == "pendente")
-    return render_template("faltante.html", itens=itens, r=r, pend=pend, sug=sug)
+    contas = sorted({(i.get("conta") or "") for i in itens if i.get("conta")})
+    return render_template("faltante.html", itens=itens, r=r, pend=pend, sug=sug, contas=contas)
 
 
 @app.route("/faltante/um", methods=["POST"])

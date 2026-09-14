@@ -28,6 +28,12 @@
     <span class="chip" data-st="pendente">Pendente <small>{{ itens|selectattr('faltante_status','equalto','pendente')|list|length }}</small></span>
     <span class="chip" data-st="preenchido">Preenchido <small>{{ itens|rejectattr('faltante_status','equalto','pendente')|list|length }}</small></span>
   </div>
+  {% if contas|length > 1 %}
+  <div class="chips" id="cchips" style="margin-bottom:8px">
+    <span class="chip on" data-conta="todas">Todas as contas <small>{{ itens|length }}</small></span>
+    {% for ct in contas %}<span class="chip" data-conta="{{ ct }}">{{ ct|contanome }} <small>{{ itens|selectattr('conta','equalto',ct)|list|length }}</small></span>{% endfor %}
+  </div>
+  {% endif %}
   <div class="barra-massa">
     <input type="search" id="fbusca" placeholder="buscar em qualquer campo: OC, SKU, MLB, valor, obs…" class="obs" style="width:320px">
     <span class="nota" style="margin:0" id="fconta"></span>
@@ -40,14 +46,15 @@
     <button type="button" class="mini ok-sel" id="bok" data-tip="Grava, um a um, os pedidos marcados">OK nos selecionados</button>
     {% endif %}
   </div>
-  <div class="rol" style="max-height:70vh"><table class="cols-13">
-    <thead><tr><th class="chk" data-sem-ordenar>{% if PODE.faltante %}<input type="checkbox" id="ftodos" data-tip="Marca / desmarca todos os visíveis">{% endif %}</th><th>Status</th><th>Data</th><th>OC / Pedido mkt</th><th>SKU</th><th>Anúncio</th><th class="n">Produto</th><th class="n">Comissão sist.</th><th class="n">Valor devolvido (R$)</th><th>OK</th><th>Obs</th><th>Sugestão</th><th>Quem / quando</th></tr></thead>
+  <div class="rol" style="max-height:70vh"><table class="cols-14">
+    <thead><tr><th class="chk" data-sem-ordenar>{% if PODE.faltante %}<input type="checkbox" id="ftodos" data-tip="Marca / desmarca todos os visíveis">{% endif %}</th><th>Status</th><th>Conta</th><th>Data</th><th>OC / Pedido mkt</th><th>SKU</th><th>Anúncio</th><th class="n">Produto</th><th class="n">Comissão sist.</th><th class="n">Valor devolvido (R$)</th><th>OK</th><th>Obs</th><th>Sugestão</th><th>Quem / quando</th></tr></thead>
     <tbody>
     {% for i in itens %}
     {% set ped = i.pedido_mkt %}
-    <tr data-ped="{{ ped }}" class="{{ 'pend' if i.faltante_status == 'pendente' and not i.sugestao }}{{ 'sug' if i.sugestao is not none and i.faltante_status == 'pendente' }}{{ 'feito' if i.faltante_status != 'pendente' }}">
+    <tr data-ped="{{ ped }}" data-conta="{{ i.conta or '' }}" class="{{ 'pend' if i.faltante_status == 'pendente' and not i.sugestao }}{{ 'sug' if i.sugestao is not none and i.faltante_status == 'pendente' }}{{ 'feito' if i.faltante_status != 'pendente' }}">
       <td class="chk">{% if PODE.faltante %}<input type="checkbox" class="sel">{% endif %}</td>
       <td data-ord="{{ '1' if i.faltante_status == 'pendente' else '2' }}" class="st">{% if i.faltante_status == 'pendente' %}<span class="tag pend">pendente</span>{% else %}<span class="tag ok2">preenchido</span>{% endif %}</td>
+      <td data-ord="{{ i.conta or '' }}" class="ct">{{ i.conta|contanome }}</td>
       <td data-ord="{{ i.data }}">{{ i.data|dia }}</td><td class="n">{{ ped }}</td><td class="n">{{ i.sku }}</td><td class="n">{{ i.anuncio }}</td>
       <td class="n">{{ i.valor_prod|brl }}</td><td class="n">{% if i.sis_rs is not none %}{{ i.sis_rs|brl }}{% else %}—{% endif %}</td>
       <td class="n" data-ord="{{ i.manual.valor if i.manual else 0 }}">{% if PODE.faltante %}<input class="val" name="val_{{ ped }}" id="v_{{ ped }}" value="{{ i.manual.valor|brl if i.manual else '' }}" placeholder="0,00">{% if i.manual %}<label style="font-size:10px;color:var(--tinta3)"><input type="checkbox" name="limpar_{{ ped }}" value="1"> limpar</label>{% endif %}{% else %}{{ i.manual.valor|brl if i.manual else '—' }}{% endif %}</td>
@@ -57,7 +64,7 @@
       <td class="qq" data-ord="{{ i.manual.quando if i.manual else '' }}" style="font-size:11px;color:var(--tinta3)">{% if i.manual %}{{ i.manual.quem }} · {{ i.manual.quando|quando }}{% endif %}</td>
     </tr>
     {% endfor %}
-    {% if not itens %}<tr><td colspan="13">Nenhum pedido de tarifa zero nesta competência.</td></tr>{% endif %}
+    {% if not itens %}<tr><td colspan="14">Nenhum pedido de tarifa zero nesta competência.</td></tr>{% endif %}
     </tbody></table></div>
 </form>
 {% endif %}
@@ -104,18 +111,24 @@
     tr.querySelectorAll('input').forEach(function(i){ if(i.type !== 'checkbox') t += ' ' + i.value; });
     return t.toLowerCase();
   }
-  var estado = 'todos';
+  var estado = 'todos', contaSel = 'todas';
   function estadoDe(tr){ return tr.classList.contains('feito') ? 'preenchido' : 'pendente'; }
   function filtrar(){
     var q = (busca.value || '').trim().toLowerCase(), n = 0, tot = 0;
-    linhas().forEach(function(tr){ tot++; var ok = (!q || texto(tr).indexOf(q) >= 0) && (estado === 'todos' || estadoDe(tr) === estado); tr.style.display = ok ? '' : 'none'; if(ok) n++; });
-    conta.textContent = (q || estado !== 'todos') ? (n + ' de ' + tot + ' pedidos') : (tot + ' pedidos');
+    linhas().forEach(function(tr){ tot++;
+      var ok = (!q || texto(tr).indexOf(q) >= 0)
+            && (estado === 'todos' || estadoDe(tr) === estado)
+            && (contaSel === 'todas' || (tr.dataset.conta || '') === contaSel);
+      tr.style.display = ok ? '' : 'none'; if(ok) n++; });
+    conta.textContent = (q || estado !== 'todos' || contaSel !== 'todas') ? (n + ' de ' + tot + ' pedidos') : (tot + ' pedidos');
     var np = 0, nf = 0; linhas().forEach(function(tr){ if(estadoDe(tr) === 'pendente') np++; else nf++; });
     document.querySelectorAll('#fchips .chip').forEach(function(c){ var s = c.querySelector('small'); if(!s) return;
       s.textContent = c.dataset.st === 'todos' ? tot : (c.dataset.st === 'pendente' ? np : nf); });
   }
   document.querySelectorAll('#fchips .chip').forEach(function(c){ c.addEventListener('click', function(){
     estado = c.dataset.st; document.querySelectorAll('#fchips .chip').forEach(function(x){ x.classList.toggle('on', x === c); }); filtrar(); }); });
+  document.querySelectorAll('#cchips .chip').forEach(function(c){ c.addEventListener('click', function(){
+    contaSel = c.dataset.conta; document.querySelectorAll('#cchips .chip').forEach(function(x){ x.classList.toggle('on', x === c); }); filtrar(); }); });
   if(busca){ busca.addEventListener('input', filtrar); filtrar(); }
 
   // ---- seleção e ações em massa (só preenchem os campos; gravar é o OK)
