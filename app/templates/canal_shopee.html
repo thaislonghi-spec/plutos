@@ -1,4 +1,7 @@
 {% extends "base.html" %}
+{% block acoes_ult %}
+{% if PODE.exportar %}<a class="bt-excel" href="{{ url_for('baixar_shopee_gabi', mes=comp) }}" data-tip="Baixa a planilha da Shopee no formato da Gabi (aba novo + Planilha1 com as fórmulas), já preenchida com o que o PLUTOS gerou no mês">↓ EXCEL · formato Gabi</a>{% endif %}
+{% endblock %}
 {% block conteudo %}
 {% if not r %}
 <div class="aviso"><b>Sem rodada de {{ c.nome }} em {{ comp|mesano }}.</b> Suba o export Order.all em <a href="{{ url_for('arquivos', mes=comp) }}">Arquivos</a> e clique Subir e rodar.</div>

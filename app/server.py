@@ -26,7 +26,7 @@ from werkzeug.utils import secure_filename
 from motor import meli, erp, magalu, shopee, madeira, webcont, colombo
 import planilhas
 
-VERSAO = "2026-09-14e"
+VERSAO = "2026-09-14f"
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(RAIZ), "dados")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -2196,6 +2196,25 @@ def baixar_mlbs():
                      download_name=f"PLUTOS_ListaMLBs{suf}_{agora().strftime('%d%m%Y_%H%M')}.xlsx",
                      mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
+
+@app.route("/baixar/shopee-gabi")
+@logado
+@exige("exportar")
+def baixar_shopee_gabi():
+    """A planilha da Shopee no formato da Gabi (aba novo + Planilha1 com as
+    fórmulas dela), já preenchida com o que o PLUTOS gerou no mês."""
+    comp = comp_atual()
+    r = rodada("shopee", comp)
+    if not _resumo_pronto(r):
+        flash("Ainda não há rodada da Shopee nesta competência.")
+        return redirect(url_for("canal", chave="shopee", mes=comp))
+    pct, _ = comissao_cadastrada(("SHOPEE",), (0.12, 12.0))
+    bio = planilhas.shopee_gabi_xlsx(r["linhas"], comp, pct, agora())
+    del r
+    gc.collect()
+    return send_file(bio, as_attachment=True,
+                     download_name=f"PLUTOS_SHOPEE_{comp.replace('-', '')}_{agora().strftime('%d%m%Y_%H%M')}.xlsx",
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 @app.route("/baixar/<qual>")
 @logado

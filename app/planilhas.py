@@ -309,3 +309,170 @@ def coletas_xlsx(pedidos: list[dict], desc: dict, comp: str) -> io.BytesIO:
             c.number_format = "@"
     bio = io.BytesIO(); wb.save(bio); bio.seek(0)
     return bio
+
+
+# ---------------------------------------------------------------------------
+# SHOPEE · planilha no formato da Gabi (aba "novo" + "Planilha1" com as fórmulas
+# dela). Pedido a pedido do PLUTOS, para ela usar direto no fechamento.
+# ---------------------------------------------------------------------------
+SHOPEE_GABI_COLS = [
+    ("COM PROMOB", None), ("PROMOB", None), ("ID do pedido", "pedido_mkt"), ("Status do pedido", "status"),
+    ("Hot Listing", None), ("Cancelar Motivo", None), ("Status da Devolução / Reembolso", None),
+    ("Número de rastreamento", "id_mkt"), ("Opção de envio", "envio"), ("Método de envio", None),
+    ("Data", "data"), ("Hora do pagamento do pedido", None), ("Data prevista de envio", None),
+    ("Tempo de Envio", None), ("Domestic Delivered Date", None), ("Hora completa do pedido", None),
+    ("Data da Finalização do Cancelamento", None), ("Pedido FBS", None),
+    ("Nº de referência do SKU principal", "sku"), ("Nome do Produto", "produto"),
+    ("Número de referência SKU", "anuncio"), ("Nome da variação", None), ("Shopee Owned", None),
+    ("Preço original", None), ("Preço acordado", None), ("Quantidade", "qtd"),
+    ("Subtotal do produto", "valor_prod"), ("Desconto do vendedor", "desc_vendedor"), ("Desconto do vendedor ", None),
+    ("Incentivo Shopee para ação comercial", "incentivo"), ("Ajuste por participação em ação comercial", "ajuste"),
+    ("Peso total SKU", None), ("Número de produtos pedidos", "itens"), ("Peso total do pedido", None),
+    ("Código do Cupom", None), ("Cupom do vendedor", "cupom_seller"),
+    ("Coin Cashback Voucher Amount Sponsored by Seller", None), ("CUPOM GERAL", None),
+    ("CUPOM SHOPEE", "cupom_shopee"), ("ps_csv_pix_discount_br", None),
+    ("Indicador da Leve Mais por Menos", None), ("Desconto Shopee da Leve Mais por Menos", None),
+    ("Desconto da Leve Mais por Menos do vendedor", None), ("Compensar", "moedas"),
+    ("Total descontado Cartão de Crédito", None), ("Valor Total", None),
+    ("Taxa de envio pagas pelo comprador", "frete_comprador"), ("", None), ("Taxa de Envio Reversa", None),
+    ("Taxa de transação", "taxa_transacao"), ("Taxa de comissão bruta", "comissao_bruta"),
+    ("Taxa de comissão líquida", "comissao_liquida"), ("Taxa de serviço bruta", "servico_bruta"),
+    ("Taxa de serviço líquida", "servico_liquida"), ("Total global", "total_global"),
+    ("Valor estimado do frete", "frete"), ("Nome de usuário (comprador)", None), ("Nome do destinatário", None),
+    ("Telefone", None), ("Endereço de entrega", None), ("Cidade", None), ("Bairro", None), ("Cidade ", None),
+    ("UF", "uf"), ("País", None), ("CEP", None), ("Observação do comprador", None), ("Nota", None),
+    ("FRETE", "rebate_frete"),
+]
+
+
+def shopee_gabi_xlsx(linhas: list[dict], comp: str, pct: float, quando) -> io.BytesIO:
+    """A planilha da Gabi (Shopee) já preenchida pelo PLUTOS: aba 'novo' com as
+    mesmas 69 colunas (1 linha por PEDIDO, sem cancelado e sem duplicidade) e
+    aba 'Planilha1' com os mesmos blocos e as mesmas fórmulas SUMIFS por dia."""
+    wb = Workbook()
+    wb.remove(wb.active)
+    linhas = sorted(linhas, key=lambda l: (l["data"], l["pedido_mkt"]))
+
+    ws = wb.create_sheet("novo")
+    ws.append([c for c, _ in SHOPEE_GABI_COLS])
+    for c in ws[1]:
+        c.fill, c.font, c.alignment = CAB, CAB_F, Alignment(vertical="center", wrap_text=True)
+    ws.row_dimensions[1].height = 30
+    for i, l in enumerate(linhas, start=2):
+        linha = []
+        for cab, campo in SHOPEE_GABI_COLS:
+            if cab == "COM PROMOB":
+                linha.append(pct)
+            elif cab == "PROMOB":
+                linha.append(f"=A{i}*AA{i}")
+            elif campo == "data":
+                linha.append(datetime.fromisoformat(l["data"]))
+            elif campo is None:
+                linha.append(None)
+            else:
+                linha.append(l.get(campo))
+        ws.append(linha)
+    for col, larg in (("C", 20), ("D", 16), ("K", 12), ("S", 16), ("T", 40), ("U", 18)):
+        ws.column_dimensions[col].width = larg
+    for row in ws.iter_rows(min_row=2, min_col=11, max_col=11):
+        for c in row:
+            c.number_format = "DD/MM/YYYY"
+    for row in ws.iter_rows(min_row=2, min_col=3, max_col=3):
+        for c in row:
+            c.number_format = "@"
+    ws.freeze_panes = "D2"
+
+    # ---- Planilha1: mesmos blocos e mesmas fórmulas da Gabi, um dia por coluna
+    dias = sorted({l["data"] for l in linhas})
+    p1 = wb.create_sheet("Planilha1")
+    fim = get_column_letter(1 + len(dias))
+
+    def bloco(linha_ini: int, titulo: str, itens: list[tuple[str, str]], ref: int):
+        p1.cell(linha_ini, 1, titulo).font = Font(bold=True)
+        for j, d in enumerate(dias, start=2):
+            cel = p1.cell(linha_ini, j, datetime.fromisoformat(d))
+            cel.number_format = "DD/MM/YYYY"
+            cel.font = Font(bold=True)
+        for k, (rot, colu) in enumerate(itens, start=1):
+            p1.cell(linha_ini + k, 1, rot)
+            for j, _ in enumerate(dias, start=2):
+                L = get_column_letter(j)
+                extra = "*0.01" if rot == "Compensar moedas" else ""
+                p1.cell(linha_ini + k, j, f"=SUMIFS(novo!${colu}:${colu},novo!$K:$K,Planilha1!{L}${ref}){extra}").number_format = BRL
+
+    bloco(1, "REBATE ATIVO", [("Incentivo Shopee para ação comercial", "AD"), ("CUPOM SHOPEE", "AM"),
+                              ("Desconto de Frete Aproximado", "BQ"), ("Compensar moedas", "AR")], 1)
+    p1.cell(7, 1, "Diferença a lançar").font = Font(bold=True)
+    for j, _ in enumerate(dias, start=2):
+        L = get_column_letter(j)
+        p1.cell(7, j, f"=SUM({L}2:{L}5)").number_format = BRL
+
+    bloco(11, "DIFERENÇA COMISSÃO", [("COMISSÃO PROMOB", "B"), ("Taxa de comissão bruta", "AY"),
+                                     ("Taxa de serviço bruta", "BA"),
+                                     ("Ajuste por participação em ação comercial", "AE"),
+                                     ("Coin Cashback Voucher Amount Sponsored by Seller", "AK")], 11)
+    p1.cell(18, 1, "Diferença a lançar").font = Font(bold=True)
+    for j, _ in enumerate(dias, start=2):
+        L = get_column_letter(j)
+        p1.cell(18, j, f"=({L}12-(({L}13+{L}14)-{L}15-{L}16))").number_format = BRL
+
+    p1.cell(20, 1, "REBATE ATIVO").font = Font(bold=True)
+    p1.cell(20, 2, f"=SUM(B7:{fim}7)").number_format = BRL
+    p1.cell(21, 1, "DIFERENÇA COMISSÃO").font = Font(bold=True)
+    p1.cell(21, 2, f"=SUM(B18:{fim}18)").number_format = BRL
+    p1.cell(22, 1, "TOTAL").font = Font(bold=True)
+    p1.cell(22, 2, "=B20+B21").number_format = BRL
+
+    bloco(24, "BI RODRIGO", [("Incentivo Shopee para ação comercial", "AD"),
+                             ("Ajuste por participação em ação comercial", "AE"), ("CUPOM SHOPEE", "AM"),
+                             ("Desconto de Frete Aproximado", "BQ"), ("Compensar moedas", "AR")], 24)
+    p1.cell(31, 1, "Total BI").font = Font(bold=True)
+    for j, _ in enumerate(dias, start=2):
+        L = get_column_letter(j)
+        p1.cell(31, j, f"=SUM({L}25:{L}29)").number_format = BRL
+    p1.cell(33, 1, "Total do dia (rebate ativo + comissão)").font = Font(bold=True)
+    for j, _ in enumerate(dias, start=2):
+        L = get_column_letter(j)
+        p1.cell(33, j, f"={L}7+{L}18").number_format = BRL
+    p1.column_dimensions["A"].width = 42
+    for j, _ in enumerate(dias, start=2):
+        p1.column_dimensions[get_column_letter(j)].width = 13
+
+    # ---- conferência com o número oficial do PLUTOS
+    por_dia: dict[str, list] = {}
+    for l in linhas:
+        a = por_dia.setdefault(l["data"], [0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        a[0] += 1; a[1] += l["rebate_rs"]; a[2] += l["rebate_comissao"]; a[3] += l["rebate_frete"]
+        a[4] += l["rebate_total"]; a[5] += l["sis_rs"]
+    ls = [[datetime.fromisoformat(d), v[0], round(v[1], 2), round(v[2], 2), round(v[3], 2), round(v[4], 2), round(v[5], 2)]
+          for d, v in sorted(por_dia.items())]
+    ws3 = _aba(wb, "PLUTOS_por_dia", ["Dia", "Pedidos", "Rebate R$", "Rebate comissão", "Rebate frete",
+                                      "REBATE TOTAL", "Comissão sistema (12% + R$/item)"],
+               ls, [12, 10, 14, 16, 14, 15, 24], moeda=(3, 4, 5, 6, 7))
+    for row in ws3.iter_rows(min_row=2, min_col=1, max_col=1):
+        for c in row:
+            c.number_format = "DD/MM/YYYY"
+
+    ws4 = wb.create_sheet("Como_ler")
+    for t in [f"PLUTOS · SHOPEE no formato da Gabi · {comp} · gerado em {quando.strftime('%d/%m/%Y %H:%M')} (Brasília)",
+              "",
+              "aba 'novo'   = a base do PLUTOS nas mesmas 69 colunas do export da Shopee, já tratada:",
+              "               1 LINHA POR PEDIDO (no export vem 1 por item, com taxas e incentivos repetidos),",
+              "               cancelados fora e nada somado duas vezes. Coluna A = 12% · B = A × Subtotal.",
+              "               Coluna BQ (FRETE) = valor estimado do frete − taxa de envio paga pelo comprador.",
+              "aba 'Planilha1' = os mesmos blocos e as mesmas fórmulas SUMIFS do fechamento dela, um dia por coluna.",
+              "aba 'PLUTOS_por_dia' = o número oficial do app para conferir.",
+              "",
+              "ÚNICA diferença de método: a COMISSÃO PROMOB da Planilha1 é 12% do subtotal (a conta dela).",
+              "O PLUTOS usa 12% + R$ 12,00 por ITEM, que é a tabela oficial — por isso o rebate de comissão",
+              "do app é maior. A coluna 'Comissão sistema' da aba PLUTOS_por_dia mostra esse valor.",
+              "",
+              "ATENÇÃO na linha 'Compensar moedas': aqui a coluna AR vem PREENCHIDA (quantidade de moedas),",
+              "então a fórmula ×0,01 mostra um valor em R$ — na planilha antiga essa linha ficava zerada.",
+              "O rebate oficial do PLUTOS NÃO conta moedas; se não quiser contar, é só zerar essa linha.",
+              ]:
+        ws4.append([t])
+    ws4.column_dimensions["A"].width = 105
+    ws4["A1"].font = Font(bold=True, size=13)
+    bio = io.BytesIO(); wb.save(bio); bio.seek(0)
+    return bio
