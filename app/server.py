@@ -6,7 +6,9 @@ Flask + arquivos JSON em DATA_DIR (multiempresa desde o início).
 from __future__ import annotations
 
 import io
+import gc
 import json
+from collections import OrderedDict
 import os
 import re
 import secrets
@@ -15,6 +17,7 @@ from datetime import datetime, timedelta, timezone
 from functools import wraps
 from typing import Any
 
+from werkzeug.exceptions import HTTPException
 from flask import (Flask, abort, flash, jsonify, redirect, render_template, request,
                    send_file, session, url_for)
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -23,7 +26,7 @@ from werkzeug.utils import secure_filename
 from motor import meli, erp, magalu, shopee, madeira, webcont
 import planilhas
 
-VERSAO = "2026-09-12s"
+VERSAO = "2026-09-14a"
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(RAIZ), "dados")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -126,7 +129,9 @@ def agora():
 # índice do ERP, as rodadas, a Planilha 2 e o cadastro várias vezes por
 # requisição — no Render (512 MB) isso derrubava o worker (502). Quem altera
 # um JSON sempre grava em seguida (_json_gravar), que invalida a entrada.
-_CACHE: dict[str, tuple[tuple, Any]] = {}
+_CACHE: OrderedDict = OrderedDict()
+CACHE_MAX_ARQ = 1_500_000     # bytes: JSON maior que isso NUNCA fica em memória
+CACHE_MAX_ITENS = 30          # no máximo 30 arquivos em cache (LRU)
 _CACHE_LOCK = __import__("threading").Lock()
 
 
@@ -139,14 +144,22 @@ def _json_ler(caminho, padrao):
     with _CACHE_LOCK:
         hit = _CACHE.get(caminho)
         if hit and hit[0] == chave:
+            _CACHE.move_to_end(caminho)
             return hit[1]
     try:
         with open(caminho, encoding="utf-8") as f:
             dado = json.load(f)
     except Exception:
         return padrao
-    with _CACHE_LOCK:
-        _CACHE[caminho] = (chave, dado)
+    # o cache existe para as leituras pequenas e repetidas (parâmetros, índices,
+    # resumos). Arquivo grande NUNCA fica em memória: no Render são 512 MB e foi
+    # isso que derrubou o app em 13/09 (rodada gigante da Shopee).
+    if st.st_size <= CACHE_MAX_ARQ:
+        with _CACHE_LOCK:
+            _CACHE[caminho] = (chave, dado)
+            _CACHE.move_to_end(caminho)
+            while len(_CACHE) > CACHE_MAX_ITENS:
+                _CACHE.popitem(last=False)
     return dado
 
 
@@ -367,7 +380,7 @@ def ok_quando_pagina():
         return ups[-1]["quando"] if ups else ""
     if ep in ("canal", "linha", "faltante", "pedidos", "painel"):
         chave = request.view_args.get("chave", "meli") if request.view_args else "meli"
-        r = rodada(chave, comp_atual())
+        r = rodada_res(chave, comp_atual())
         if r:
             return r["quando"]
         if ep in ("canal", "linha", "faltante"):
@@ -399,8 +412,37 @@ def rodada_caminho(canal, comp):
     return pasta("rodadas", f"{canal}_{comp}.json")
 
 
+def rodada_res_caminho(canal, comp):
+    return pasta("rodadas", f"{canal}_{comp}.resumo.json")
+
+
 def rodada(canal, comp) -> dict | None:
+    """A rodada INTEIRA (com todas as linhas). Só use nas telas que precisam das
+    linhas — Linha a linha, Por pedido, exportações."""
     return _json_ler(rodada_caminho(canal, comp), None)
+
+
+def _gravar_resumo(canal, comp, r) -> dict:
+    leve = {k: v for k, v in r.items() if k != "linhas"}
+    leve["linhas_n"] = len(r.get("linhas") or [])
+    _json_gravar(rodada_res_caminho(canal, comp), leve)
+    return leve
+
+
+def rodada_gravar(canal, comp, r):
+    """Grava a rodada e, ao lado, o resumo leve (sem as linhas) que as telas usam."""
+    rodada_gravar(canal, comp, r)
+    _gravar_resumo(canal, comp, r)
+
+
+def rodada_res(canal, comp) -> dict | None:
+    """Só o cabeçalho + resumo da rodada — não carrega as linhas na memória.
+    Se o resumo leve ainda não existir (rodada de versão anterior), cria uma vez."""
+    leve = _json_ler(rodada_res_caminho(canal, comp), None)
+    if leve:
+        return leve
+    cheia = _json_ler(rodada_caminho(canal, comp), None)
+    return _gravar_resumo(canal, comp, cheia) if cheia else None
 
 
 def competencias() -> list[str]:
@@ -658,7 +700,7 @@ def recalcular_meli(comp: str):
     r["resumo"] = meli.resumo(linhas)
     r["sistema_diag"] = sis_diag
     r["recalculado"] = agora().isoformat()
-    _json_gravar(rodada_caminho("meli", comp), r)
+    rodada_gravar("meli", comp, r)
     return r
 
 
@@ -678,7 +720,7 @@ def recalcular_magalu(comp: str):
                     "diag": {"linhas": len(linhas), "modo": "tabela de comissões (Parâmetros)"}}
     r["sistema_diag"] = r["sistema"]["diag"]
     r["recalculado"] = agora().isoformat()
-    _json_gravar(rodada_caminho("magalu", comp), r)
+    rodada_gravar("magalu", comp, r)
     return r
 
 
@@ -698,7 +740,7 @@ def processar_magalu(destino: str, nome: str, quem: str) -> str:
         r.update({"quando": agora().isoformat(), "quem": quem,
                   "arquivo": {"nome": nome, "caminho": destino, "diag": {k: v for k, v in diag.items() if k != "competencias"}},
                   "linhas": [], "resumo": {}})
-        _json_gravar(rodada_caminho("magalu", comp), r)
+        rodada_gravar("magalu", comp, r)
         r = recalcular_magalu(comp)
         feitos.append((comp, r["resumo"]["pedidos"], r["resumo"]["rebate_total"]))
     txt = " · ".join(f"{f_mesano(c)}: {n} pedidos, R$ {f_brl(t)}" for c, n, t in feitos)
@@ -722,7 +764,7 @@ def recalcular_shopee(comp: str):
                     "diag": {"linhas": len(linhas), "modo": "tabela de comissões (Parâmetros)"}}
     r["sistema_diag"] = r["sistema"]["diag"]
     r["recalculado"] = agora().isoformat()
-    _json_gravar(rodada_caminho("shopee", comp), r)
+    rodada_gravar("shopee", comp, r)
     return r
 
 
@@ -742,7 +784,7 @@ def processar_shopee(destino: str, nome: str, quem: str) -> str:
         r.update({"quando": agora().isoformat(), "quem": quem,
                   "arquivo": {"nome": nome, "caminho": destino, "diag": {k: v for k, v in diag.items() if k != "competencias"}},
                   "linhas": [], "resumo": {}})
-        _json_gravar(rodada_caminho("shopee", comp), r)
+        rodada_gravar("shopee", comp, r)
         r = recalcular_shopee(comp)
         feitos.append((comp, r["resumo"]["pedidos"], r["resumo"]["rebate_total"]))
     txt = " · ".join(f"{f_mesano(c)}: {n} pedidos, R$ {f_brl(t)}" for c, n, t in feitos)
@@ -766,7 +808,7 @@ def recalcular_madeira(comp: str):
                     "diag": {"linhas": len(linhas), "modo": "tabela de comissões (Parâmetros)"}}
     r["sistema_diag"] = r["sistema"]["diag"]
     r["recalculado"] = agora().isoformat()
-    _json_gravar(rodada_caminho("madeira", comp), r)
+    rodada_gravar("madeira", comp, r)
     return r
 
 
@@ -786,7 +828,7 @@ def processar_madeira(destino: str, nome: str, quem: str) -> str:
         r.update({"quando": agora().isoformat(), "quem": quem,
                   "arquivo": {"nome": nome, "caminho": destino, "diag": {k: v for k, v in diag.items() if k != "competencias"}},
                   "linhas": [], "resumo": {}})
-        _json_gravar(rodada_caminho("madeira", comp), r)
+        rodada_gravar("madeira", comp, r)
         r = recalcular_madeira(comp)
         feitos.append((comp, r["resumo"]["pedidos"], r["resumo"]["rebate_total"]))
     txt = " · ".join(f"{f_mesano(c)}: {n} pedidos, R$ {f_brl(t)}" for c, n, t in feitos)
@@ -810,7 +852,7 @@ def recalcular_webcont(comp: str):
                     "diag": {"linhas": len(linhas), "modo": "tabela de comissões (Parâmetros)"}}
     r["sistema_diag"] = r["sistema"]["diag"]
     r["recalculado"] = agora().isoformat()
-    _json_gravar(rodada_caminho("webcont", comp), r)
+    rodada_gravar("webcont", comp, r)
     return r
 
 
@@ -830,7 +872,7 @@ def processar_webcont(destino: str, nome: str, quem: str) -> str:
         r.update({"quando": agora().isoformat(), "quem": quem,
                   "arquivo": {"nome": nome, "caminho": destino, "diag": {k: v for k, v in diag.items() if k != "competencias"}},
                   "linhas": [], "resumo": {}})
-        _json_gravar(rodada_caminho("webcont", comp), r)
+        rodada_gravar("webcont", comp, r)
         r = recalcular_webcont(comp)
         feitos.append((comp, r["resumo"]["pedidos"], r["resumo"]["rebate_total"]))
     txt = " · ".join(f"{f_mesano(c)}: {n} pedidos, R$ {f_brl(t)}" for c, n, t in feitos)
@@ -839,22 +881,34 @@ def processar_webcont(destino: str, nome: str, quem: str) -> str:
 
 
 def recalcular_canais(comp: str) -> list[str]:
+    """Recalcula um canal de cada vez e SOLTA a memória entre eles (o Render tem
+    512 MB: dois canais grandes juntos na memória derrubavam o app)."""
     feitos = []
     r = recalcular_meli(comp)
     if r:
         feitos.append(f"Mercado Livre {f_mesano(comp)}: R$ {f_brl(r['resumo']['rebate_total'])}")
+    r = None
+    gc.collect()
     r = recalcular_magalu(comp)
     if r:
         feitos.append(f"Magazine Luiza {f_mesano(comp)}: R$ {f_brl(r['resumo']['rebate_total'])}")
+    r = None
+    gc.collect()
     r = recalcular_shopee(comp)
     if r:
         feitos.append(f"Shopee {f_mesano(comp)}: R$ {f_brl(r['resumo']['rebate_total'])}")
+    r = None
+    gc.collect()
     r = recalcular_madeira(comp)
     if r:
         feitos.append(f"Madeira Madeira {f_mesano(comp)}: R$ {f_brl(r['resumo']['rebate_total'])}")
+    r = None
+    gc.collect()
     r = recalcular_webcont(comp)
     if r:
         feitos.append(f"Webcontinental {f_mesano(comp)}: R$ {f_brl(r['resumo']['rebate_total'])}")
+    r = None
+    gc.collect()
     return feitos
 
 
@@ -962,7 +1016,7 @@ def painel():
     por_canal = []
     tot = {"rs": 0.0, "com": 0.0, "frete": 0.0, "total": 0.0, "venda": 0.0, "pedidos": 0, "pend": 0}
     for c in canais():
-        r = rodada(c["chave"], comp) if c["ativo"] else None
+        r = rodada_res(c["chave"], comp) if c["ativo"] else None
         if r:
             s = r["resumo"]
             por_canal.append({**c, "res": s, "quando": r["quando"]})
@@ -983,11 +1037,16 @@ def painel():
 def canal(chave):
     c = canal_por_chave().get(chave) or abort(404)
     comp = comp_atual()
-    r = rodada(chave, comp) if c["ativo"] else None
+    r = rodada_res(chave, comp) if c["ativo"] else None
     if r and chave == "meli" and "com_sistema" not in r["resumo"]:
         # rodada gravada por versão anterior: completa o resumo sem exigir rodar de novo
-        r["resumo"] = meli.resumo(r["linhas"])
-        _json_gravar(rodada_caminho("meli", comp), r)
+        cheia = rodada("meli", comp)
+        if cheia:
+            cheia["resumo"] = meli.resumo(cheia["linhas"])
+            rodada_gravar("meli", comp, cheia)
+            r = rodada_res("meli", comp)
+            del cheia
+            gc.collect()
     if chave == "magalu":
         return render_template("canal_magalu.html", c=c, r=r)
     if chave == "shopee":
@@ -1292,6 +1351,8 @@ def arquivos():
     comp = comp_atual()
     hist = []
     for n in sorted(os.listdir(pasta("rodadas")), reverse=True):
+        if not n.endswith(".resumo.json"):
+            continue                      # o histórico lê só os resumos leves
         r = _json_ler(pasta("rodadas", n), None)
         if r:
             hist.append({"canal": r["canal"], "comp": r["competencia"], "quando": r["quando"],
@@ -1315,8 +1376,8 @@ def arquivos():
     pend_por = {}
     for x in pend:
         pend_por.setdefault(x["chave"], []).append(x)
-    rods = {c["chave"]: rodada(c["chave"], comp) for c in canais() if c["ativo"]}
-    return render_template("arquivos.html", pend=pend, pend_por=pend_por, rods=rods, hist=hist, r_meli=rodada("meli", comp), erp_idx=idx, erp_res=erp_res,
+    rods = {c["chave"]: rodada_res(c["chave"], comp) for c in canais() if c["ativo"]}
+    return render_template("arquivos.html", pend=pend, pend_por=pend_por, rods=rods, hist=hist, r_meli=rodada_res("meli", comp), erp_idx=idx, erp_res=erp_res,
                            nomes_erp=nomes_erp, sem_box=sem_box, mapa_erp=m,
                            mlbs_ult=(ml["uploads"][-1] if ml["uploads"] else None), mlbs_total=len(ml["mlbs"]))
 
@@ -1360,7 +1421,7 @@ def processar_meli(tipo: str, destino: str, nome: str, quem: str) -> str:
             return f"Suba primeiro a Tabela Geral de {f_mesano(comp)}; a comissão do sistema entra em cima dela."
         sis, diag = meli.ler_comissao_sistema(destino)
         r["sistema"] = {"nome": nome, "caminho": destino, "quando": agora().isoformat(), "diag": diag}
-        _json_gravar(rodada_caminho("meli", comp), r)
+        rodada_gravar("meli", comp, r)
         r = recalcular_meli(comp)
         return (f"Comissão do sistema lida ({diag['linhas']} pedidos, {diag['modo']}). "
                 f"Rebate de comissão: R$ {f_brl(r['resumo']['rebate_comissao'])}.")
@@ -1379,7 +1440,7 @@ def processar_meli(tipo: str, destino: str, nome: str, quem: str) -> str:
         r.update({"quando": agora().isoformat(), "quem": quem,
                   "arquivo": {"nome": nome, "caminho": destino, "diag": {k: v for k, v in diag.items() if k != "competencias"}},
                   "linhas": [], "resumo": {}})
-        _json_gravar(rodada_caminho("meli", comp), r)
+        rodada_gravar("meli", comp, r)
         r = recalcular_meli(comp)
         feitos.append((comp, r["resumo"]["pedidos"], r["resumo"]["rebate_total"]))
     txt = " · ".join(f"{f_mesano(c)}: {n} pedidos, R$ {f_brl(t)}" for c, n, t in feitos)
@@ -1453,6 +1514,7 @@ def pend_processar(chave: str | None = None) -> list[str]:
             m = f"{x['nome']}: não consegui ler — {e}"
         msgs.append(m)
         feitos.append(x["quando"])
+        gc.collect()   # solta a memória do arquivo anterior antes do próximo
     pend_gravar([x for x in pend_ler() if x["quando"] not in feitos])
     return msgs
 
@@ -2098,7 +2160,9 @@ def export_rebates():
             r = rodada(c["chave"], comp)
             if not r:
                 continue
-            for l in r["linhas"]:
+            linhas_r = r["linhas"]
+            r = None
+            for l in linhas_r:
                 base = l.get("valor_prod") or 0.0
                 linhas.append({"oc": l["pedido_mkt"], "data": l["data"], "canal": c["nome"],
                                "rebate_rs": l["rebate_rs"], "rebate_comissao": l["rebate_comissao"],
@@ -2108,6 +2172,8 @@ def export_rebates():
                                "pct_real": ((l.get("tarifa") or 0.0) / base if base else None), "venda": base,
                                "competencia": comp, "sku": l.get("sku", ""), "pedido_canal": l.get("pedido_canal", ""),
                                "faltante_status": l.get("faltante_status", "")})
+            linhas_r = None
+            gc.collect()          # solta a rodada inteira antes de abrir a próxima
     if not linhas:
         flash("Nada gerado ainda para exportar.")
         return redirect(url_for("arquivos"))
@@ -2140,6 +2206,32 @@ def api_rebates(comp):
                           "faltante_status": l["faltante_status"]})
     return jsonify({"competencia": comp, "gerado": agora().isoformat(), "versao": VERSAO,
                     "pedidos": len(saida), "linhas": saida})
+
+
+@app.errorhandler(500)
+@app.errorhandler(Exception)
+def erro_500(e):
+    """Em vez do 'Internal Server Error' cru: uma página que diz o que houve e
+    libera a memória do processo (o cache de JSON) para o app voltar a responder."""
+    if isinstance(e, HTTPException) and e.code != 500:
+        return e
+    with _CACHE_LOCK:
+        _CACHE.clear()
+    gc.collect()
+    app.logger.exception("erro em %s", request.path if request else "?")
+    memoria = isinstance(e, MemoryError)
+    titulo = "Faltou memória para esta tela" if memoria else "Deu erro nesta tela"
+    detalhe = ("O arquivo é grande demais para caber de uma vez. Já liberei a memória: recarregue a página. "
+               "Se acontecer de novo, suba o arquivo em pedaços menores (por período) ou avise o Otto.") \
+        if memoria else f"{type(e).__name__}: {e}"
+    return (f"""<!doctype html><meta charset=utf-8><title>PLUTOS · erro</title>
+<style>body{{font:15px/1.55 system-ui,Arial;margin:0;background:#0B0B0C;color:#F3F3F1}}
+.cx{{max-width:640px;margin:12vh auto;padding:28px;background:#131315;border-top:3px solid #D4A017}}
+h1{{font-size:20px;margin:0 0 10px}} p{{color:#BDBDB8}} a{{color:#F2C94C}}
+code{{font:12px ui-monospace,monospace;color:#8A8A86;word-break:break-all}}</style>
+<div class=cx><h1>{titulo}</h1><p>{detalhe}</p>
+<p><a href="/">Voltar ao GERAL</a> &nbsp;·&nbsp; <a href="/arquivos">Arquivos</a></p>
+<p><code>{request.path if request else ""} · PLUTOS {VERSAO}</code></p></div>""", 500)
 
 
 @app.route("/saude")
