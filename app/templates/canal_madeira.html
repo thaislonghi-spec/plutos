@@ -8,7 +8,7 @@
   <div class="kpi bom"><span class="l">Rebate em R$</span><span class="v">R$ 0</span><span class="o">o relatório do Madeira não traz incentivo nem cupom</span></div>
   <div class="kpi preto"><span class="l">Rebate em comissão</span><span class="v">R$ {{ s.rebate_comissao|brl(0) }}</span><span class="o">17% × valor do pedido − comissão cobrada · {{ s.dif_pos }} a favor · {{ s.dif_neg }} contra</span></div>
   <div class="kpi preto"><span class="l">Rebate em frete</span><span class="v">R$ 0</span><span class="o">sem subsídio de frete no relatório</span></div>
-  <div class="kpi {{ 'crit' if s.cancelados else 'bom' }}"><span class="l">Cancelados (fora)</span><span class="v">{{ s.cancelados }}</span><span class="o">{{ s.erp_ok }} de {{ s.pedidos }} com par no ERP</span></div>
+  <div class="kpi {{ 'crit' if s.cancelados else 'bom' }}"><span class="l">Fora da conta</span><span class="v">{{ s.cancelados }}</span><span class="o">cancelados + novos · {{ s.erp_ok }} de {{ s.pedidos }} com par no ERP</span></div>
   <div class="kpi ouro"><span class="l">Rebate total</span><span class="v">R$ {{ s.rebate_total|brl(0) }}</span><span class="o">{{ s.pct_sobre_venda|brl(2) }}% de R$ {{ s.venda|brl(0) }} (GMV c/ frete) · {{ s.pedidos }} pedidos</span></div>
 </div>
 <div class="kpis tres-com">
@@ -45,7 +45,7 @@
       <tr><td>Dinheiro</td><td><span class="tag mk-cinza">—</span></td><td>o relatório não traz incentivo nem cupom</td><td>não existe</td></tr>
       <tr><td>Frete</td><td><span class="tag mk-cinza">—</span></td><td>o relatório não traz subsídio de frete</td><td>não existe</td></tr>
     </tbody></table></div>
-  <div class="nota">Entrada: relatório de pedidos do portal Madeira (csv ";", 1 linha por item → 1 por pedido). Cancelados fora (a comissão não zera no cancelado). Chave: Pedido = OC do ERP. Competência: Data Pedido. No ERP, os 21% = 17% comissão + 4% taxa financeira (antecipação) — os 4% são custo financeiro, fora do rebate.</div>
+  <div class="nota">Entrada: relatório de pedidos do portal Madeira (csv ";", 1 linha por item → 1 por pedido). Fora da conta: <b>Cancelados</b> (todas as variações) e <b>Novos</b> (pedido ainda não confirmado) — sobe-se o relatório com todos os status e o PLUTOS exclui esses dois. Chave: Pedido = OC do ERP. Competência: Data Pedido. No ERP, os 21% = 17% comissão + 4% taxa financeira (antecipação) — os 4% são custo financeiro, fora do rebate.</div>
 </div>
 <div class="bloco">
   <h2>Sinais desta rodada</h2>
@@ -53,7 +53,7 @@
     <tr><td>Arquivo</td><td class="n">{{ r.arquivo.nome }}</td></tr>
     <tr><td>Período no arquivo</td><td class="n">{{ r.arquivo.diag.de|dia }} a {{ r.arquivo.diag.ate|dia }}</td></tr>
     <tr><td>Itens → pedidos</td><td class="n">{{ r.arquivo.diag.itens }} itens → {{ r.arquivo.diag.linhas }} pedidos ({{ s.multi_item }} com mais de um item)</td></tr>
-    <tr><td>Cancelados (fora)</td><td class="n">{{ s.cancelados }}</td></tr>
+    <tr><td>Fora da conta (cancelados + novos)</td><td class="n">{{ s.cancelados }}</td></tr>
     <tr><td>Status</td><td class="n">{% for k, v in r.arquivo.diag.status.items() %}{{ k }} {{ v }}{% if not loop.last %} · {% endif %}{% endfor %}</td></tr>
     <tr><td>Pagamento</td><td class="n">{% for k, v in s.pagamentos.items() %}{{ k }} {{ v }}{% if not loop.last %} · {% endif %}{% endfor %}</td></tr>
     <tr><td>Comissão do sistema</td><td class="n">{{ r.sistema.nome }}</td></tr>

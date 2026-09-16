@@ -3,7 +3,8 @@
 Fonte: relatório de pedidos do portal Madeira "MadeiraMadeira_<seller>-report_pedido_<hash>"
 (csv separado por ';', latin-1, 41 colunas, 1 linha por ITEM; pode vir sem extensão).
 
-- Status ≠ Cancelado (no Madeira a comissão NÃO zera no cancelado — filtrar é obrigatório).
+- FORA: Status "Cancelado" (no Madeira a comissão NÃO zera no cancelado) e Status "Novo"
+  (pedido que ainda não andou; entra sozinho quando o arquivo seguinte atualizar o status).
 - 1 linha por pedido: "Valor Pedido" e "Comissão" repetem em cada item; "Valor" (item) soma.
 - Competência = Data Pedido (dd/mm/aaaa hh:mm:ss → só a data).
 - Chave = "Pedido" (= OC do ERP).
@@ -86,6 +87,22 @@ def _ler_bruto(caminho: str) -> pd.DataFrame:
     return pd.read_csv(io.StringIO(txt), sep=sep, dtype=str, quoting=csv.QUOTE_MINIMAL)
 
 
+def fora_da_conta(status) -> bool:
+    """FORA DA CONTA (regra da Thaís, 16/09/2026): Status "Cancelado" (no Madeira a
+    comissão não zera no cancelado, filtrar é obrigatório) e Status "Novo" (o pedido
+    ainda nem começou — quando andar, o arquivo seguinte atualiza e ele entra sozinho).
+    Vale na leitura E no recálculo, para alcançar o que já está na base."""
+    st = _norm(status)
+    return bool("cancelado" in st or st.startswith("novo"))
+
+
+def marcar_fora(ped: pd.DataFrame) -> pd.DataFrame:
+    st = ped["status"].map(_norm)
+    ped["novo"] = st.str.startswith("novo")
+    ped["cancelado"] = st.str.contains("cancelado") | ped["novo"]
+    return ped
+
+
 def ler(caminho: str) -> tuple[pd.DataFrame, dict]:
     d = _ler_bruto(caminho)
     mapa = {}
@@ -111,11 +128,12 @@ def ler(caminho: str) -> tuple[pd.DataFrame, dict]:
     somas = df.groupby("pedido", sort=False).agg(valor_item=("valor_item", "sum"), qtd=("qtd", "sum"), itens=("sku", "size"),
                                                   skus=("sku", lambda s: ", ".join(dict.fromkeys(x for x in s if x))))
     ped = primeira.drop(columns=["valor_item", "qtd"]).join(somas).reset_index()
-    ped["cancelado"] = ped["status"].map(_norm).str.contains("cancelado")
+    ped = marcar_fora(ped)
     ped["competencia"] = ped["data"].map(lambda d: f"{d.year}-{d.month:02d}")
     diag: dict[str, Any] = {
         "aba": "csv", "linhas_brutas": itens, "itens": itens, "linhas": int(len(ped)),
         "cancelados": int(ped["cancelado"].sum()), "multi_item": int((ped["itens"] > 1).sum()),
+        "novos": int(ped["novo"].sum()),
         "status": ped["status"].value_counts().to_dict(),
         "competencias": ped["competencia"].value_counts().sort_index().to_dict(),
         "de": str(ped["data"].min()), "ate": str(ped["data"].max()),
@@ -127,7 +145,7 @@ def calcular(df: pd.DataFrame, pct: float, erp_idx: dict | None = None) -> list[
     out = []
     erp_idx = erp_idx or {}
     for r in df.itertuples(index=False):
-        if r.cancelado:
+        if fora_da_conta(getattr(r, "status", "")):
             continue
         sis_rs = round(r.valor_pedido * pct, 2)
         real = round(r.comissao, 2)

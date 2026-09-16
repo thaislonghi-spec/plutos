@@ -26,7 +26,7 @@ from werkzeug.utils import secure_filename
 from motor import meli, erp, magalu, shopee, madeira, webcont, colombo
 import planilhas
 
-VERSAO = "2026-09-16a"
+VERSAO = "2026-09-16b"
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(RAIZ), "dados")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -882,6 +882,7 @@ def recalcular_madeira(comp: str):
     if df is None:
         df, diag = madeira.ler(r["arquivo"]["caminho"])
         df = df[df["competencia"] == comp]
+    df = madeira.marcar_fora(df)   # as exclusões valem também sobre a base já gravada
     pct, _ = comissao_cadastrada(("MADEIRA",), (0.17, 0.0))
     linhas = madeira.calcular(df, pct, erp_ler()["ocs"])
     r["linhas"] = linhas
@@ -918,7 +919,7 @@ def processar_madeira(destino: str, nome: str, quem: str) -> str:
         feitos.append((comp, r["resumo"]["pedidos"], r["resumo"]["rebate_total"]))
     txt = " · ".join(f"{f_mesano(c)}: {n} pedidos, R$ {f_brl(t)}" for c, n, t in feitos)
     extra = f" {fora} linha(s) de outro mês ficaram de fora." if fora else ""
-    return f"Madeira Madeira lido — {_txt_upsert(res)}. {txt}. Cancelados fora: {diag['cancelados']} · {diag['itens']} itens → {diag['linhas']} pedidos.{extra}"
+    return f"Madeira Madeira lido — {_txt_upsert(res)}. {txt}. Fora: {diag['cancelados']} ({diag['cancelados'] - diag.get('novos', 0)} cancelados + {diag.get('novos', 0)} novos) · {diag['itens']} itens → {diag['linhas']} pedidos.{extra}"
 
 
 def recalcular_webcont(comp: str):
