@@ -26,7 +26,7 @@ from werkzeug.utils import secure_filename
 from motor import meli, erp, magalu, shopee, madeira, webcont, colombo
 import planilhas
 
-VERSAO = "2026-09-14s"
+VERSAO = "2026-09-16a"
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(RAIZ), "dados")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -1271,7 +1271,8 @@ LINHA_COLS = {
         ("Status", "status", "t"), ("Pagamento", "pagamento", "t"), ("UF", "uf", "t"), ("Cidade", "cidade", "t"),
         ("SKU", "sku", "t"), ("Descrição", "descricao", "t"), ("Qtd", "qtd", "n"),
         ("Total do pedido (GMV c/ frete)", "valor_prod", "n"), ("Valor produtos", "valor_itens", "n"), ("Valor frete", "frete", "n"), ("Desconto", "desconto", "n"), ("Valor repasse", "repasse", "n"),
-        ("Comissão retida R$", "tarifa", "n"), ("% real", "pct_comissao", "p"),
+        ("Comissão retida R$ (do relatório)", "comissao_retida", "n"),
+        ("Comissão real R$ (negativa vira 0)", "tarifa", "n"), ("% real", "pct_comissao", "p"),
         ("Comissão sistema R$", "sis_rs", "n"), ("% sistema", "sis_pct", "p"), ("Diferença = rebate comissão", "diferenca", "n"),
         ("NF", "nf", "t"), ("Transportadora", "transportadora", "t"),
         ("Rebate R$", "rebate_rs", "n"), ("Rebate comissão", "rebate_comissao", "n"), ("Rebate frete", "rebate_frete", "n"),

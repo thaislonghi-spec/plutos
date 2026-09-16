@@ -7,7 +7,9 @@ Fonte: export do portal "relatorio_pedidos_webcontinental_DDMMateDDMMAA.xlsx", a
 - Competência = Data Criação (dd/mm/aaaa).
 - COMISSÃO SISTEMA = % da tabela de Parâmetros (Webcontinental 19% GMV) × Total do Pedido.
 - COMISSÃO REAL = Valor de Comissão Retido.
-- REBATE EM COMISSÃO = sistema − real. Rebate em R$ = 0 · Rebate em frete = 0.
+- REBATE EM COMISSÃO = sistema − real (real = 0 quando a retida vem negativa).
+- REBATE EM R$ = o "Valor de Comissão Retido" NEGATIVO (em módulo): o canal não cobrou
+  comissão e ainda devolve esse saldo (regra da Thaís, 16/09/2026). Rebate em frete = 0.
 - Chave: Pedido Parceiro (acumula por ele); Pedido ERP = OC do ERP.
 """
 from __future__ import annotations
@@ -136,8 +138,14 @@ def calcular(df: pd.DataFrame, pct: float, erp_idx: dict | None = None) -> list[
     for r in df.itertuples(index=False):
         if r.cancelado:
             continue
+        # REGRA DA THAÍS 16/09/2026: "Valor de Comissão Retido" NEGATIVO significa que
+        # a Webcontinental não cobrou comissão nenhuma e AINDA devolve esse saldo para
+        # nós → o valor (em módulo) entra como REBATE EM R$ e a comissão real do
+        # pedido vira ZERO (o rebate de comissão fica sendo a comissão do sistema).
         sis_rs = round(r.total * pct, 2)
-        real = round(r.comissao, 2)
+        retida = round(r.comissao, 2)
+        reb_rs = round(-retida, 2) if retida < 0 else 0.0
+        real = retida if retida > 0 else 0.0
         reb_com = round(sis_rs - real, 2)
         oc = r.oc or r.pedido
         e = erp_idx.get(oc) or erp_idx.get(r.pedido)
@@ -152,8 +160,10 @@ def calcular(df: pd.DataFrame, pct: float, erp_idx: dict | None = None) -> list[
             "pct_comissao": (real / r.total if r.total else 0.0),
             "sis_pct": pct, "sis_rs": sis_rs, "diferenca": reb_com,
             "nf": r.nf, "transportadora": r.transportadora,
+            "comissao_retida": retida, "comissao_negativa": bool(retida < 0),
             "tarifa_zero": bool(real <= 0.005 and sis_rs > 0), "faltante": 0.0, "faltante_status": "", "sem_sistema": False,
-            "rebate_rs": 0.0, "rebate_comissao": reb_com, "rebate_frete": 0.0, "rebate_total": reb_com,
+            "rebate_rs": reb_rs, "rebate_comissao": reb_com, "rebate_frete": 0.0,
+            "rebate_total": round(reb_rs + reb_com, 2),
             "erp_ok": bool(e),
         })
     return out
@@ -167,7 +177,8 @@ def resumo(linhas: list[dict], cancelados: int = 0) -> dict:
     for l in linhas:
         d = por_dia.setdefault(l["data"], {"pedidos": 0, "venda": 0.0, "cupom": 0.0, "faltante": 0.0,
                                             "comissao": 0.0, "frete": 0.0, "total": 0.0, "tz": 0})
-        d["pedidos"] += 1; d["venda"] += l["valor_prod"]; d["comissao"] += l["rebate_comissao"]; d["total"] += l["rebate_total"]
+        d["pedidos"] += 1; d["venda"] += l["valor_prod"]; d["comissao"] += l["rebate_comissao"]
+        d["cupom"] += l["rebate_rs"]; d["total"] += l["rebate_total"]
         d["tz"] += 1 if l["tarifa_zero"] else 0
     for d in por_dia.values():
         for k in ("venda", "cupom", "faltante", "comissao", "frete", "total"):
@@ -179,7 +190,9 @@ def resumo(linhas: list[dict], cancelados: int = 0) -> dict:
     return {
         "pedidos": n, "cancelados": cancelados, "venda": venda, "tarifa": com_real, "frete": s("frete"),
         "cupom_meli": 0.0, "cupom_seller": 0.0, "faltante": 0.0, "valor_itens": s("valor_itens"), "desconto": s("desconto"),
-        "rebate_rs": 0.0, "rebate_comissao": s("rebate_comissao"), "rebate_frete": 0.0, "rebate_total": s("rebate_total"),
+        "rebate_rs": s("rebate_rs"), "rebate_comissao": s("rebate_comissao"), "rebate_frete": 0.0, "rebate_total": s("rebate_total"),
+        "negativos": sum(1 for l in linhas if l.get("comissao_negativa")),
+        "negativos_rs": round(sum(l["rebate_rs"] for l in linhas if l.get("comissao_negativa")), 2),
         "pct_sobre_venda": (round(100 * s("rebate_total") / venda, 2) if venda else 0.0),
         "tarifa_zero": sum(1 for l in linhas if l["tarifa_zero"]), "faltante_pendentes": 0, "faltante_preenchidos": 0,
         "dif_pos": sum(1 for l in linhas if l["diferenca"] > 0.5), "dif_pos_rs": round(sum(l["diferenca"] for l in linhas if l["diferenca"] > 0.5), 2),
