@@ -29,6 +29,8 @@ from typing import Any
 
 import pandas as pd
 
+from . import arred
+
 
 def _norm(s: Any) -> str:
     s = "" if s is None else str(s)
@@ -195,20 +197,22 @@ def resumo(linhas: list[dict], cancelados: int = 0) -> dict:
     for l in linhas:
         d = por_dia.setdefault(l["data"], {"pedidos": 0, "venda": 0.0, "cupom": 0.0, "faltante": 0.0,
                                             "comissao": 0.0, "frete": 0.0, "total": 0.0, "tz": 0})
-        d["pedidos"] += 1; d["venda"] += l["valor_prod"]; d["comissao"] += l["rebate_comissao"]; d["total"] += l["rebate_total"]
+        d["pedidos"] += 1; d["venda"] += l["valor_prod"]; d["comissao"] += arred.sis_exato(l, False) - (l["tarifa"] or 0.0); d["total"] += (l.get("rebate_rs") or 0.0) + (arred.sis_exato(l, False) - (l["tarifa"] or 0.0)) + (l.get("rebate_frete") or 0.0)
         d["tz"] += 1 if l["tarifa_zero"] else 0
     for d in por_dia.values():
         for k in ("venda", "cupom", "faltante", "comissao", "frete", "total"):
             d[k] = round(d[k], 2)
-    com_sis, com_real = s("sis_rs"), s("tarifa")
+    com_sis, com_real = arred.total(linhas, False), s("tarifa")  # arred. 1x no total
+    reb_com = round(com_sis - com_real, 2)
+    reb_tot = round(0.0 + reb_com + 0.0, 2)
     sts: dict[str, int] = {}
     for l in linhas:
         sts[l["status"] or "—"] = sts.get(l["status"] or "—", 0) + 1
     return {
         "pedidos": n, "cancelados": cancelados, "venda": venda, "tarifa": com_real, "frete": s("frete"),
         "cupom_meli": 0.0, "cupom_seller": 0.0, "faltante": 0.0, "valor_itens": s("valor_itens"), "desconto": s("desconto"),
-        "rebate_rs": 0.0, "rebate_comissao": s("rebate_comissao"), "rebate_frete": 0.0, "rebate_total": s("rebate_total"),
-        "pct_sobre_venda": (round(100 * s("rebate_total") / venda, 2) if venda else 0.0),
+        "rebate_rs": 0.0, "rebate_comissao": reb_com, "rebate_frete": 0.0, "rebate_total": reb_tot,
+        "pct_sobre_venda": (round(100 * reb_tot / venda, 2) if venda else 0.0),
         "tarifa_zero": sum(1 for l in linhas if l["tarifa_zero"]), "faltante_pendentes": 0, "faltante_preenchidos": 0,
         "dif_pos": sum(1 for l in linhas if l["diferenca"] > 0.5), "dif_pos_rs": round(sum(l["diferenca"] for l in linhas if l["diferenca"] > 0.5), 2),
         "dif_neg": sum(1 for l in linhas if l["diferenca"] < -0.5), "dif_neg_rs": round(sum(l["diferenca"] for l in linhas if l["diferenca"] < -0.5), 2),

@@ -22,6 +22,8 @@ from typing import Any
 
 import pandas as pd
 
+from . import arred
+
 
 def _norm(s: Any) -> str:
     s = "" if s is None else str(s)
@@ -207,11 +209,13 @@ def resumo(linhas: list[dict], cancelados: int = 0) -> dict:
         d = por_dia.setdefault(l["data"], {"pedidos": 0, "venda": 0.0, "cupom": 0.0, "faltante": 0.0,
                                             "comissao": 0.0, "total": 0.0, "tz": 0})
         d["pedidos"] += 1; d["venda"] += l["valor_prod"]; d["cupom"] += l["rebate_rs"]
-        d["comissao"] += l["rebate_comissao"]; d["total"] += l["rebate_total"]
+        d["comissao"] += arred.sis_exato(l, True) - (l["tarifa"] or 0.0); d["total"] += (l.get("rebate_rs") or 0.0) + (arred.sis_exato(l, True) - (l["tarifa"] or 0.0)) + (l.get("rebate_frete") or 0.0)
     for d in por_dia.values():
         for k in ("venda", "cupom", "faltante", "comissao", "total"):
             d[k] = round(d[k], 2)
-    com_sis, com_real = s("sis_rs"), s("tarifa")
+    com_sis, com_real = arred.total(linhas, True), s("tarifa")  # arred. 1x no total
+    reb_com = round(com_sis - com_real, 2)
+    reb_tot = round(s("rebate_rs") + reb_com + 0.0, 2)
     mods: dict[str, int] = {}
     for l in linhas:
         mods[l["modalidade"] or "—"] = mods.get(l["modalidade"] or "—", 0) + 1
@@ -220,8 +224,8 @@ def resumo(linhas: list[dict], cancelados: int = 0) -> dict:
         "cupom_meli": 0.0, "cupom_seller": s("cupom_seller"), "faltante": 0.0,
         "desc_vista_magalu": s("desc_vista_magalu"), "promo_magalu": s("promo_magalu"), "cupom_magalu": s("cupom_magalu"),
         "desc_vista_seller": s("desc_vista_seller"), "copart_frete": s("copart_frete"), "custos_log": s("custos_log"),
-        "rebate_rs": s("rebate_rs"), "rebate_comissao": s("rebate_comissao"), "rebate_total": s("rebate_total"),
-        "pct_sobre_venda": (round(100 * s("rebate_total") / venda, 2) if venda else 0.0),
+        "rebate_rs": s("rebate_rs"), "rebate_comissao": reb_com, "rebate_total": reb_tot,
+        "pct_sobre_venda": (round(100 * reb_tot / venda, 2) if venda else 0.0),
         "tarifa_zero": 0, "faltante_pendentes": 0, "faltante_preenchidos": 0,
         "dif_pos": sum(1 for l in linhas if l["diferenca"] > 0.5), "dif_pos_rs": round(sum(l["diferenca"] for l in linhas if l["diferenca"] > 0.5), 2),
         "dif_neg": sum(1 for l in linhas if l["diferenca"] < -0.5), "dif_neg_rs": round(sum(l["diferenca"] for l in linhas if l["diferenca"] < -0.5), 2),

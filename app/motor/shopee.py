@@ -28,6 +28,8 @@ from typing import Any
 
 import pandas as pd
 
+from . import arred
+
 
 def _norm(s: Any) -> str:
     s = "" if s is None else str(s)
@@ -225,12 +227,14 @@ def resumo(linhas: list[dict], cancelados: int = 0) -> dict:
         d = por_dia.setdefault(l["data"], {"pedidos": 0, "venda": 0.0, "cupom": 0.0, "faltante": 0.0,
                                             "comissao": 0.0, "frete": 0.0, "total": 0.0, "tz": 0})
         d["pedidos"] += 1; d["venda"] += l["valor_prod"]; d["cupom"] += l["rebate_rs"]
-        d["comissao"] += l["rebate_comissao"]; d["frete"] += l["rebate_frete"]; d["total"] += l["rebate_total"]
+        d["comissao"] += arred.sis_exato(l, False) - (l["tarifa"] or 0.0); d["frete"] += l["rebate_frete"]; d["total"] += (l.get("rebate_rs") or 0.0) + (arred.sis_exato(l, False) - (l["tarifa"] or 0.0)) + (l.get("rebate_frete") or 0.0)
         d["tz"] += 1 if l["tarifa_zero"] else 0
     for d in por_dia.values():
         for k in ("venda", "cupom", "faltante", "comissao", "frete", "total"):
             d[k] = round(d[k], 2)
-    com_sis, com_real = s("sis_rs"), s("tarifa")
+    com_sis, com_real = arred.total(linhas, False), s("tarifa")  # arred. 1x no total
+    reb_com = round(com_sis - com_real, 2)
+    reb_tot = round(s("rebate_rs") + reb_com + s("rebate_frete"), 2)
     envios: dict[str, int] = {}
     for l in linhas:
         envios[l["envio"] or "—"] = envios.get(l["envio"] or "—", 0) + 1
@@ -243,9 +247,9 @@ def resumo(linhas: list[dict], cancelados: int = 0) -> dict:
         "incentivo": s("incentivo"), "cupom_shopee": s("cupom_shopee"), "frete_comprador": s("frete_comprador"),
         "comissao_bruta": s("comissao_bruta"), "servico_bruta": s("servico_bruta"), "ajuste": s("ajuste"),
         "taxa_fixa": s("taxa_fixa"), "tarifa_cheia": s("tarifa_cheia"),
-        "rebate_rs": s("rebate_rs"), "rebate_comissao": s("rebate_comissao"), "rebate_frete": s("rebate_frete"),
-        "rebate_total": s("rebate_total"),
-        "pct_sobre_venda": (round(100 * s("rebate_total") / venda, 2) if venda else 0.0),
+        "rebate_rs": s("rebate_rs"), "rebate_comissao": reb_com, "rebate_frete": s("rebate_frete"),
+        "rebate_total": reb_tot,
+        "pct_sobre_venda": (round(100 * reb_tot / venda, 2) if venda else 0.0),
         "tarifa_zero": sum(1 for l in linhas if l["tarifa_zero"]), "faltante_pendentes": 0, "faltante_preenchidos": 0,
         "dif_pos": sum(1 for l in linhas if l["diferenca"] > 0.5), "dif_pos_rs": round(sum(l["diferenca"] for l in linhas if l["diferenca"] > 0.5), 2),
         "dif_neg": sum(1 for l in linhas if l["diferenca"] < -0.5), "dif_neg_rs": round(sum(l["diferenca"] for l in linhas if l["diferenca"] < -0.5), 2),

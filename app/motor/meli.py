@@ -24,6 +24,8 @@ from typing import Any
 
 import pandas as pd
 
+from . import arred
+
 CANAL = "MERCADO LIVRE"
 CHAVE = "meli"
 
@@ -247,12 +249,14 @@ def calcular(df: pd.DataFrame, comissao_sistema: dict | None, faltante: dict,
         vp, tarifa = r.valor_prod, r.tarifa
         pct = (tarifa / vp) if vp else 0.0
         sis = (comissao_sistema or {}).get(r.pedido_mkt) or (comissao_sistema or {}).get(r.pedido_canal)
+        fixo = False   # True = ERP trouxe a comissão em R$ fixo (não recalcular pelo %)
         if sis:
             if sis.get("rs") is None and sis.get("pct") is not None:
                 # ERP: só o % (coluna AB); o R$ é sobre o VALOR DE PRODUTOS do export do canal
                 sis_rs = round(vp * sis["pct"], 2)
             else:
                 sis_rs = sis["rs"]
+                fixo = True
             sis_pct = sis["pct"] if sis.get("pct") is not None else ((sis_rs / vp) if vp else None)
             dif = sis_rs - tarifa
         else:
@@ -272,8 +276,8 @@ def calcular(df: pd.DataFrame, comissao_sistema: dict | None, faltante: dict,
             "valor_prod": round(vp, 2), "tarifa": round(tarifa, 2), "frete": round(r.frete, 2),
             "cupom_seller": round(r.cupom_seller, 2), "cupom_meli": round(r.cupom_meli, 2),
             "pct_comissao": round(pct, 4),
-            "sis_pct": (round(sis_pct, 4) if sis_pct is not None else None),
-            "sis_rs": (round(sis_rs, 2) if sis_rs is not None else None),
+            "sis_pct": (round(sis_pct, 6) if sis_pct is not None else None),  # 6 casas: o total usa pct x valor
+            "sis_rs": (round(sis_rs, 2) if sis_rs is not None else None), "sis_fixo": fixo,
             "diferenca": (round(dif, 2) if dif is not None else None),
             "tarifa_zero": tarifa_zero,
             "faltante": round(falt_val, 2) if tarifa_zero else 0.0,
@@ -307,7 +311,8 @@ def resumo(linhas: list[dict]) -> dict:
             d[k] = round(d[k], 2)
     venda = s("valor_prod")
     com = [l for l in linhas if l.get("sis_rs") is not None]  # pedidos com par no ERP
-    com_sis = round(sum(l["sis_rs"] for l in com), 2)
+    # arredonda 1x no total (regra 16/09/2026); comissão fixa em R$ do ERP fica como veio
+    com_sis = round(sum((l["sis_rs"] if l.get("sis_fixo") else arred.sis_exato(l)) for l in com), 2)
     com_real = round(sum((l["tarifa"] or 0.0) for l in com), 2)
     venda_com = round(sum(l["valor_prod"] for l in com), 2)
     return {
