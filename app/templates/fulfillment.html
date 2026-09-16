@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block conteudo %}
+{% if not r %}
+<div class="aviso"><b>Sem rodada do Magazine Luiza em {{ comp|mesano }}.</b> Suba o export FINANCEIRO POR PERÍODO em <a href="{{ url_for('arquivos', mes=comp) }}">Arquivos</a>.</div>
+{% elif not n %}
+<div class="aviso"><b>Nenhum pedido Fulfillment em {{ comp|mesano }}.</b> A tela lista os pedidos com Modalidade de Entrega <b>Magalu entregas - Fulfillment</b>.</div>
+{% else %}
+<div class="kpis cinco">
+  <div class="kpi preto"><span class="l">Pedidos Fulfillment</span><span class="v">{{ ff.pedidos }}</span><span class="o">de {{ ff.pedidos + propria.pedidos }} pedidos do mês · entrega própria {{ propria.pedidos }}</span></div>
+  <div class="kpi ouro"><span class="l">Venda (GMV)</span><span class="v">R$ {{ ff.venda|brl(0) }}</span><span class="o">base da comissão do Promob: R$ {{ ff.base|brl(0) }} (produto + IPI, sem frete)</span></div>
+  <div class="kpi preto"><span class="l">Comissão sistema (Promob)</span><span class="v">R$ {{ ff.com_sistema|brl(0) }}</span><span class="o">% do pedido no ERP × produto + IPI</span></div>
+  <div class="kpi crit"><span class="l">Comissão real (Magalu)</span><span class="v">R$ {{ ff.com_real|brl(0) }}</span><span class="o">{{ ff.com_real_pct|brl(2) }}% do GMV · serviços + tarifa fixa</span></div>
+  <div class="kpi {{ 'bom' if ff.rebate_total >= 0 else 'crit' }}"><span class="l">Rebate total Fulfillment</span><span class="v">R$ {{ ff.rebate_total|brl(0) }}</span><span class="o">R$ {{ ff.rebate_comissao|brl(0) }} em comissão + R$ {{ ff.rebate_rs|brl(0) }} em dinheiro</span></div>
+</div>
+
+<div class="bloco">
+  <h2>Fulfillment × entrega própria · {{ comp|mesano }}</h2>
+  <div class="rol fit"><table data-sem-ordenar>
+    <thead><tr><th>Modalidade</th><th class="n">Pedidos</th><th class="n">Venda (GMV)</th><th class="n">Base da comissão</th><th class="n">Comissão sistema</th><th class="n">Comissão real</th><th class="n">% real</th><th class="n">Rebate comissão</th></tr></thead>
+    <tbody>
+      <tr><td><b>Magalu entregas · Fulfillment</b></td><td class="n">{{ ff.pedidos }}</td><td class="n">{{ ff.venda|brl }}</td><td class="n">{{ ff.base|brl }}</td><td class="n">{{ ff.com_sistema|brl }}</td><td class="n">{{ ff.com_real|brl }}</td><td class="n">{{ ff.com_real_pct|brl(2) }}%</td><td class="n"><b>{{ ff.rebate_comissao|brl }}</b></td></tr>
+      <tr><td>Entrega própria (transportadora)</td><td class="n">{{ propria.pedidos }}</td><td class="n">{{ propria.venda|brl }}</td><td class="n">{{ propria.base|brl }}</td><td class="n">{{ propria.com_sistema|brl }}</td><td class="n">{{ propria.com_real|brl }}</td><td class="n">{{ propria.com_real_pct|brl(2) }}%</td><td class="n"><b>{{ propria.rebate_comissao|brl }}</b></td></tr>
+      <tr class="linha-total"><td><b>Total Magalu</b></td><td class="n"><b>{{ ff.pedidos + propria.pedidos }}</b></td><td class="n"><b>{{ (ff.venda + propria.venda)|brl }}</b></td><td class="n"><b>{{ (ff.base + propria.base)|brl }}</b></td><td class="n"><b>{{ (ff.com_sistema + propria.com_sistema)|brl }}</b></td><td class="n"><b>{{ (ff.com_real + propria.com_real)|brl }}</b></td><td class="n"></td><td class="n"><b>{{ (ff.rebate_comissao + propria.rebate_comissao)|brl }}</b></td></tr>
+    </tbody></table></div>
+  <div class="nota">No Fulfillment o Magalu guarda e entrega o produto, e cobra por isso dentro dos "Serviços do marketplace" — por isso a comissão real fica bem acima da entrega própria. No <b>Promob a comissão é calculada só sobre produto + IPI</b> (sem frete), então a base aqui é menor que o GMV. Rebate de comissão negativo neste box significa que o Magalu cobrou mais do que o sistema previu — é custo, não é rebate a cobrar.</div>
+</div>
+
+<div class="bloco">
+  <h2>Dia a dia · Fulfillment</h2>
+  <div class="rol" style="max-height:44vh"><table class="cols-7">
+    <thead><tr><th>Dia</th><th class="n">Pedidos</th><th class="n">Venda (GMV)</th><th class="n">Base (prod + IPI)</th><th class="n">Comissão sistema</th><th class="n">Comissão real</th><th class="n">Rebate comissão</th></tr></thead>
+    <tbody>
+    {% for d in dias %}
+    <tr><td>{{ d.dia|dia }}</td><td class="n">{{ d.pedidos }}</td><td class="n">{{ d.venda|brl(0) }}</td><td class="n">{{ d.base|brl(0) }}</td><td class="n">{{ d.sistema|brl }}</td><td class="n">{{ d.real|brl }}</td><td class="n"><b>{{ d.rebate|brl }}</b></td></tr>
+    {% endfor %}
+    <tr class="linha-total"><td><b>Total</b></td><td class="n"><b>{{ ff.pedidos }}</b></td><td class="n"><b>{{ ff.venda|brl(0) }}</b></td><td class="n"><b>{{ ff.base|brl(0) }}</b></td><td class="n"><b>{{ ff.com_sistema|brl }}</b></td><td class="n"><b>{{ ff.com_real|brl }}</b></td><td class="n"><b>{{ ff.rebate_comissao|brl }}</b></td></tr>
+    </tbody></table></div>
+</div>
+
+<div class="bloco">
+  <h2>Os 40 pedidos em que o Magalu mais cobrou acima do sistema</h2>
+  <div class="rol" style="max-height:46vh"><table class="cols-8">
+    <thead><tr><th>Pedido</th><th>Dia</th><th class="n">GMV</th><th class="n">Base (prod + IPI)</th><th class="n">% ERP</th><th class="n">Comissão sistema</th><th class="n">Comissão real</th><th class="n">Diferença</th></tr></thead>
+    <tbody>
+    {% for l in piores %}
+    <tr><td class="n" style="text-align:left">{{ l.pedido_mkt }}</td><td>{{ l.data|dia }}</td><td class="n">{{ l.valor_prod|brl }}</td><td class="n">{{ l.sis_base|brl }}</td>
+      <td class="n">{{ (100 * (l.sis_pct or 0))|brl(2) }}%</td><td class="n">{{ l.sis_rs|brl }}</td><td class="n">{{ l.tarifa|brl }}</td>
+      <td class="n"><b>{{ l.diferenca|brl }}</b></td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</div>
+{% endif %}
+{% endblock %}

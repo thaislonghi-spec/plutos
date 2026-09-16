@@ -69,6 +69,7 @@
     <tr><td>Custos logísticos (informativo)</td><td class="n">R$ {{ s.custos_log|brl }}</td></tr>
   </tbody></table></div>
   <a class="bt sec" href="{{ url_for('linha', chave='magalu', mes=comp) }}" style="margin-top:10px">Linha a linha Magazine Luiza →</a>
+  <a class="bt sec" href="{{ url_for('fulfillment', mes=comp) }}" style="margin-top:8px">Fulfillment ({{ (s.ff or {}).get('pedidos', 0) }} pedidos) →</a>
 </div>
 </div>
 {% endif %}

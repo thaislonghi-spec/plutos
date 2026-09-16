@@ -4,10 +4,13 @@ Entrada: export do portal Magalu "FINANCEIRO POR PERÍODO" (.xlsx, 62 colunas,
 1 linha por pedido "LU-…", com uma linha de TOTAL no fim que é ignorada).
 
 - Pedido cancelado (status) fica FORA.
-- COMISSÃO SISTEMA (o que deveria ser) = % cadastrado × valor pago pelo cliente
-  + taxa fixa por pedido (Parâmetros · tabela de comissões: Magalu 11% + R$ 5,00).
-- COMISSÃO REAL (cobrada) = "Serviços do marketplace (1+2+3+4)" + "Tarifa fixa"
-  (vêm negativos; a 2ª forma de pagamento é ignorada — recebemos à vista).
+- COMISSÃO SISTEMA (o que deveria ser) = % do pedido no ERP (Promob) × base
+  + R$ 5,00 de taxa por pedido (Parâmetros).
+  Base: FULFILLMENT → produto + IPI (o Promob não cobra comissão sobre o frete
+  nesses pedidos); demais → o TIPO cadastrado (GMV = valor pago pelo cliente).
+  Sem par no ERP, cai para o % dos Parâmetros + a taxa fixa por pedido.
+- COMISSÃO REAL (cobrada) = "Serviços do marketplace (1+2+3+4)" das DUAS formas
+  de pagamento + "Tarifa fixa" (vêm negativos no relatório).
 - REBATE COMISSÃO = sistema − real.
 - REBATE R$ = coparticipação de descontos pagos pelo Magalu (desconto à vista
   + preço promocional) + subsídio de cupom pago pelo Magalu.
@@ -163,19 +166,52 @@ def base_oc(oc: str) -> str:
     return re.sub(r"-\d+$", "", str(oc or "").strip())
 
 
-def calcular(df: pd.DataFrame, pct: float, taxa: float, erp_por_base: dict | None = None) -> list[dict]:
+def fulfillment(modalidade) -> bool:
+    """Modalidade de Entrega = 'Magalu entregas - Fulfillment' (regra da Thaís,
+    16/09/2026: nesses pedidos o Promob cobra comissão SÓ sobre produto + IPI,
+    não sobre o frete)."""
+    return "fulfillment" in _norm(modalidade)
+
+
+def calcular(df: pd.DataFrame, pct: float, taxa: float, erp_por_base: dict | None = None,
+             tipo: str = "GMV") -> list[dict]:
     """Uma linha por pedido válido (não cancelado) com o rebate nas 3 formas.
-    pct = comissão cadastrada (0.11), taxa = R$ por pedido (5.0)."""
+
+    COMISSÃO DO SISTEMA (Promob), regra validada com a planilha da Gabi (16/09/2026):
+      · % = o percentual DO PEDIDO no ERP (coluna de comissão da OC), não um % fixo;
+        sem par no ERP, cai para o % dos Parâmetros.
+      · + a taxa fixa por pedido dos Parâmetros (R$ 5,00): o % da OC é comissão
+        pura, não embute a taxa (conferido pedido a pedido em set/26).
+      · base = FULFILLMENT → produto + IPI (soma das OCs do ERP);
+               demais → conforme o TIPO cadastrado (GMV = valor pago pelo cliente).
+    A taxa fixa do canal (R$ ~5/pedido) NÃO entra na comissão do sistema — ela é
+    custo cobrado pelo Magalu e já está na comissão real."""
     out = []
     erp_por_base = erp_por_base or {}
     for r in df.itertuples(index=False):
         if r.cancelado:
             continue
-        sis_rs = round(r.pago * pct + taxa, 2)
-        real = round(abs(r.servicos) + abs(r.tarifa_fixa), 2)
+        e = erp_por_base.get(r.pedido)
+        ff = fulfillment(r.modalidade)
+        # A taxa fixa por pedido (Parâmetros, R$ 5,00) SEMPRE entra: conferido em
+        # set/26 que o % gravado na OC é comissão pura — não embute a taxa
+        # (0 de 1.301 pedidos batem com "serviços + taxa"; 1.012 batem sem ela).
+        taxa_ped = taxa
+        if e:
+            pct_ped = float(e.get("pct_comissao") or 0.0) or pct
+            base_prod = float(e.get("prod_erp") or 0.0) + float(e.get("ipi_erp") or 0.0)
+        else:
+            pct_ped = pct
+            base_prod = r.itens or r.pago
+        base = base_prod if (ff or tipo == "Produto") else r.pago
+        base_nome = "produto + IPI" if (ff or tipo == "Produto") else "GMV (valor pago pelo cliente)"
+        sis_rs = round(base * pct_ped + taxa_ped, 2)
+        # Quando o cliente divide o pagamento em duas formas, o Magalu cobra
+        # serviços nas DUAS (conferido com a planilha da Gabi, 16/09/2026: 9
+        # pedidos de set/26). A 2ª forma entra na comissão real.
+        real = round(abs(r.servicos) + abs(r.servicos_pgto2) + abs(r.tarifa_fixa), 2)
         reb_com = round(sis_rs - real, 2)
         reb_rs = round(r.desc_vista_magalu + r.promo_magalu + r.cupom_magalu, 2)
-        e = erp_por_base.get(r.pedido)
         out.append({
             "canal": "magalu",
             "pedido_mkt": r.pedido, "pedido_canal": r.pedido, "pedido_any": (e or {}).get("obs05", "") or "",
@@ -187,7 +223,8 @@ def calcular(df: pd.DataFrame, pct: float, taxa: float, erp_por_base: dict | Non
             "pct_comissao": (real / r.pago if r.pago else 0.0), "pct_mkt": r.pct_mkt / 100 if r.pct_mkt > 1 else r.pct_mkt,
             "servicos": r.servicos, "intermediacao": r.intermediacao, "tecnologia": r.tecnologia, "mdr": r.mdr,
             "tarifa_fixa": r.tarifa_fixa, "servicos_pgto2": r.servicos_pgto2,
-            "sis_pct": pct, "sis_taxa": taxa, "sis_rs": sis_rs, "diferenca": reb_com,
+            "sis_pct": pct_ped, "sis_taxa": taxa_ped, "sis_rs": sis_rs, "diferenca": reb_com,
+            "sis_base": round(base, 2), "sis_base_nome": base_nome, "fulfillment": ff,
             "desc_vista_magalu": r.desc_vista_magalu, "desc_vista_seller": r.desc_vista_seller,
             "promo_magalu": r.promo_magalu, "promo_seller": r.promo_seller,
             "cupom_magalu": r.cupom_magalu, "copart_frete": r.copart_frete, "custos_log": r.custos_log,
@@ -219,6 +256,20 @@ def resumo(linhas: list[dict], cancelados: int = 0) -> dict:
     mods: dict[str, int] = {}
     for l in linhas:
         mods[l["modalidade"] or "—"] = mods.get(l["modalidade"] or "—", 0) + 1
+    # FULFILLMENT × entrega própria (a aba do Fulfillment vive desses números)
+    def _bloco(sel):
+        g = [l for l in linhas if bool(l.get("fulfillment")) is sel]
+        sis = arred.total(g, True)
+        real = round(sum((l.get("tarifa") or 0.0) for l in g), 2)
+        rs = round(sum((l.get("rebate_rs") or 0.0) for l in g), 2)
+        venda_g = round(sum((l.get("valor_prod") or 0.0) for l in g), 2)
+        base_g = round(sum((l.get("sis_base") or 0.0) for l in g), 2)
+        return {"pedidos": len(g), "venda": venda_g, "base": base_g, "com_sistema": sis, "com_real": real,
+                "rebate_comissao": round(sis - real, 2), "rebate_rs": rs,
+                "rebate_total": round(sis - real + rs, 2),
+                "com_real_pct": (round(100 * real / venda_g, 2) if venda_g else 0.0),
+                "com_sistema_pct": (round(100 * sis / venda_g, 2) if venda_g else 0.0)}
+    ff, propria = _bloco(True), _bloco(False)
     return {
         "pedidos": n, "cancelados": cancelados, "venda": venda, "tarifa": com_real, "frete": 0.0,
         "cupom_meli": 0.0, "cupom_seller": s("cupom_seller"), "faltante": 0.0,
@@ -235,5 +286,6 @@ def resumo(linhas: list[dict], cancelados: int = 0) -> dict:
         "com_real_pct": (round(100 * com_real / venda, 2) if venda else 0.0),
         "com_dif": round(com_sis - com_real, 2),
         "modalidades": mods, "contas": {}, "tipos": mods,
+        "ff": ff, "propria": propria, "sem_erp": sum(1 for l in linhas if not l.get("erp_ok")),
         "por_dia": dict(sorted(por_dia.items())),
     }

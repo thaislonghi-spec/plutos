@@ -26,7 +26,7 @@ from werkzeug.utils import secure_filename
 from motor import meli, erp, magalu, shopee, madeira, webcont, colombo
 import planilhas
 
-VERSAO = "2026-09-16c"
+VERSAO = "2026-09-16e"
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(RAIZ), "dados")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -568,11 +568,23 @@ def base_do_tipo(tipo: str) -> str:
 
 
 def erp_por_base(box: str) -> dict:
-    """OC do ERP sem o sufixo -N → linha do ERP (o Magalu grava 'LU-…-1', 'LU-…-2')."""
-    out = {}
+    """OC do ERP sem o sufixo -N → linha do ERP (o Magalu grava 'LU-…-1', 'LU-…-2').
+
+    Um pedido do canal pode virar VÁRIAS OCs no ERP. Guardo a primeira (para os
+    campos de texto) e SOMO produto, IPI e total de todas — é essa soma que vira
+    a base da comissão do Promob (produto + IPI no Fulfillment, total na NF fora)."""
+    out: dict[str, dict] = {}
     for oc, l in erp_ler()["ocs"].items():
-        if l.get("box") == box:
-            out.setdefault(magalu.base_oc(oc), l)
+        if l.get("box") != box:
+            continue
+        b = magalu.base_oc(oc)
+        if b not in out:
+            out[b] = dict(l, ocs_erp=0, prod_erp=0.0, ipi_erp=0.0, total_erp=0.0)
+        a = out[b]
+        a["ocs_erp"] += 1
+        a["prod_erp"] += float(l.get("valor_prod") or 0.0)
+        a["ipi_erp"] += float(l.get("ipi") or 0.0)
+        a["total_erp"] += float(l.get("valor_total") or 0.0)
     return out
 
 
@@ -779,13 +791,15 @@ def recalcular_magalu(comp: str):
         df, diag = magalu.ler(r["arquivo"]["caminho"])
         df = df[df["competencia"] == comp]
     pct, taxa = comissao_cadastrada(("MAGAZINE", "MAGALU"), (0.11, 5.0))
-    linhas = magalu.calcular(df, pct, taxa, erp_por_base("magalu"))
+    tipo = comissao_tipo(("MAGAZINE", "MAGALU"))
+    linhas = magalu.calcular(df, pct, taxa, erp_por_base("magalu"), tipo)
     r["linhas"] = linhas
     r["resumo"] = magalu.resumo(linhas, int(df["cancelado"].sum()))
-    tipo = comissao_tipo(("MAGAZINE", "MAGALU"))
-    r["sistema"] = {"nome": f"Parâmetros · {pct * 100:.2f}% + R$ {taxa:.2f}/pedido · {tipo} ({base_do_tipo(tipo)})",
+    sem_erp = sum(1 for l in linhas if not l.get("erp_ok"))
+    r["sistema"] = {"nome": (f"% do pedido no ERP + R$ {taxa:.2f}/pedido · {tipo} ({base_do_tipo(tipo)}) · Fulfillment sobre produto + IPI"
+                             + (f" · {sem_erp} sem par no ERP usam Parâmetros {pct * 100:.2f}%" if sem_erp else "")),
                     "quando": agora().isoformat(),
-                    "diag": {"linhas": len(linhas), "modo": "tabela de comissões (Parâmetros)"}}
+                    "diag": {"linhas": len(linhas), "modo": "comissão do ERP por pedido", "sem_erp": sem_erp}}
     r["sistema_diag"] = r["sistema"]["diag"]
     r["recalculado"] = agora().isoformat()
     rodada_gravar("magalu", comp, r)
@@ -2147,6 +2161,37 @@ def _coletas_pedidos(so_validos: bool = True) -> list[dict]:
 
 def _soma(ps, k):
     return float(sum((p.get(k) or 0) for p in ps))
+
+
+@app.route("/canal/magalu/fulfillment")
+@logado
+def fulfillment():
+    """FULFILLMENT · Magalu — os pedidos com Modalidade de Entrega
+    'Magalu entregas - Fulfillment'. Regra da Thaís (16/09/2026): nesses pedidos
+    o Promob calcula a comissão SÓ sobre produto + IPI, não sobre o frete."""
+    comp = comp_atual()
+    r = rodada("magalu", comp)
+    linhas = [l for l in (r["linhas"] if r else []) if l.get("fulfillment")]
+    s = (r or {}).get("resumo") or {}
+    ff = s.get("ff") or {}
+    propria = s.get("propria") or {}
+    por_dia: dict[str, dict] = {}
+    for l in linhas:
+        d = por_dia.setdefault(l["data"], {"dia": l["data"], "pedidos": 0, "venda": 0.0, "base": 0.0,
+                                           "sistema": 0.0, "real": 0.0, "rebate": 0.0, "rebate_rs": 0.0})
+        d["pedidos"] += 1
+        d["venda"] += l.get("valor_prod") or 0.0
+        d["base"] += l.get("sis_base") or 0.0
+        sis = magalu.arred.sis_exato(l, True)
+        d["sistema"] += sis
+        d["real"] += l.get("tarifa") or 0.0
+        d["rebate"] += sis - (l.get("tarifa") or 0.0)
+        d["rebate_rs"] += l.get("rebate_rs") or 0.0
+    dias = [dict(d, **{k: round(d[k], 2) for k in ("venda", "base", "sistema", "real", "rebate", "rebate_rs")})
+            for d in sorted(por_dia.values(), key=lambda x: x["dia"])]
+    piores = sorted(linhas, key=lambda l: (magalu.arred.sis_exato(l, True) - (l.get("tarifa") or 0.0)))[:40]
+    return render_template("fulfillment.html", c=canal_por_chave()["magalu"], comp=comp, r=r,
+                           ff=ff, propria=propria, dias=dias, piores=piores, n=len(linhas))
 
 
 @app.route("/canal/meli/coletas")

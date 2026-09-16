@@ -26,7 +26,10 @@ def sis_exato(l: dict, taxa: bool = False) -> float:
     p = l.get("sis_pct")
     if p is None:
         return float(l.get("sis_rs") or 0.0)   # comissão cadastrada em R$ fixo
-    v = (l.get("valor_prod") or 0.0) * p
+    # sis_base = base sobre a qual o Promob calcula (Magalu: Fulfillment usa
+    # produto + IPI, entrega própria usa o GMV). Sem ela, a base é valor_prod.
+    base = l.get("sis_base")
+    v = (base if base is not None else (l.get("valor_prod") or 0.0)) * p
     if taxa:
         v += (l.get("sis_taxa") or 0.0)
     return float(v)
