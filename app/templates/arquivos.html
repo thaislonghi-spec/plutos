@@ -110,7 +110,9 @@
       </div>
       {% else %}
       {% set rc = rods.get(cn.chave) %}
-      <div class="upl-box" style="margin-top:8px">
+      {% if cn.chave == 'magalu' %}<div class="tres-upl">{% endif %}
+      <div class="upl-box" {% if cn.chave != 'magalu' %}style="margin-top:8px"{% endif %}>
+        {% if cn.chave == 'magalu' %}<div class="upl-eyebrow">Principal · Financeiro por período</div>{% endif %}
         <div class="arq-tit">{{ cn.arquivo }}</div>
         <div class="arq-sub">{{ cn.arquivo_sub }}</div>
         {% if rc %}<span class="arq-n">{{ rc.arquivo.nome }} · {{ rc.quando|quando }} · {{ rc.resumo.pedidos }} pedidos válidos · {{ rc.resumo.cancelados or 0 }} cancelados fora</span>
@@ -125,7 +127,7 @@
         {% endif %}
       </div>
       {% if cn.chave == 'magalu' %}
-      <div class="upl-box" style="margin-top:8px">
+      <div class="upl-box">
         <div class="upl-eyebrow">Planilha 2 · Vendas no período</div>
         <div class="arq-tit">MAGAZINELUIZA_VENDAS (zip)</div>
         <div class="arq-sub">os dois custos de logística: frete dos pedidos Full e a coparticipação de frete que nós pagamos</div>
@@ -140,7 +142,7 @@
         <div class="ok-canto">{% if mg_vendas %}<span class="pill-ok">ok · {{ mg_vendas.quando|quando }}</span>{% else %}<span class="pill-nao">sem Planilha 2</span>{% endif %}</div>
         {% endif %}
       </div>
-      <div class="upl-box" style="margin-top:8px">
+      <div class="upl-box">
         <div class="upl-eyebrow">Cobranças do Fulfillment</div>
         <div class="arq-tit">COBRANÇASFULLFILMENT + COLETAFULLFILMENT (zip)</div>
         <div class="arq-sub">manuseio · armazenagem · tempo de estoque · coleta — o custo do Full por item</div>
@@ -154,6 +156,7 @@
         {% for x in pend_por.get(cn.chave, []) if x.tipo == 'full' %}<span class="arq-n espera-n">⏳ {{ x.nome }} · aguardando ▶ rodar</span>{% endfor %}
         <div class="ok-canto">{% if mg_full %}<span class="pill-ok">ok · {{ mg_full.quando|quando }}</span>{% else %}<span class="pill-nao">sem cobranças</span>{% endif %}</div>
         {% endif %}
+      </div>
       </div>
       {% endif %}
       {% endif %}

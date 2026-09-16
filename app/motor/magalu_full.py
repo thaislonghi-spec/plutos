@@ -157,7 +157,7 @@ def resumo(cobrancas: list[dict], copart_por_sku: dict | None = None, nomes: dic
         s = por_sku.setdefault(c["sku"], {"sku": c["sku"], "produto": c["produto"], "qtd": 0.0,
                                           "manuseio": 0.0, "armazenagem": 0.0, "tempo_estoque": 0.0,
                                           "copart": 0.0, "coleta_rateio": 0.0, "cds": [], "ultimo": "",
-                                          "cobrancas": 0, "estocado": 0.0})
+                                          "cobrancas": 0, "estocado": 0.0, "unit_manuseio": 0.0})
         if c["produto"] and not s["produto"]:
             s["produto"] = c["produto"]
         if c["cd"] and c["cd"] not in s["cds"]:
@@ -167,13 +167,16 @@ def resumo(cobrancas: list[dict], copart_por_sku: dict | None = None, nomes: dic
         s["cobrancas"] += 1
         if c["tipo"] == "manuseio":
             s["qtd"] += c["qtd"]
+            if c["unit"]:                    # tabela vigente: vale o último arquivo subido
+                s["unit_manuseio"] = round(c["unit"], 2)
         if c["tipo"] == "armazenagem":
             s["estocado"] += c["qtd"]
         s[c["tipo"]] = round(s[c["tipo"]] + c["valor"], 2)
     for sku, v in copart_por_sku.items():
         s = por_sku.setdefault(sku, {"sku": sku, "produto": "", "qtd": 0.0, "manuseio": 0.0,
                                      "armazenagem": 0.0, "tempo_estoque": 0.0, "copart": 0.0,
-                                     "coleta_rateio": 0.0, "cds": [], "ultimo": "", "cobrancas": 0, "estocado": 0.0})
+                                     "coleta_rateio": 0.0, "cds": [], "ultimo": "", "cobrancas": 0,
+                                     "estocado": 0.0, "unit_manuseio": 0.0})
         s["copart"] = round(v, 2)
     # rateio da coleta pela participação no manuseio (não tem SKU na origem)
     base_rateio = sum(s["manuseio"] for s in por_sku.values())

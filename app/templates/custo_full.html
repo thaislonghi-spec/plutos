@@ -22,25 +22,25 @@
     </div>
     <span class="nota" style="margin:0">{{ itens|length }} de {{ contagem.todos }}</span>
   </form>
-  <div class="nota" style="margin:8px 0 0">Custo do Full = <b>manuseio + armazenagem + tempo de estoque + coparticipação de frete + coleta rateada</b>, das cobranças subidas em {{ comp|mesano }}. A <b>coleta</b> é cobrada por agenda e m³, sem SKU na origem — aqui ela é rateada pela participação de cada SKU no manuseio (coluna própria, é rateio). Peso e descrição vêm do cadastro de SKUs (Parâmetros).</div>
+  <div class="nota" style="margin:8px 0 0">Custo do Full = <b>manuseio + armazenagem + tempo de estoque + coparticipação de frete + coleta rateada</b>, das cobranças subidas em {{ comp|mesano }}{% if periodo %} (ciclo do portal: <b>{{ periodo }}</b>){% endif %}. O <b>R$/un manuseio</b> é a tabela do último arquivo subido — cada upload substitui o anterior, então vale sempre o preço mais recente. A <b>coleta</b> é cobrada por agenda e m³, sem SKU na origem — aqui ela é rateada pela participação de cada SKU no manuseio (coluna própria, é rateio). Peso e descrição vêm do cadastro de SKUs (Parâmetros).</div>
   <div class="rol"><table class="cols-cf">
-    <thead><tr><th>SKU</th><th>Descrição</th><th>CD</th><th class="n">Itens</th><th class="n">Peso</th><th class="n">Manuseio</th><th class="n">Armazenagem</th><th class="n">Tempo estoque</th><th class="n">Copart. frete</th><th class="n">Coleta (rateio)</th><th class="n">Custo total</th><th class="n">Por unidade</th><th class="n">R$ / kg</th><th>Última</th></tr></thead>
+    <thead><tr><th>SKU</th><th>Descrição</th><th>CD</th><th class="n">Itens</th><th class="n">Peso</th><th class="n">R$/un manuseio</th><th class="n">Manuseio</th><th class="n">Armazenagem</th><th class="n">Tempo estoque</th><th class="n">Copart. frete</th><th class="n">Coleta (rateio)</th><th class="n">Custo total</th><th class="n">Por unidade</th><th class="n">R$ / kg</th><th>Última</th></tr></thead>
     <tbody>
     {% for m in itens %}
     <tr><td class="n" style="text-align:left">{{ m.sku }}</td><td>{{ m.descricao or '—' }}</td>
       <td>{{ m.cd }}</td>
       <td class="n">{{ m.qtd|brl(0) }}</td>
       <td class="n" data-ord="{{ m.peso or 0 }}">{% if m.peso %}{{ m.peso|brl(1) }} kg{% else %}<span class="tag pend">sem peso</span>{% endif %}</td>
-      <td class="n">{{ m.manuseio|brl }}</td><td class="n">{{ m.armazenagem|brl }}</td><td class="n">{{ m.tempo_estoque|brl }}</td>
+      <td class="n">{{ m.unit_manuseio|brl(2) if m.unit_manuseio else "—" }}</td><td class="n">{{ m.manuseio|brl }}</td><td class="n">{{ m.armazenagem|brl }}</td><td class="n">{{ m.tempo_estoque|brl }}</td>
       <td class="n">{{ m.copart|brl }}</td><td class="n" style="opacity:.7">{{ m.coleta_rateio|brl }}</td>
       <td class="n"><b>R$ {{ m.custo_total|brl }}</b></td>
       <td class="n">{{ m.por_unidade|brl(2) if m.qtd else '—' }}</td>
       <td class="n" data-ord="{{ m.custo_kg or 0 }}">{{ m.custo_kg|brl if m.custo_kg else '—' }}</td>
       <td data-ord="{{ m.ultimo }}">{{ m.ultimo|dia if m.ultimo else '—' }}</td></tr>
     {% else %}
-    <tr><td colspan="14" class="vazio">{% if contagem.todos %}Nada com esse filtro.{% else %}Nasce das Cobranças do Fulfillment — suba os zips em Arquivos, box Magazine Luiza.{% endif %}</td></tr>
+    <tr><td colspan="15" class="vazio">{% if contagem.todos %}Nada com esse filtro.{% else %}Nasce das Cobranças do Fulfillment — suba os zips em Arquivos, box Magazine Luiza.{% endif %}</td></tr>
     {% endfor %}
-    <tr class="linha-total"><td><b>Total</b></td><td></td><td></td><td class="n"><b>{{ tot.qtd|brl(0) }}</b></td><td></td>
+    <tr class="linha-total"><td><b>Total</b></td><td></td><td></td><td class="n"><b>{{ tot.qtd|brl(0) }}</b></td><td></td><td></td>
       <td class="n"><b>{{ tot.manuseio|brl }}</b></td><td class="n"><b>{{ tot.armazenagem|brl }}</b></td><td class="n"><b>{{ tot.tempo_estoque|brl }}</b></td>
       <td class="n"><b>{{ tot.copart|brl }}</b></td><td class="n"><b>{{ tot.coleta_rateio|brl }}</b></td>
       <td class="n"><b>R$ {{ tot.custo_total|brl }}</b></td><td></td><td></td><td></td></tr>

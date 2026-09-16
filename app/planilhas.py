@@ -295,17 +295,17 @@ def custo_full_xlsx(itens: list[dict], comp: str, q: str, cd: str) -> io.BytesIO
     """Custo do Fulfillment do Magalu por item, do jeito que está na tela."""
     wb = Workbook()
     wb.remove(wb.active)
-    cab = ["SKU", "Descrição", "CD", "Itens manuseados", "Peso produto (kg)", "Manuseio (R$)",
+    cab = ["SKU", "Descrição", "CD", "Itens manuseados", "Peso produto (kg)", "R$/un manuseio (tabela)", "Manuseio (R$)",
            "Armazenagem (R$)", "Tempo de estoque (R$)", "Coparticipação de frete (R$)",
            "Coleta rateada (R$)", "CUSTO TOTAL (R$)", "Custo por unidade (R$)", "R$/kg",
            "Cobranças", "Última cobrança"]
     ls = [[m["sku"], m.get("descricao") or "", m.get("cd") or "", m.get("qtd"), m.get("peso"),
-           m["manuseio"], m["armazenagem"], m["tempo_estoque"], m["copart"], m["coleta_rateio"],
+           m.get("unit_manuseio"), m["manuseio"], m["armazenagem"], m["tempo_estoque"], m["copart"], m["coleta_rateio"],
            m["custo_total"], m.get("por_unidade"), m.get("custo_kg"), m.get("cobrancas"),
            (datetime.fromisoformat(m["ultimo"]) if m.get("ultimo") else None)] for m in itens]
-    ws = _aba(wb, "Custo_Full", cab, ls, [16, 46, 26, 14, 13, 13, 14, 16, 18, 15, 16, 16, 10, 11, 14],
-              moeda=(6, 7, 8, 9, 10, 11, 12, 13))
-    for row in ws.iter_rows(min_row=2, min_col=15, max_col=15):
+    ws = _aba(wb, "Custo_Full", cab, ls, [16, 46, 26, 14, 13, 15, 13, 14, 16, 18, 15, 16, 16, 10, 11, 14],
+              moeda=(6, 7, 8, 9, 10, 11, 12, 13, 14))
+    for row in ws.iter_rows(min_row=2, min_col=16, max_col=16):
         for c in row:
             c.number_format = "DD/MM/YYYY"
     filtro = " · ".join(x for x in [f"busca: {q}" if q else "", f"CD: {cd}" if cd and cd != "todos" else ""] if x)
@@ -317,6 +317,7 @@ def custo_full_xlsx(itens: list[dict], comp: str, q: str, cd: str) -> io.BytesIO
         ["Coleta rateada", "produtos_coletados é cobrada por agenda e m³, SEM SKU. Aqui ela é rateada pela "
                            "participação de cada SKU no manuseio — é rateio, não é custo medido do item"],
         ["CUSTO TOTAL", "manuseio + armazenagem + tempo de estoque + coparticipação + coleta rateada"],
+        ["R$/un manuseio (tabela)", "o preço unitário de manuseio do ÚLTIMO arquivo subido — cada upload substitui o anterior"],
         ["Custo por unidade", "CUSTO TOTAL ÷ itens manuseados"],
         ["R$/kg", "custo por unidade ÷ peso da peça (o peso do cadastro é de uma unidade)"],
         ["Peso / Descrição", "Cadastro de SKUs (CustoProduto) subido em Parâmetros"],

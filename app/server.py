@@ -26,7 +26,7 @@ from werkzeug.utils import secure_filename
 from motor import meli, erp, magalu, magalu_vendas, magalu_full, shopee, madeira, webcont, colombo
 import planilhas
 
-VERSAO = "2026-09-16i"
+VERSAO = "2026-09-16k"
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(RAIZ), "dados")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -894,6 +894,15 @@ def processar_magalu_full(destino: str, nome: str, quem: str) -> str:
     # vai. O período da cobrança pode atravessar meses (a coleta é de agosto);
     # quem manda é a competência aberta na hora de subir.
     comp_ = comp_atual()
+    # PARCIAL: o relatório do portal é ACUMULADO (do início do período até a
+    # data da extração) e as linhas não têm id próprio. Então cada upload
+    # SUBSTITUI o bloco daquele tipo na competência — subir o parcial do dia 10
+    # e depois o fechado do dia 30 não duplica nada. Por isso: sempre exportar
+    # desde o início do período, nunca só o pedaço novo.
+    antes = sum(1 for c in d["cobrancas"].values()
+                if c.get("comp") == comp_ and c.get("tipo") == qual)
+    d["cobrancas"] = {k: c for k, c in d["cobrancas"].items()
+                      if not (c.get("comp") == comp_ and c.get("tipo") == qual)}
     for c in linhas:
         c["comp"] = comp_
         d["cobrancas"][f"{comp_}|{c['chave']}"] = c
@@ -902,8 +911,9 @@ def processar_magalu_full(destino: str, nome: str, quem: str) -> str:
     d["uploads"] = d["uploads"][-40:]
     full_magalu_gravar(d)
     per = f" de {f_dia(diag['de'])} a {f_dia(diag['ate'])}" if diag["de"] else ""
+    troca = f" (substituiu as {antes} anteriores desta competência)" if antes else ""
     return (f"Fulfillment · {magalu_full.TIPOS[qual]} lido em {f_mesano(comp_)} — {diag['linhas']} cobranças{per} · "
-            f"{diag['skus']} SKUs · R$ {diag['valor']:,.2f}".replace(",", "@").replace(".", ",").replace("@", "."))
+            f"{diag['skus']} SKUs · R$ {diag['valor']:,.2f}{troca}".replace(",", "@").replace(".", ",").replace("@", "."))
 
 
 def copart_por_sku(comp: str) -> dict:
@@ -1872,7 +1882,9 @@ def subir(chave):
     if request.form.get("rodar"):
         for m in pend_processar(chave):
             flash(m)
-        return redirect(url_for("canal", chave=chave, mes=comp_atual()) if chave != "meli" or tipo == "base" else url_for("mlbs") if tipo == "rebates" else url_for("arquivos"))
+        # fica em Arquivos: quem sobe costuma subir vários seguidos. Só o
+        # ▶ Rodar o PLUTOS leva para o GERAL, quando termina tudo.
+        return redirect(url_for("arquivos", mes=comp_atual()))
     n = len([x for x in lista if x["chave"] == chave])
     flash(f"{nome} guardado no box {c['nome']} — {n} arquivo(s) aguardando. Clique ▶ Rodar {c['nome']} ou ▶ Rodar o PLUTOS.")
     return redirect(url_for("arquivos"))
@@ -1961,7 +1973,7 @@ def rodar_tudo():
         flash(m)
     flash(f"PLUTOS rodado em {seg:.0f} s — {len(msgs)} arquivo(s) processado(s). ERP reclassificado ({len(erp_ler()['ocs'])} OCs)."
           + (" " + " · ".join(feitos) if feitos else " Nenhum canal com rodada ainda."))
-    return redirect(url_for("arquivos"))
+    return redirect(url_for("painel", mes=comp_atual()))   # terminou tudo: abre o GERAL
 
 
 def processar_erp(destino: str, nome: str, quem: str, recalcular: bool = True) -> str:
@@ -2375,8 +2387,11 @@ def custo_full():
     tot = {k: round(sum(m[k] for m in itens), 2) for k in
            ("manuseio", "armazenagem", "tempo_estoque", "copart", "coleta_rateio", "custo_total")}
     tot["qtd"] = round(sum(m["qtd"] for m in itens), 0)
+    dts = sorted({c["data"] for c in full_magalu_ler()["cobrancas"].values()
+                  if c.get("comp", comp) == comp and c.get("data")})
+    periodo = f"{f_dia(dts[0])} a {f_dia(dts[-1])}" if dts else ""
     return render_template("custo_full.html", c=canal_por_chave()["magalu"], comp=comp, itens=itens,
-                           q=q, cd=cd, contagem=contagem, tot=tot,
+                           q=q, cd=cd, contagem=contagem, tot=tot, periodo=periodo,
                            sem_peso=sum(1 for m in todos if not m.get("peso")),
                            cds=sorted(k for k in contagem if k != "todos"))
 
