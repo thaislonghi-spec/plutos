@@ -23,10 +23,10 @@ from flask import (Flask, abort, flash, jsonify, redirect, render_template, requ
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
-from motor import meli, erp, magalu, shopee, madeira, webcont, colombo
+from motor import meli, erp, magalu, magalu_vendas, magalu_full, shopee, madeira, webcont, colombo
 import planilhas
 
-VERSAO = "2026-09-16e"
+VERSAO = "2026-09-16i"
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(RAIZ), "dados")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -659,10 +659,35 @@ def _tabela_leve(f, nome: str):
     return cab, it, fechar
 
 
+_IDX_SKU: dict = {}   # id(cadastro) → índice pela chave sem pontuação
+
+
+def sku_chave(s) -> str:
+    """SKU sem pontuação, em maiúsculas: o Magalu manda '0527156' e o cadastro
+    tem '0527.156' — é o mesmo produto. Sem isso o item aparece 'sem peso'."""
+    return re.sub(r"[^A-Z0-9]", "", str(s or "").upper())
+
+
+def cadastro_sku(sku, cad=None) -> dict:
+    """A linha do cadastro daquele SKU, casando também sem a pontuação."""
+    cad = cad if cad is not None else descricoes_ler()["skus"]
+    t = str(sku or "").strip()
+    e = cad.get(t) or cad.get(t.upper())
+    if e:
+        return e
+    idx = _IDX_SKU.get(id(cad))
+    if idx is None:
+        idx = {}
+        for k, v in cad.items():
+            idx.setdefault(sku_chave(k), v)
+        _IDX_SKU.clear()          # um cadastro por vez basta (17 mil SKUs)
+        _IDX_SKU[id(cad)] = idx
+    return idx.get(sku_chave(t)) or {}
+
+
 def descricao_de(sku, cad=None) -> str:
     """Descrição do SKU pelo cadastro (Anymarket primeiro, CustoProduto se não houver)."""
-    cad = cad if cad is not None else descricoes_ler()["skus"]
-    e = cad.get(str(sku or "").strip()) or cad.get(str(sku or "").strip().upper()) or {}
+    e = cadastro_sku(sku, cad)
     return e.get("descricao") or e.get("descricao_curta") or ""
 
 
@@ -804,6 +829,93 @@ def recalcular_magalu(comp: str):
     r["recalculado"] = agora().isoformat()
     rodada_gravar("magalu", comp, r)
     return r
+
+
+def vendas_magalu_ler() -> dict:
+    """Planilha 2 do Magalu (Vendas no período): pacotes (frete Full) e itens
+    (coparticipação de frete). Daqui saem as telas Custo Frete Full e
+    Coparticipação de Frete."""
+    return _json_ler(pasta("magalu", "vendas.json"), {"pacotes": {}, "itens": {}, "uploads": []})
+
+
+def vendas_magalu_gravar(d):
+    _json_gravar(pasta("magalu", "vendas.json"), d)
+
+
+def processar_magalu_vendas(destino: str, nome: str, quem: str) -> str:
+    """Planilha 2 · Vendas no período. O zip do portal traz dois csv; cada um
+    entra por aqui e atualiza o seu lado (pacotes ou itens), sem apagar o outro."""
+    qual = magalu_vendas.que_arquivo(destino)
+    if not qual:
+        raise ValueError("Não parece a Planilha 2 do Magalu. Suba o zip 'MagazineLuiza_Vendas_…' "
+                         "(ele traz relatorio_vendas_pedidos e relatorio_vendas_pacotes).")
+    d = vendas_magalu_ler()
+    if qual == "pacotes":
+        linhas, diag = magalu_vendas.ler_pacotes(destino)
+        for p in linhas:
+            d["pacotes"][p["pacote"] or p["pedido"]] = p
+        txt = (f"Planilha 2 · PACOTES lida — {diag['linhas']} pacotes de {f_dia(diag['de'])} a {f_dia(diag['ate'])} · "
+               f"{diag['full']} Full · {diag['cancelados']} cancelados fora · "
+               f"custo do frete Full R$ {diag['frete_full']:,.2f}".replace(",", "@").replace(".", ",").replace("@", "."))
+    else:
+        linhas, diag = magalu_vendas.ler_pedidos(destino)
+        vistos: dict[str, int] = {}
+        for i in linhas:
+            k = f"{i['pedido']}|{i['sku']}"
+            vistos[k] = vistos.get(k, 0) + 1
+            d["itens"][f"{k}|{vistos[k]}"] = i
+        txt = (f"Planilha 2 · ITENS lida — {diag['linhas']} itens em {diag['pedidos']} pedidos de "
+               f"{f_dia(diag['de'])} a {f_dia(diag['ate'])} · {diag['com_copart']} com coparticipação de frete · "
+               f"R$ {diag['copart']:,.2f}".replace(",", "@").replace(".", ",").replace("@", "."))
+    d["uploads"].append({"nome": nome, "caminho": destino, "quando": agora().isoformat(), "quem": quem,
+                         "qual": qual, "diag": diag})
+    d["uploads"] = d["uploads"][-30:]
+    vendas_magalu_gravar(d)
+    return txt
+
+
+def full_magalu_ler() -> dict:
+    """Cobranças do Fulfillment do Magalu (manuseio, armazenagem, tempo de
+    estoque e coleta), uma entrada por cobrança."""
+    return _json_ler(pasta("magalu", "full.json"), {"cobrancas": {}, "uploads": []})
+
+
+def full_magalu_gravar(d):
+    _json_gravar(pasta("magalu", "full.json"), d)
+
+
+def processar_magalu_full(destino: str, nome: str, quem: str) -> str:
+    """Cobranças do Fulfillment. Cada csv do zip entra por aqui e atualiza só o
+    seu tipo — manuseio, armazenagem, tempo de estoque ou coleta."""
+    qual, linhas, diag = magalu_full.ler(destino)
+    d = full_magalu_ler()
+    # REGRA DA THAÍS (16/09/2026): a cobrança do Full pertence ao MÊS EM QUE É
+    # SUBIDA — este arquivo é de setembro, o próximo será de outubro, e assim
+    # vai. O período da cobrança pode atravessar meses (a coleta é de agosto);
+    # quem manda é a competência aberta na hora de subir.
+    comp_ = comp_atual()
+    for c in linhas:
+        c["comp"] = comp_
+        d["cobrancas"][f"{comp_}|{c['chave']}"] = c
+    d["uploads"].append({"nome": nome, "caminho": destino, "quando": agora().isoformat(), "quem": quem,
+                         "qual": qual, "diag": diag})
+    d["uploads"] = d["uploads"][-40:]
+    full_magalu_gravar(d)
+    per = f" de {f_dia(diag['de'])} a {f_dia(diag['ate'])}" if diag["de"] else ""
+    return (f"Fulfillment · {magalu_full.TIPOS[qual]} lido em {f_mesano(comp_)} — {diag['linhas']} cobranças{per} · "
+            f"{diag['skus']} SKUs · R$ {diag['valor']:,.2f}".replace(",", "@").replace(".", ",").replace("@", "."))
+
+
+def copart_por_sku(comp: str) -> dict:
+    """Coparticipação de frete por SKU da competência (Planilha 2 · Vendas)."""
+    v = vendas_magalu_ler()
+    canc = {p["pedido"] for p in v["pacotes"].values() if p.get("cancelado")}
+    out: dict[str, float] = {}
+    for i in v["itens"].values():
+        if i.get("competencia") != comp or i["pedido"] in canc or not i.get("copart"):
+            continue
+        out[i.get("sku") or "—"] = round(out.get(i.get("sku") or "—", 0.0) + i["copart"], 2)
+    return out
 
 
 def processar_magalu(destino: str, nome: str, quem: str) -> str:
@@ -1194,7 +1306,14 @@ def painel():
     erp_res = erp.resumo_por_box([l for l in erp_ler()["ocs"].values() if l["competencia"] == comp])
     for c in por_canal:
         c["erp"] = erp_res.get(c["chave"])
-    return render_template("painel.html", por_canal=por_canal, tot=tot, erp_outros=erp_res.get("outros"))
+    # aviso de cadastro: SKU do Full sem peso não tem R$/kg e não dá para
+    # comparar Full × Coletas × transportadora própria
+    try:
+        sem_peso = [m["sku"] for m in _custo_full(comp) if not m.get("peso")]
+    except Exception:  # noqa: BLE001
+        sem_peso = []
+    return render_template("painel.html", por_canal=por_canal, tot=tot, erp_outros=erp_res.get("outros"),
+                           sem_peso=sem_peso)
 
 
 @app.route("/canal/<chave>")
@@ -1576,7 +1695,9 @@ def arquivos():
     rods = {c["chave"]: rodada_res(c["chave"], comp) for c in canais() if c["ativo"]}
     return render_template("arquivos.html", pend=pend, pend_por=pend_por, rods=rods, hist=hist, r_meli=rodada_res("meli", comp), erp_idx=idx, erp_res=erp_res,
                            nomes_erp=nomes_erp, sem_box=sem_box, mapa_erp=m,
-                           mlbs_ult=(ml["uploads"][-1] if ml["uploads"] else None), mlbs_total=len(ml["mlbs"]))
+                           mlbs_ult=(ml["uploads"][-1] if ml["uploads"] else None), mlbs_total=len(ml["mlbs"]),
+                           mg_vendas=(vendas_magalu_ler()["uploads"] or [None])[-1],
+                           mg_full=(full_magalu_ler()["uploads"] or [None])[-1])
 
 
 def processar_meli(tipo: str, destino: str, nome: str, quem: str) -> str:
@@ -1700,7 +1821,9 @@ def pend_processar(chave: str | None = None) -> list[str]:
             elif x["chave"] == "meli":
                 m = processar_meli(x["tipo"], x["caminho"], x["nome"], x["quem"])
             elif x["chave"] == "magalu":
-                m = processar_magalu(x["caminho"], x["nome"], x["quem"])
+                m = (processar_magalu_vendas(x["caminho"], x["nome"], x["quem"]) if x.get("tipo") == "vendas"
+                     else processar_magalu_full(x["caminho"], x["nome"], x["quem"]) if x.get("tipo") == "full"
+                     else processar_magalu(x["caminho"], x["nome"], x["quem"]))
             elif x["chave"] == "shopee":
                 m = processar_shopee(x["caminho"], x["nome"], x["quem"])
             elif x["chave"] == "madeira":
@@ -2094,7 +2217,7 @@ def _mlbs_filtrados(q: str, tipo: str) -> list[dict]:
     itens = []
     for m in d["mlbs"].values():
         m = dict(m)
-        e = desc.get(m["sku"]) or desc.get(m["sku"].upper()) or {}
+        e = cadastro_sku(m["sku"], desc)
         m["descricao"] = e.get("descricao") or e.get("descricao_curta") or ""
         m["peso"] = e.get("peso") or e.get("peso_any")
         itens.append(m)
@@ -2190,8 +2313,115 @@ def fulfillment():
     dias = [dict(d, **{k: round(d[k], 2) for k in ("venda", "base", "sistema", "real", "rebate", "rebate_rs")})
             for d in sorted(por_dia.values(), key=lambda x: x["dia"])]
     piores = sorted(linhas, key=lambda l: (magalu.arred.sis_exato(l, True) - (l.get("tarifa") or 0.0)))[:40]
+    # CUSTO TOTAL DO FULL PARA A MULTIMÓVEIS, por item
+    fl = full_magalu_ler()
+    cob = [c for c in fl["cobrancas"].values() if c.get("comp", comp) == comp]
+    nomes = {}
+    for i in vendas_magalu_ler()["itens"].values():
+        if i.get("sku") and i.get("produto") and i["sku"] not in nomes:
+            nomes[i["sku"]] = i["produto"]
+    custo = magalu_full.resumo(cob, copart_por_sku(comp), nomes)
+    ult_full = fl["uploads"][-1] if fl["uploads"] else None
     return render_template("fulfillment.html", c=canal_por_chave()["magalu"], comp=comp, r=r,
-                           ff=ff, propria=propria, dias=dias, piores=piores, n=len(linhas))
+                           ff=ff, propria=propria, dias=dias, piores=piores, n=len(linhas),
+                           custo=custo, ult_full=ult_full)
+
+
+def _custo_full(comp: str, q: str = "", cd: str = "todos") -> list[dict]:
+    """Custo do Full por item: manuseio + armazenagem + tempo de estoque +
+    coparticipação de frete + coleta rateada. Descrição e peso vêm do cadastro
+    de SKUs (Parâmetros); o nome do anúncio, da Planilha 2 · Vendas."""
+    fl = full_magalu_ler()
+    cob = [c for c in fl["cobrancas"].values() if c.get("comp", comp) == comp]
+    nomes = {}
+    for i in vendas_magalu_ler()["itens"].values():
+        if i.get("sku") and i.get("produto") and i["sku"] not in nomes:
+            nomes[i["sku"]] = i["produto"]
+    s_ = magalu_full.resumo(cob, copart_por_sku(comp), nomes)
+    desc = descricoes_ler()["skus"]
+    itens = []
+    for m in s_["por_sku"]:
+        e = cadastro_sku(m["sku"], desc)
+        m = dict(m)
+        m["descricao"] = e.get("descricao") or e.get("descricao_curta") or m.get("produto") or ""
+        m["peso"] = e.get("peso") or e.get("peso_any")
+        # R$/kg é do CUSTO POR UNIDADE (o peso é de uma peça, não do lote)
+        m["custo_kg"] = (m["por_unidade"] / m["peso"]) if (m.get("peso") and m.get("por_unidade")) else None
+        m["cd"] = " · ".join(m.get("cds") or []) or "—"
+        itens.append(m)
+    if cd and cd != "todos":
+        itens = [m for m in itens if cd in (m.get("cds") or [])]
+    if q:
+        qs = [t for t in unidecode_lower(q).split() if t]
+        itens = [m for m in itens if all(t in unidecode_lower(f"{m['sku']} {m['descricao']} {m['cd']}") for t in qs)]
+    itens.sort(key=lambda m: -m["custo_total"])
+    return itens
+
+
+@app.route("/canal/magalu/custo-full")
+@logado
+def custo_full():
+    """CUSTO DO FULL POR ITEM — tudo que o Fulfillment cobra da Multimóveis,
+    SKU a SKU, com busca e filtro por CD (mesmo padrão do Custo coletas)."""
+    comp = comp_atual()
+    q = (request.args.get("q") or "").strip()
+    cd = (request.args.get("cd") or "todos").strip()
+    todos = _custo_full(comp)
+    contagem = {"todos": len(todos)}
+    for m in todos:
+        for x in (m.get("cds") or []):
+            contagem[x] = contagem.get(x, 0) + 1
+    itens = _custo_full(comp, q, cd)
+    tot = {k: round(sum(m[k] for m in itens), 2) for k in
+           ("manuseio", "armazenagem", "tempo_estoque", "copart", "coleta_rateio", "custo_total")}
+    tot["qtd"] = round(sum(m["qtd"] for m in itens), 0)
+    return render_template("custo_full.html", c=canal_por_chave()["magalu"], comp=comp, itens=itens,
+                           q=q, cd=cd, contagem=contagem, tot=tot,
+                           sem_peso=sum(1 for m in todos if not m.get("peso")),
+                           cds=sorted(k for k in contagem if k != "todos"))
+
+
+@app.route("/baixar/custo-full")
+@logado
+@exige("exportar")
+def baixar_custo_full():
+    q = (request.args.get("q") or "").strip()
+    cd = (request.args.get("cd") or "todos").strip()
+    bio = planilhas.custo_full_xlsx(_custo_full(comp_atual(), q, cd), comp_atual(), q, cd)
+    return send_file(bio, as_attachment=True,
+                     download_name=f"PLUTOS_CustoFull_{agora().strftime('%d%m%Y_%H%M')}.xlsx",
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+@app.route("/canal/magalu/frete-full")
+@logado
+def frete_full():
+    """CUSTO FRETE FULL — o que o frete dos pedidos Fulfillment está custando.
+    Nasce da Planilha 2 (Vendas no período), aba de PACOTES."""
+    comp = comp_atual()
+    v = vendas_magalu_ler()
+    pacotes = list(v["pacotes"].values())
+    s = magalu_vendas.resumo_frete_full(pacotes, comp)
+    comps = sorted({p["competencia"] for p in pacotes})
+    ult = v["uploads"][-1] if v["uploads"] else None
+    return render_template("frete_full.html", c=canal_por_chave()["magalu"], comp=comp, s=s,
+                           comps=comps, ult=ult, tem=bool(pacotes))
+
+
+@app.route("/canal/magalu/coparticipacao")
+@logado
+def coparticipacao():
+    """COPARTICIPAÇÃO DE FRETE — o pedaço do frete que NÓS pagamos no Magalu.
+    Nasce da Planilha 2 (Vendas no período), aba de PEDIDOS/itens."""
+    comp = comp_atual()
+    v = vendas_magalu_ler()
+    itens = list(v["itens"].values())
+    pacotes = list(v["pacotes"].values())
+    s = magalu_vendas.resumo_copart(itens, pacotes, comp)
+    comps = sorted({i["competencia"] for i in itens})
+    ult = v["uploads"][-1] if v["uploads"] else None
+    return render_template("coparticipacao.html", c=canal_por_chave()["magalu"], comp=comp, s=s,
+                           comps=comps, ult=ult, tem=bool(itens))
 
 
 @app.route("/canal/meli/coletas")

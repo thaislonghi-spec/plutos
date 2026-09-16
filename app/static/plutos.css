@@ -241,6 +241,10 @@ table.cols-coletas-m th:nth-child(4){width:150px} table.cols-coletas-m th:nth-ch
 /* Listas de MLB (Lista de MLB's · Custo coletas · Coletas por MLB): colunas
    compactas e do mesmo passo, a DESCRIÇÃO fica com o espaço que sobra e o
    texto é justificado; tudo cabe na tela sem rolagem horizontal. */
+table.cols-cf{table-layout:auto;width:100%}
+table.cols-cf th,table.cols-cf td{padding:6px 7px;font-size:12.5px}
+table.cols-cf th:nth-child(2),table.cols-cf td:nth-child(2){white-space:normal;line-height:1.3;width:26%;min-width:230px;text-align:left}
+table.cols-cf th:nth-child(3),table.cols-cf td:nth-child(3){white-space:nowrap;font-size:12px}
 table.cols-mlb,table.cols-cc,table.cols-coletas{table-layout:fixed;min-width:0;width:100%}
 table.cols-mlb th,table.cols-mlb td,table.cols-cc th,table.cols-cc td,table.cols-coletas th,table.cols-coletas td{padding:7px 8px}
 table.cols-mlb td:nth-child(3),table.cols-cc td:nth-child(3),table.cols-coletas td:nth-child(3){white-space:normal;text-align:justify;line-height:1.3;font-size:12.5px}

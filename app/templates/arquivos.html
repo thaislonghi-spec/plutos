@@ -120,10 +120,42 @@
           <input type="hidden" name="tipo" value="base"><input type="hidden" name="rodar" value="1"><input type="file" name="arquivo" {% if cn.chave != 'madeira' %}accept=".xlsx,.xls,.csv,.zip"{% endif %} required>
           <button class="bt pri" type="submit" style="padding:7px 14px">Subir e rodar</button>
         </form>
-        {% for x in pend_por.get(cn.chave, []) %}<span class="arq-n espera-n">⏳ {{ x.nome }} · aguardando ▶ rodar</span>{% endfor %}
+        {% for x in pend_por.get(cn.chave, []) if x.tipo not in ('vendas', 'full') %}<span class="arq-n espera-n">⏳ {{ x.nome }} · aguardando ▶ rodar</span>{% endfor %}
         <div class="ok-canto">{% if rc %}<span class="pill-ok">ok · {{ rc.quando|quando }}</span>{% else %}<span class="pill-nao">sem arquivo · {{ comp|mesano }}</span>{% endif %}</div>
         {% endif %}
       </div>
+      {% if cn.chave == 'magalu' %}
+      <div class="upl-box" style="margin-top:8px">
+        <div class="upl-eyebrow">Planilha 2 · Vendas no período</div>
+        <div class="arq-tit">MAGAZINELUIZA_VENDAS (zip)</div>
+        <div class="arq-sub">os dois custos de logística: frete dos pedidos Full e a coparticipação de frete que nós pagamos</div>
+        {% if mg_vendas %}<span class="arq-n">{{ mg_vendas.nome }} · {{ mg_vendas.quando|quando }} · {{ mg_vendas.diag.linhas }} linhas ({{ mg_vendas.qual }})</span>
+        <span class="arq-n"><a href="{{ url_for('frete_full', mes=comp) }}">Custo Frete Full</a> · <a href="{{ url_for('coparticipacao', mes=comp) }}">Coparticipação de Frete</a></span>{% else %}<span class="arq-n">ainda não subiu — as telas de frete Full e coparticipação nascem daqui</span>{% endif %}
+        {% if PODE.arquivos %}
+        <form method="post" action="{{ url_for('subir', chave=cn.chave) }}" enctype="multipart/form-data" class="upl">
+          <input type="hidden" name="tipo" value="vendas"><input type="hidden" name="rodar" value="1"><input type="file" name="arquivo" accept=".zip,.csv" required>
+          <button class="bt pri" type="submit" style="padding:7px 14px">Subir e rodar</button>
+        </form>
+        {% for x in pend_por.get(cn.chave, []) if x.tipo == 'vendas' %}<span class="arq-n espera-n">⏳ {{ x.nome }} · aguardando ▶ rodar</span>{% endfor %}
+        <div class="ok-canto">{% if mg_vendas %}<span class="pill-ok">ok · {{ mg_vendas.quando|quando }}</span>{% else %}<span class="pill-nao">sem Planilha 2</span>{% endif %}</div>
+        {% endif %}
+      </div>
+      <div class="upl-box" style="margin-top:8px">
+        <div class="upl-eyebrow">Cobranças do Fulfillment</div>
+        <div class="arq-tit">COBRANÇASFULLFILMENT + COLETAFULLFILMENT (zip)</div>
+        <div class="arq-sub">manuseio · armazenagem · tempo de estoque · coleta — o custo do Full por item</div>
+        {% if mg_full %}<span class="arq-n">{{ mg_full.nome }} · {{ mg_full.quando|quando }} · {{ mg_full.qual }} · {{ mg_full.diag.linhas }} cobranças</span>
+        <span class="arq-n">custo por item: <a href="{{ url_for('fulfillment', mes=comp) }}">abrir a aba Fulfillment</a></span>{% else %}<span class="arq-n">ainda não subiu — o custo total do Full nasce daqui</span>{% endif %}
+        {% if PODE.arquivos %}
+        <form method="post" action="{{ url_for('subir', chave=cn.chave) }}" enctype="multipart/form-data" class="upl">
+          <input type="hidden" name="tipo" value="full"><input type="hidden" name="rodar" value="1"><input type="file" name="arquivo" accept=".zip,.csv" required>
+          <button class="bt pri" type="submit" style="padding:7px 14px">Subir e rodar</button>
+        </form>
+        {% for x in pend_por.get(cn.chave, []) if x.tipo == 'full' %}<span class="arq-n espera-n">⏳ {{ x.nome }} · aguardando ▶ rodar</span>{% endfor %}
+        <div class="ok-canto">{% if mg_full %}<span class="pill-ok">ok · {{ mg_full.quando|quando }}</span>{% else %}<span class="pill-nao">sem cobranças</span>{% endif %}</div>
+        {% endif %}
+      </div>
+      {% endif %}
       {% endif %}
       <details class="ajuda2"><summary>O que o PLUTOS faz com isso</summary>
         {% if cn.chave == 'colombo' %}
