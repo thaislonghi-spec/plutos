@@ -110,7 +110,7 @@
       </div>
       {% else %}
       {% set rc = rods.get(cn.chave) %}
-      {% if cn.chave == 'magalu' %}<div class="tres-upl">{% endif %}
+      {% if cn.chave == 'magalu' %}<div class="quatro-upl">{% endif %}
       <div class="upl-box" {% if cn.chave != 'magalu' %}style="margin-top:8px"{% endif %}>
         {% if cn.chave == 'magalu' %}<div class="upl-eyebrow">Principal · Financeiro por período</div>{% endif %}
         <div class="arq-tit">{{ cn.arquivo }}</div>
@@ -122,7 +122,7 @@
           <input type="hidden" name="tipo" value="base"><input type="hidden" name="rodar" value="1"><input type="file" name="arquivo" {% if cn.chave != 'madeira' %}accept=".xlsx,.xls,.csv,.zip"{% endif %} required>
           <button class="bt pri" type="submit" style="padding:7px 14px">Subir e rodar</button>
         </form>
-        {% for x in pend_por.get(cn.chave, []) if x.tipo not in ('vendas', 'full') %}<span class="arq-n espera-n">⏳ {{ x.nome }} · aguardando ▶ rodar</span>{% endfor %}
+        {% for x in pend_por.get(cn.chave, []) if x.tipo not in ('vendas', 'full', 'coleta') %}<span class="arq-n espera-n">⏳ {{ x.nome }} · aguardando ▶ rodar</span>{% endfor %}
         <div class="ok-canto">{% if rc %}<span class="pill-ok">ok · {{ rc.quando|quando }}</span>{% else %}<span class="pill-nao">sem arquivo · {{ comp|mesano }}</span>{% endif %}</div>
         {% endif %}
       </div>
@@ -144,10 +144,10 @@
       </div>
       <div class="upl-box">
         <div class="upl-eyebrow">Cobranças do Fulfillment</div>
-        <div class="arq-tit">COBRANÇASFULLFILMENT + COLETAFULLFILMENT (zip)</div>
-        <div class="arq-sub">manuseio · armazenagem · tempo de estoque · coleta — o custo do Full por item</div>
-        {% if mg_full %}<span class="arq-n">{{ mg_full.nome }} · {{ mg_full.quando|quando }} · {{ mg_full.qual }} · {{ mg_full.diag.linhas }} cobranças</span>
-        <span class="arq-n">custo por item: <a href="{{ url_for('fulfillment', mes=comp) }}">abrir a aba Fulfillment</a></span>{% else %}<span class="arq-n">ainda não subiu — o custo total do Full nasce daqui</span>{% endif %}
+        <div class="arq-tit">CSV-156171 · COBRANÇASFULLFILMENT (zip)</div>
+        <div class="arq-sub">manuseio · armazenagem · tempo de estoque — ciclo do dia 20 ao dia 20</div>
+        {% if mg_full %}<span class="arq-n">{{ mg_full.nome }} · {{ mg_full.quando|quando }} · {{ mg_full.diag.linhas }} cobranças</span>
+        <span class="arq-n">custo por item: <a href="{{ url_for('custo_full', mes=comp) }}">abrir Custo do Full</a></span>{% else %}<span class="arq-n">ainda não subiu — manuseio, armazenagem e tempo de estoque nascem daqui</span>{% endif %}
         {% if PODE.arquivos %}
         <form method="post" action="{{ url_for('subir', chave=cn.chave) }}" enctype="multipart/form-data" class="upl">
           <input type="hidden" name="tipo" value="full"><input type="hidden" name="rodar" value="1"><input type="file" name="arquivo" accept=".zip,.csv" required>
@@ -155,6 +155,21 @@
         </form>
         {% for x in pend_por.get(cn.chave, []) if x.tipo == 'full' %}<span class="arq-n espera-n">⏳ {{ x.nome }} · aguardando ▶ rodar</span>{% endfor %}
         <div class="ok-canto">{% if mg_full %}<span class="pill-ok">ok · {{ mg_full.quando|quando }}</span>{% else %}<span class="pill-nao">sem cobranças</span>{% endif %}</div>
+        {% endif %}
+      </div>
+      <div class="upl-box">
+        <div class="upl-eyebrow">Coleta do Fulfillment</div>
+        <div class="arq-tit">CSV-160172 · COLETAFULLFILMENT (zip)</div>
+        <div class="arq-sub">o que o Magalu cobra para buscar a mercadoria — por agenda e m³, sem SKU</div>
+        {% if mg_coleta %}<span class="arq-n">{{ mg_coleta.nome }} · {{ mg_coleta.quando|quando }} · {{ mg_coleta.diag.linhas }} coletas · R$ {{ mg_coleta.diag.valor|brl }}</span>
+        <span class="arq-n">entra rateada no <a href="{{ url_for('custo_full', mes=comp) }}">Custo do Full por item</a></span>{% else %}<span class="arq-n">ainda não subiu — a coleta é o 2º maior custo do Full</span>{% endif %}
+        {% if PODE.arquivos %}
+        <form method="post" action="{{ url_for('subir', chave=cn.chave) }}" enctype="multipart/form-data" class="upl">
+          <input type="hidden" name="tipo" value="coleta"><input type="hidden" name="rodar" value="1"><input type="file" name="arquivo" accept=".zip,.csv" required>
+          <button class="bt pri" type="submit" style="padding:7px 14px">Subir e rodar</button>
+        </form>
+        {% for x in pend_por.get(cn.chave, []) if x.tipo == 'coleta' %}<span class="arq-n espera-n">⏳ {{ x.nome }} · aguardando ▶ rodar</span>{% endfor %}
+        <div class="ok-canto">{% if mg_coleta %}<span class="pill-ok">ok · {{ mg_coleta.quando|quando }}</span>{% else %}<span class="pill-nao">sem coleta</span>{% endif %}</div>
         {% endif %}
       </div>
       </div>

@@ -219,12 +219,14 @@ table.cols-14 td input.obs{width:100%;box-sizing:border-box} table.cols-14 td in
 /* box Mercado Livre em Arquivos: as duas planilhas lado a lado */
 .dois-upl{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px}
 .tres-upl{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:8px;align-items:stretch}
-.tres-upl>.upl-box{margin-top:0}
+.quatro-upl{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:8px;align-items:stretch}
+.tres-upl>.upl-box,.quatro-upl>.upl-box{margin-top:0}
+.quatro-upl .arq-tit{font-size:12.5px}.quatro-upl .arq-sub{font-size:11.5px}
 .upl-box{border:1px solid var(--linha);border-radius:2px;padding:10px 12px;background:var(--sup)}
 .upl-eyebrow{font:700 9.5px Archivo,sans-serif;letter-spacing:.2em;text-transform:uppercase;color:var(--ouro2);margin-bottom:4px}
 .upl-box .arq-n{display:block}
-@media (max-width:1100px){.dois-upl{grid-template-columns:1fr}.tres-upl{grid-template-columns:1fr}}
-@media (max-width:1500px) and (min-width:1101px){.tres-upl{grid-template-columns:1fr 1fr}}
+@media (max-width:1100px){.dois-upl{grid-template-columns:1fr}.tres-upl,.quatro-upl{grid-template-columns:1fr}}
+@media (max-width:1500px) and (min-width:1101px){.tres-upl,.quatro-upl{grid-template-columns:1fr 1fr}}
 .arq.arq-largo{grid-column:1 / -1}
 .arq.arq-largo .upl input[type=file]{max-width:260px}
 /* Coletas */

@@ -26,7 +26,7 @@ from werkzeug.utils import secure_filename
 from motor import meli, erp, magalu, magalu_vendas, magalu_full, shopee, madeira, webcont, colombo
 import planilhas
 
-VERSAO = "2026-09-16k"
+VERSAO = "2026-09-16l"
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(RAIZ), "dados")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -1707,7 +1707,10 @@ def arquivos():
                            nomes_erp=nomes_erp, sem_box=sem_box, mapa_erp=m,
                            mlbs_ult=(ml["uploads"][-1] if ml["uploads"] else None), mlbs_total=len(ml["mlbs"]),
                            mg_vendas=(vendas_magalu_ler()["uploads"] or [None])[-1],
-                           mg_full=(full_magalu_ler()["uploads"] or [None])[-1])
+                           mg_full=next((u for u in reversed(full_magalu_ler()["uploads"])
+                                         if u.get("qual") != "coleta"), None),
+                           mg_coleta=next((u for u in reversed(full_magalu_ler()["uploads"])
+                                           if u.get("qual") == "coleta"), None))
 
 
 def processar_meli(tipo: str, destino: str, nome: str, quem: str) -> str:
@@ -1832,7 +1835,7 @@ def pend_processar(chave: str | None = None) -> list[str]:
                 m = processar_meli(x["tipo"], x["caminho"], x["nome"], x["quem"])
             elif x["chave"] == "magalu":
                 m = (processar_magalu_vendas(x["caminho"], x["nome"], x["quem"]) if x.get("tipo") == "vendas"
-                     else processar_magalu_full(x["caminho"], x["nome"], x["quem"]) if x.get("tipo") == "full"
+                     else processar_magalu_full(x["caminho"], x["nome"], x["quem"]) if x.get("tipo") in ("full", "coleta")
                      else processar_magalu(x["caminho"], x["nome"], x["quem"]))
             elif x["chave"] == "shopee":
                 m = processar_shopee(x["caminho"], x["nome"], x["quem"])
