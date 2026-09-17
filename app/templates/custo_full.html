@@ -1,15 +1,23 @@
 {% extends "base.html" %}
 {% block acoes_ult %}
-{% if PODE.exportar %}<a class="bt-excel" id="bexp2" href="{{ url_for('baixar_custo_full', q=q, cd=cd) }}" data-tip="Baixa a lista do jeito que está filtrada na tela (busca + CD)">↓ EXCEL</a>{% endif %}
+{% if PODE.exportar %}<a class="bt-excel" id="bexp2" href="{{ url_for('baixar_custo_full', q=q, cd=cd) }}" data-tip="Baixa a lista do jeito que está filtrada na tela (busca + CD), pronta para o ORION">↓ EXCEL</a>{% endif %}
 {% endblock %}
 {% block conteudo %}
 <div class="kpis cinco">
-  <div class="kpi crit"><span class="l">Custo total do Full</span><span class="v">R$ {{ tot.custo_total|brl(0) }}</span><span class="o">{{ itens|length }} SKUs na tela · {{ comp|mesano }}</span></div>
-  <div class="kpi preto"><span class="l">Manuseio</span><span class="v">R$ {{ tot.manuseio|brl(0) }}</span><span class="o">{{ tot.qtd|brl(0) }} itens movimentados</span></div>
-  <div class="kpi preto"><span class="l">Coparticipação de frete</span><span class="v">R$ {{ tot.copart|brl(0) }}</span><span class="o">o pedaço do frete que nós pagamos · <a href="{{ url_for('coparticipacao', mes=comp) }}">abrir</a></span></div>
-  <div class="kpi ouro"><span class="l">Coleta (rateada)</span><span class="v">R$ {{ tot.coleta_rateio|brl(0) }}</span><span class="o">cobrada por agenda/m³ · rateio pelo manuseio</span></div>
+  <div class="kpi crit"><span class="l">Custo total por unidade</span><span class="v">R$ {{ tot.por_unidade|brl(2) }}</span><span class="o">média ponderada · {{ tot.unidades|brl(0) }} unidades · {{ itens|length }} SKUs</span></div>
+  <div class="kpi preto"><span class="l">Custo Full / un</span><span class="v">R$ {{ tot.full_un|brl(2) }}</span><span class="o">manuseio + armazenagem + tempo de estoque + coleta</span></div>
+  <div class="kpi preto"><span class="l">Coparticipação frete / un</span><span class="v">R$ {{ tot.copart_un|brl(2) }}</span><span class="o">o pedaço do frete que nós pagamos · <a href="{{ url_for('coparticipacao', mes=comp) }}">abrir</a></span></div>
+  <div class="kpi ouro"><span class="l">Custo total do mês</span><span class="v">R$ {{ tot.custo_total|brl(0) }}</span><span class="o">Full R$ {{ tot.custo_full|brl(0) }} + coparticipação R$ {{ tot.copart|brl(0) }}{% if tot.tarifa_m3 %} · coleta R$ {{ tot.tarifa_m3|brl(2) }}/m³{% endif %}</span></div>
   <div class="kpi {{ 'crit' if sem_peso else 'preto' }}"><span class="l">Sem peso</span><span class="v">{{ sem_peso }}</span><span class="o">{% if sem_peso %}SKUs fora do cadastro — suba em Parâmetros{% else %}todos com peso do cadastro{% endif %}</span></div>
 </div>
+{% if sem_cub %}
+<div class="aviso" style="margin-bottom:12px"><b>{{ sem_cub|length }} SKU(s) sem cubagem no cadastro.</b> A coleta é cobrada por m³ — sem cubagem, o rateio desses cai para o manuseio, que é menos preciso. Suba a Tabela de Custos MUL atualizada em <a href="{{ url_for('parametros_tela') }}">Parâmetros</a>.
+<span class="nota" style="display:block;margin-top:4px">{{ sem_cub[:12]|join(' · ') }}{% if sem_cub|length > 12 %} · +{{ sem_cub|length - 12 }}{% endif %}</span></div>
+{% endif %}
+{% if sem_un %}
+<div class="aviso" style="margin-bottom:12px"><b>{{ sem_un|length }} SKU(s) sem unidade no ciclo</b> — não foram manuseados nem vendidos, só pagaram armazenagem ou tempo de estoque. O custo deles está no total do mês, mas <b>não vira custo por unidade</b>: é penalidade de estoque parado, não custo do produto vendido.
+<span class="nota" style="display:block;margin-top:4px">{{ sem_un[:12]|join(' · ') }}{% if sem_un|length > 12 %} · +{{ sem_un|length - 12 }}{% endif %}</span></div>
+{% endif %}
 <div class="bloco">
   <form method="get" class="barra-massa filtro-mlb" id="ffiltro">
     <input type="hidden" name="cd" id="ftipo" value="{{ cd }}">
@@ -22,28 +30,45 @@
     </div>
     <span class="nota" style="margin:0">{{ itens|length }} de {{ contagem.todos }}</span>
   </form>
-  <div class="nota" style="margin:8px 0 0">Custo do Full = <b>manuseio + armazenagem + tempo de estoque + coparticipação de frete + coleta rateada</b>, das cobranças subidas em {{ comp|mesano }}{% if periodo %} (ciclo do portal: <b>{{ periodo }}</b>){% endif %}. O <b>R$/un manuseio</b> é a tabela do último arquivo subido — cada upload substitui o anterior, então vale sempre o preço mais recente. A <b>coleta</b> é cobrada por agenda e m³, sem SKU na origem — aqui ela é rateada pela participação de cada SKU no manuseio (coluna própria, é rateio). Peso e descrição vêm do cadastro de SKUs (Parâmetros).</div>
+  <div class="nota" style="margin:8px 0 0"><b>Para o ORION:</b> as três primeiras colunas de valor são o que entra na precificação — <b>Custo Full/un</b> (manuseio + armazenagem + tempo de estoque + coleta rateada) <b>+ Copart. frete/un</b> = <b>CUSTO TOTAL/un</b>. O resto da tabela é a abertura do mês, para conferência.
+  Fonte: cobranças subidas em {{ comp|mesano }}{% if periodo %} · ciclo do portal <b>{{ periodo }}</b>{% endif %}. A <b>coleta</b> é cobrada por m³ (em set/26: R$ {{ tot.tarifa_m3|brl(2) }}/m³) — por isso é rateada pelo <b>volume</b> que cada SKU ocupou (cubagem × unidades), e a coluna <b>Coleta tabela/un</b> mostra quanto custa coletar UMA peça pela tarifa vigente. Peso e descrição vêm do cadastro de SKUs (Parâmetros).</div>
   <div class="rol"><table class="cols-cf">
-    <thead><tr><th>SKU</th><th>Descrição</th><th>CD</th><th class="n">Itens</th><th class="n">Peso</th><th class="n">R$/un manuseio</th><th class="n">Manuseio</th><th class="n">Armazenagem</th><th class="n">Tempo estoque</th><th class="n">Copart. frete</th><th class="n">Coleta (rateio)</th><th class="n">Custo total</th><th class="n">Por unidade</th><th class="n">R$ / kg</th><th>Última</th></tr></thead>
+    <thead><tr>
+      <th>SKU</th><th>Descrição</th>
+      <th class="n">Custo Full / un</th><th class="n">Copart. frete / un</th><th class="n">CUSTO TOTAL / un</th>
+      <th class="n">Unidades</th><th class="n">R$ / kg</th><th class="n">Peso</th><th>CD</th>
+      <th class="n">R$/un manuseio</th><th class="n">Manuseio</th><th class="n">Armazenagem</th><th class="n">Tempo estoque</th>
+      <th class="n">Coleta tabela / un</th><th class="n">Cubagem</th><th class="n">Coleta (rateio)</th><th class="n">Custo Full mês</th><th class="n">Copart. mês</th><th class="n">Custo total mês</th><th>Última</th>
+    </tr></thead>
     <tbody>
     {% for m in itens %}
     <tr><td class="n" style="text-align:left">{{ m.sku }}</td><td>{{ m.descricao or '—' }}</td>
-      <td>{{ m.cd }}</td>
-      <td class="n">{{ m.qtd|brl(0) }}</td>
-      <td class="n" data-ord="{{ m.peso or 0 }}">{% if m.peso %}{{ m.peso|brl(1) }} kg{% else %}<span class="tag pend">sem peso</span>{% endif %}</td>
-      <td class="n">{{ m.unit_manuseio|brl(2) if m.unit_manuseio else "—" }}</td><td class="n">{{ m.manuseio|brl }}</td><td class="n">{{ m.armazenagem|brl }}</td><td class="n">{{ m.tempo_estoque|brl }}</td>
-      <td class="n">{{ m.copart|brl }}</td><td class="n" style="opacity:.7">{{ m.coleta_rateio|brl }}</td>
-      <td class="n"><b>R$ {{ m.custo_total|brl }}</b></td>
-      <td class="n">{{ m.por_unidade|brl(2) if m.qtd else '—' }}</td>
+      <td class="n">{{ m.full_un|brl(2) if m.unidades else '—' }}</td>
+      <td class="n">{{ m.copart_un|brl(2) if m.unidades else '—' }}</td>
+      <td class="n"><b>R$ {{ m.por_unidade|brl(2) if m.unidades else '—' }}</b></td>
+      <td class="n" data-ord="{{ m.unidades }}">{{ m.unidades|brl(0) }}{% if m.base_un == 'vendidas' %} <span class="tag pend" style="font-size:9px">vendidas</span>{% endif %}</td>
       <td class="n" data-ord="{{ m.custo_kg or 0 }}">{{ m.custo_kg|brl if m.custo_kg else '—' }}</td>
+      <td class="n" data-ord="{{ m.peso or 0 }}">{% if m.peso %}{{ m.peso|brl(1) }} kg{% else %}<span class="tag pend">sem peso</span>{% endif %}</td>
+      <td>{{ m.cd }}</td>
+      <td class="n">{{ m.unit_manuseio|brl(2) if m.unit_manuseio else '—' }}</td>
+      <td class="n">{{ m.manuseio|brl }}</td><td class="n">{{ m.armazenagem|brl }}</td><td class="n">{{ m.tempo_estoque|brl }}</td>
+      <td class="n">{{ m.coleta_tabela_un|brl(2) if m.coleta_tabela_un else '—' }}</td>
+      <td class="n" data-ord="{{ m.cubagem or 0 }}">{% if m.cubagem %}{{ m.cubagem|brl(3) }} m³{% else %}<span class="tag pend">sem cubagem</span>{% endif %}</td>
+      <td class="n" style="opacity:.7">{{ m.coleta_rateio|brl }}</td>
+      <td class="n">{{ m.custo_full|brl }}</td><td class="n">{{ m.copart|brl }}</td>
+      <td class="n"><b>{{ m.custo_total|brl }}</b></td>
       <td data-ord="{{ m.ultimo }}">{{ m.ultimo|dia if m.ultimo else '—' }}</td></tr>
     {% else %}
-    <tr><td colspan="15" class="vazio">{% if contagem.todos %}Nada com esse filtro.{% else %}Nasce das Cobranças do Fulfillment — suba os zips em Arquivos, box Magazine Luiza.{% endif %}</td></tr>
+    <tr><td colspan="20" class="vazio">{% if contagem.todos %}Nada com esse filtro.{% else %}Nasce das Cobranças do Fulfillment — suba os zips em Arquivos, box Magazine Luiza.{% endif %}</td></tr>
     {% endfor %}
-    <tr class="linha-total"><td><b>Total</b></td><td></td><td></td><td class="n"><b>{{ tot.qtd|brl(0) }}</b></td><td></td><td></td>
+    <tr class="linha-total">
+      <td><b>Total</b></td><td></td>
+      <td class="n"><b>{{ tot.full_un|brl(2) }}</b></td><td class="n"><b>{{ tot.copart_un|brl(2) }}</b></td><td class="n"><b>R$ {{ tot.por_unidade|brl(2) }}</b></td>
+      <td class="n"><b>{{ tot.unidades|brl(0) }}</b></td><td></td><td></td><td></td><td></td>
       <td class="n"><b>{{ tot.manuseio|brl }}</b></td><td class="n"><b>{{ tot.armazenagem|brl }}</b></td><td class="n"><b>{{ tot.tempo_estoque|brl }}</b></td>
-      <td class="n"><b>{{ tot.copart|brl }}</b></td><td class="n"><b>{{ tot.coleta_rateio|brl }}</b></td>
-      <td class="n"><b>R$ {{ tot.custo_total|brl }}</b></td><td></td><td></td><td></td></tr>
+      <td></td><td class="n"><b>{{ tot.volume|brl(2) }} m³</b></td><td class="n"><b>{{ tot.coleta_rateio|brl }}</b></td>
+      <td class="n"><b>{{ tot.custo_full|brl }}</b></td><td class="n"><b>{{ tot.copart|brl }}</b></td>
+      <td class="n"><b>{{ tot.custo_total|brl }}</b></td><td></td></tr>
     </tbody>
   </table></div>
 </div>

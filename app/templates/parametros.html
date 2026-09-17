@@ -54,6 +54,37 @@
 {% endif %}
 
 {% if PODE.parametros %}
+<div class="bloco">
+  <h2>Prazos de envio ao Full (dias)</h2>
+  <div class="nota" style="margin:0 0 10px">O que a sugestão de envio precisa esperar até a peça ficar <b>vendável no CD</b>:
+  <b>manuseio</b> (o nosso tempo de separar, embalar e faturar) + <b>transferência</b> (o trânsito até o CD do canal).
+  A sugestão soma os dois à cobertura desejada — sem isso a reposição chega depois da ruptura.</div>
+  <form method="post" class="upl" style="margin:0;display:block">
+    <input type="hidden" name="acao" value="prazos_full">
+    <div class="rol fit"><table data-sem-ordenar>
+      <thead><tr><th>CD do Full</th><th class="n">Manuseio (nosso)</th><th class="n">Transferência</th><th class="n">Total</th></tr></thead>
+      <tbody>
+      {% for cd in CDS_FULL %}
+      {% set pz = PARAM.prazos_full.get(cd) or {} %}
+      <tr><td>{{ cd }}</td>
+        <td class="n"><input type="number" min="0" max="180" style="width:80px;text-align:right" name="man_{{ cd|replace(' ', '__') }}" value="{{ pz.manuseio if pz.manuseio is defined else '' }}" placeholder="{{ PARAM.prazo_full_padrao.manuseio }}"></td>
+        <td class="n"><input type="number" min="0" max="180" style="width:80px;text-align:right" name="tra_{{ cd|replace(' ', '__') }}" value="{{ pz.transferencia if pz.transferencia is defined else '' }}" placeholder="{{ PARAM.prazo_full_padrao.transferencia }}"></td>
+        <td class="n"><b>{{ (pz.manuseio or 0) + (pz.transferencia or 0) }} d</b></td></tr>
+      {% else %}
+      <tr><td colspan="4" class="vazio">Nenhum CD ainda — suba as Cobranças do Fulfillment no box Magazine Luiza.</td></tr>
+      {% endfor %}
+      <tr class="linha-total"><td><b>Padrão (CD sem prazo próprio)</b></td>
+        <td class="n"><input type="number" min="0" max="180" style="width:80px;text-align:right" name="man_padrao" value="{{ PARAM.prazo_full_padrao.manuseio }}"></td>
+        <td class="n"><input type="number" min="0" max="180" style="width:80px;text-align:right" name="tra_padrao" value="{{ PARAM.prazo_full_padrao.transferencia }}"></td>
+        <td class="n"><b>{{ PARAM.prazo_full_padrao.manuseio + PARAM.prazo_full_padrao.transferencia }} d</b></td></tr>
+      </tbody></table></div>
+    <button class="bt sec" type="submit" style="margin-top:10px">Gravar prazos</button>
+    {% if PARAM.prazos_full_quando %}<div class="cad-st ok">gravado {{ PARAM.prazos_full_quando|quando }} por {{ PARAM.prazos_full_quem }}</div>{% endif %}
+  </form>
+</div>
+{% endif %}
+
+{% if PODE.parametros %}
 <div class="dois-cad">
 <div class="bloco">
   <h2>Cadastro de SKUs (descrição)</h2>

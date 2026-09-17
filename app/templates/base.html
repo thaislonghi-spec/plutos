@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PLUTOS · Rebates · {{ PARAM.empresa }}</title>
+<title>PLUTOS · Rebates e Entregas · {{ PARAM.empresa }}</title>
 <link rel="icon" href="{{ url_for('static', filename='icone.ico') }}" sizes="any">
 <link rel="apple-touch-icon" href="{{ url_for('static', filename='icone-192.png') }}">
 <meta name="theme-color" content="#0B0B0C">
@@ -53,6 +53,7 @@
   'conta':    ['Conta', 'Sua senha e a equipe'],
   'coletas':  ['Coletas · total', 'Mercado Livre · pedidos entregues pelo Coletas (frete coletas > 0): venda, frete, custo e rebates'],
   'custo_coletas': ['Custo coletas', 'Mercado Livre · o custo do Coletas por MLB — último pedido válido, com peso do produto'],
+  'estoque_full': ['Estoque Full', 'Magazine Luiza · o que está guardado no CD do Magalu, quanto vale e o que está parado'],
   'custo_full': ['Custo do Full por item', 'Magazine Luiza · tudo que o Fulfillment cobra da Multimóveis, SKU a SKU'],
   'frete_full': ['Custo Frete Full', 'Magazine Luiza · Planilha 2 — quanto o frete dos pedidos Fulfillment está custando'],
   'coparticipacao': ['Coparticipação de Frete', 'Magazine Luiza · Planilha 2 — o pedaço do frete que nós pagamos'],
@@ -60,7 +61,7 @@
   'mlbs':     ["Lista de MLB's", 'Mercado Livre · cada anúncio com SKU, descrição e tipo (Premium 16,5% · Clássico 11,5%)'],
 } %}
 {% set atual = request.endpoint %}
-{% set pagina = paginas.get(atual, ['PLUTOS', 'Rebates']) %}
+{% set pagina = paginas.get(atual, ['PLUTOS', 'Rebates e Entregas']) %}
 {% if atual == 'canal' and c is defined %}{% set pagina = [c.nome, 'Box do canal · como o rebate nasce aqui'] %}{% endif %}
 {% if atual == 'linha' and c is defined %}{% set pagina = ['Linha a linha ' ~ c.nome, 'A base do canal, OC por OC, com tudo que os relatórios trouxeram'] %}{% endif %}
 
@@ -74,7 +75,7 @@
     <a class="item {{ 'on' if atual == 'pedidos' }}" href="{{ url_for('pedidos', mes=comp) }}">Por pedido</a>
     <div class="grupo">Canais</div>
     {% for cn in CANAIS %}
-      {% set aberto = (c is defined and c.chave == cn.chave) or (atual in ('faltante', 'mlbs', 'coletas', 'custo_coletas') and cn.chave == 'meli') or (atual in ('fulfillment', 'custo_full', 'frete_full', 'coparticipacao') and cn.chave == 'magalu') %}
+      {% set aberto = (c is defined and c.chave == cn.chave) or (atual in ('faltante', 'mlbs', 'coletas', 'custo_coletas') and cn.chave == 'meli') or (atual in ('fulfillment', 'custo_full', 'estoque_full', 'frete_full', 'coparticipacao') and cn.chave == 'magalu') %}
       <div class="grupo-canal {{ 'aberto' if aberto }}" data-canal="{{ cn.chave }}">
         {% if cn.ativo %}
         <a class="item canal {{ 'on' if atual == 'canal' and c is defined and c.chave == cn.chave }}" href="{{ url_for('canal', chave=cn.chave, mes=comp) }}">{{ cn.nome }}<i class="seta" data-toggle="{{ cn.chave }}" title="abrir / fechar">›</i></a>
@@ -85,6 +86,7 @@
           <a class="item sub {{ 'on' if atual == 'linha' and c is defined and c.chave == cn.chave }}" href="{{ url_for('linha', chave=cn.chave, mes=comp) }}">Linha a linha {{ cn.nome }}</a>
           {% if cn.chave == 'magalu' %}
           <a class="item sub {{ 'on' if atual == 'fulfillment' }}" href="{{ url_for('fulfillment', mes=comp) }}">Fulfillment</a>
+          <a class="item sub {{ 'on' if atual == 'estoque_full' }}" href="{{ url_for('estoque_full', mes=comp) }}">Estoque Full</a>
           <a class="item sub {{ 'on' if atual == 'custo_full' }}" href="{{ url_for('custo_full', mes=comp) }}">Custo do Full por item</a>
           <a class="item sub {{ 'on' if atual == 'frete_full' }}" href="{{ url_for('frete_full', mes=comp) }}">Custo Frete Full</a>
           <a class="item sub {{ 'on' if atual == 'coparticipacao' }}" href="{{ url_for('coparticipacao', mes=comp) }}">Coparticipação de Frete</a>
@@ -135,7 +137,7 @@
   <div class="acoes-topo">
     {% set ano = comp[:4] %}
     {% set anos = [] %}{% for cp in COMPS + [HOJE_COMP] %}{% if cp[:4] not in anos %}{% set _ = anos.append(cp[:4]) %}{% endif %}{% endfor %}{% set anos = anos|sort %}
-    {% set pag_mes = atual if atual in ('painel','pedidos','faltante','arquivos','canal','linha','coletas','fulfillment','custo_full','frete_full','coparticipacao') else 'painel' %}
+    {% set pag_mes = atual if atual in ('painel','pedidos','faltante','arquivos','canal','linha','coletas','fulfillment','custo_full','estoque_full','frete_full','coparticipacao') else 'painel' %}
     {% set extra = dict(chave=c.chave) if atual in ('canal','linha') and c is defined else {} %}
     <div class="meses">
       {% if anos|length > 1 %}<div class="anos">{% for a in anos %}<a class="ano {{ 'on' if a == ano }}" href="{{ url_for(pag_mes, mes=a ~ '-' ~ (HOJE_COMP[5:] if a == HOJE_COMP[:4] else '01'), **extra) }}">{{ a }}</a>{% endfor %}</div>{% endif %}
@@ -180,7 +182,7 @@
 (function(){
   function valor(td){if(!td)return"";var o=td.getAttribute("data-ord");if(o!==null){o=o.trim();if(/^-?\d+(\.\d+)?$/.test(o))return parseFloat(o);return o.toLowerCase();}var t=(td.textContent||"").trim();var n=t.replace(/[R$\s%×kg]/g,"").replace(/\./g,"").replace(",",".");if(n&&!isNaN(n)&&/[\d]/.test(n))return parseFloat(n);return t.toLowerCase();}
   document.querySelectorAll("table").forEach(function(tab){if(tab.closest("[data-sem-ordenar]"))return;var thead=tab.tHead,corpo=tab.tBodies[0];if(!thead||!corpo||corpo.rows.length<2)return;
-    Array.prototype.forEach.call(thead.rows[0].cells,function(th,i){if(!th.textContent.trim())return;th.classList.add("ord");th.addEventListener("click",function(){var desc=!th.classList.contains("desc");Array.prototype.forEach.call(thead.rows[0].cells,function(o){o.classList.remove("asc","desc");});th.classList.add(desc?"desc":"asc");var linhas=Array.prototype.slice.call(corpo.rows);linhas.sort(function(a,b){var x=valor(a.cells[i]),y=valor(b.cells[i]);if(x===y)return 0;if(typeof x==="number"&&typeof y==="number")return desc?y-x:x-y;return desc?String(y).localeCompare(String(x),"pt-BR"):String(x).localeCompare(String(y),"pt-BR");});linhas.forEach(function(l){corpo.appendChild(l);});});});});
+    Array.prototype.forEach.call(thead.rows[0].cells,function(th,i){if(!th.textContent.trim())return;th.classList.add("ord");th.addEventListener("click",function(){var desc=!th.classList.contains("desc");Array.prototype.forEach.call(thead.rows[0].cells,function(o){o.classList.remove("asc","desc");});th.classList.add(desc?"desc":"asc");var todas=Array.prototype.slice.call(corpo.rows);var fixas=todas.filter(function(l){return l.classList.contains("linha-total");});var linhas=todas.filter(function(l){return !l.classList.contains("linha-total");});linhas.sort(function(a,b){var x=valor(a.cells[i]),y=valor(b.cells[i]);if(x===y)return 0;if(typeof x==="number"&&typeof y==="number")return desc?y-x:x-y;return desc?String(y).localeCompare(String(x),"pt-BR"):String(x).localeCompare(String(y),"pt-BR");});linhas.forEach(function(l){corpo.appendChild(l);});fixas.forEach(function(l){corpo.appendChild(l);});});});});
 })();
 </script>
 <script>

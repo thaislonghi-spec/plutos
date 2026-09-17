@@ -292,37 +292,133 @@ def custo_coletas_xlsx(itens: list[dict], q: str, tipo: str) -> io.BytesIO:
 
 
 def custo_full_xlsx(itens: list[dict], comp: str, q: str, cd: str) -> io.BytesIO:
-    """Custo do Fulfillment do Magalu por item, do jeito que está na tela."""
+    """Custo do Fulfillment do Magalu por SKU — aba ORION primeiro (as três
+    colunas da precificação) e a abertura completa do mês na segunda aba."""
     wb = Workbook()
     wb.remove(wb.active)
-    cab = ["SKU", "Descrição", "CD", "Itens manuseados", "Peso produto (kg)", "R$/un manuseio (tabela)", "Manuseio (R$)",
-           "Armazenagem (R$)", "Tempo de estoque (R$)", "Coparticipação de frete (R$)",
-           "Coleta rateada (R$)", "CUSTO TOTAL (R$)", "Custo por unidade (R$)", "R$/kg",
-           "Cobranças", "Última cobrança"]
-    ls = [[m["sku"], m.get("descricao") or "", m.get("cd") or "", m.get("qtd"), m.get("peso"),
-           m.get("unit_manuseio"), m["manuseio"], m["armazenagem"], m["tempo_estoque"], m["copart"], m["coleta_rateio"],
-           m["custo_total"], m.get("por_unidade"), m.get("custo_kg"), m.get("cobrancas"),
-           (datetime.fromisoformat(m["ultimo"]) if m.get("ultimo") else None)] for m in itens]
-    ws = _aba(wb, "Custo_Full", cab, ls, [16, 46, 26, 14, 13, 15, 13, 14, 16, 18, 15, 16, 16, 10, 11, 14],
-              moeda=(6, 7, 8, 9, 10, 11, 12, 13, 14))
-    for row in ws.iter_rows(min_row=2, min_col=16, max_col=16):
+
+    # 1) ORION — só o que entra no preço
+    cab = ["SKU", "Descrição", "Custo Full por unidade (R$)", "Coparticipação de frete por unidade (R$)",
+           "CUSTO TOTAL POR UNIDADE (R$)", "Unidades no ciclo", "Base das unidades",
+           "Peso (kg)", "Cubagem (m³)", "R$/un manuseio (tabela)", "Coleta por unidade (tabela R$/m³)", "R$/kg"]
+    ls = [[m["sku"], m.get("descricao") or "",
+           (m.get("full_un") if m.get("unidades") else None),
+           (m.get("copart_un") if m.get("unidades") else None),
+           (m.get("por_unidade") if m.get("unidades") else None),
+           m.get("unidades"), m.get("base_un") or "sem unidade no ciclo",
+           m.get("peso"), m.get("cubagem"), m.get("unit_manuseio"), m.get("coleta_tabela_un"),
+           m.get("custo_kg")] for m in itens]
+    _aba(wb, "ORION_custo_por_unidade", cab, ls, [16, 46, 20, 24, 22, 14, 18, 11, 12, 16, 22, 10],
+         moeda=(3, 4, 5, 10, 11, 12))
+
+    # 2) abertura do mês, para conferência
+    cab2 = ["SKU", "Descrição", "CD", "Unidades", "R$/un manuseio (tabela)", "Manuseio (R$)",
+            "Armazenagem (R$)", "Tempo de estoque (R$)", "Coleta rateada (R$)", "CUSTO FULL do mês (R$)",
+            "Coparticipação de frete do mês (R$)", "CUSTO TOTAL do mês (R$)", "Cobranças", "Última cobrança"]
+    ls2 = [[m["sku"], m.get("descricao") or "", m.get("cd") or "", m.get("unidades"), m.get("unit_manuseio"),
+            m["manuseio"], m["armazenagem"], m["tempo_estoque"], m["coleta_rateio"], m.get("custo_full"),
+            m["copart"], m["custo_total"], m.get("cobrancas"),
+            (datetime.fromisoformat(m["ultimo"]) if m.get("ultimo") else None)] for m in itens]
+    ws2 = _aba(wb, "Abertura_do_mes", cab2, ls2, [16, 44, 26, 12, 16, 13, 14, 16, 15, 17, 20, 18, 11, 14],
+               moeda=(5, 6, 7, 8, 9, 10, 11, 12))
+    for row in ws2.iter_rows(min_row=2, min_col=14, max_col=14):
         for c in row:
             c.number_format = "DD/MM/YYYY"
+
     filtro = " · ".join(x for x in [f"busca: {q}" if q else "", f"CD: {cd}" if cd and cd != "todos" else ""] if x)
     _aba(wb, "Como_ler", ["Item", "Explicação"], [
-        ["Manuseio", "produtos_manuseados — o Magalu cobra por item movimentado no CD"],
-        ["Armazenagem", "produtos_armazenados — cobrança por item guardado, por dia"],
-        ["Tempo de estoque", "tempo_estoque — a penalidade de aniversário do produto parado no CD"],
-        ["Coparticipação de frete", f"Planilha 2 · Vendas no período, competência {comp} — o pedaço do frete que a Multimóveis paga"],
-        ["Coleta rateada", "produtos_coletados é cobrada por agenda e m³, SEM SKU. Aqui ela é rateada pela "
-                           "participação de cada SKU no manuseio — é rateio, não é custo medido do item"],
-        ["CUSTO TOTAL", "manuseio + armazenagem + tempo de estoque + coparticipação + coleta rateada"],
-        ["R$/un manuseio (tabela)", "o preço unitário de manuseio do ÚLTIMO arquivo subido — cada upload substitui o anterior"],
-        ["Custo por unidade", "CUSTO TOTAL ÷ itens manuseados"],
-        ["R$/kg", "custo por unidade ÷ peso da peça (o peso do cadastro é de uma unidade)"],
-        ["Peso / Descrição", "Cadastro de SKUs (CustoProduto) subido em Parâmetros"],
+        ["Para que serve", "levar para o ORION o custo do Fulfillment do Magalu por unidade, SKU a SKU"],
+        ["CUSTO FULL por unidade", "manuseio + armazenagem + tempo de estoque + coleta rateada, dividido pelas unidades"],
+        ["Coparticipação por unidade", "o pedaço do frete que a Multimóveis paga, dividido pelas unidades"],
+        ["CUSTO TOTAL por unidade", "a soma dos dois — é esta coluna que entra na formação de preço"],
+        ["Unidades no ciclo", "unidades manuseadas no Fulfillment; quando o SKU não teve manuseio, "
+                              "usa as unidades vendidas no Full (a coluna 'Base das unidades' diz qual foi)"],
+        ["Sem unidade no ciclo", "SKU que só pagou armazenagem ou tempo de estoque, sem manuseio nem venda. "
+                                 "O custo entra no total do mês, mas NÃO vira custo por unidade: é penalidade "
+                                 "de estoque parado, não custo do produto vendido"],
+        ["Coleta rateada", "a coleta é cobrada por agenda e m³, SEM SKU. É rateada pelo VOLUME que cada SKU "
+                           "ocupou (cubagem × unidades), que é como o Magalu cobra"],
+        ["Coleta por unidade (tabela)", "a tarifa do m³ do ciclo × a cubagem da peça — quanto custa coletar UMA "
+                                        "unidade. Serve para precificar produto novo, sem depender do rateio do mês"],
+        ["R$/un manuseio (tabela)", "o manuseio é uma tabela por faixa de tamanho (em set/26: R$ 0,00 · 3,90 · "
+                                    "19,90 · 32,90 · 37,90). É a faixa do SKU, do último arquivo subido"],
+        ["Manuseio / Armazenagem / Tempo de estoque", "cobranças do Fulfillment (CSV-156171)"],
+        ["Coparticipação de frete", f"Planilha 2 · Vendas no período, competência {comp}"],
+        ["Peso / Descrição", "Cadastro de SKUs (Tabela de Custos MUL), subido em Parâmetros"],
         ["Filtro aplicado", filtro or "nenhum (lista completa)"],
-    ], [24, 96])
+    ], [30, 100])
+    bio = io.BytesIO(); wb.save(bio); bio.seek(0)
+    return bio
+
+
+def sugestao_full_xlsx(e: dict, comp: str, dias_alvo: int) -> io.BytesIO:
+    """Lista de envio para o Fulfillment do Magalu: o que mandar, quanto, quanto
+    ocupa e quanto custa colocar lá dentro."""
+    wb = Workbook()
+    wb.remove(wb.active)
+    env = [m for m in e["por_sku"] if m.get("sugestao")]
+    cab = ["SKU", "Descrição", "ENVIAR (un)", "Ação", "Estoque hoje", "Alvo (un)", "Venda média/dia",
+           "Cobertura hoje (dias)", "Prazo do CD (dias)", "Dias a cobrir", "m³ do envio", "Custo da coleta (R$)", "Manuseio quando vender (R$)",
+           "Coleta + manuseio (R$)", "Valor do envio a custo (R$)", "CD atual"]
+    ls = [[m["sku"], m.get("descricao") or "", m["sugestao"], m.get("acao"), m["estoque"], m["alvo"],
+           m["media_dia"], m["cobertura"], m.get("prazo"), m.get("dias_cobrir"), m["sug_m3"],
+           m["sug_coleta"], m["sug_manuseio"], m["sug_custo"], m["sug_valor"], m.get("cd") or ""]
+          for m in sorted(env, key=lambda x: (x.get("acao") != "URGENTE", -x["sugestao"]))]
+    _aba(wb, f"Enviar_{dias_alvo}dias", cab, ls,
+         [16, 44, 12, 11, 13, 11, 14, 16, 14, 13, 12, 15, 18, 20, 20, 26], moeda=(12, 13, 14, 15))
+
+    # a mesma lista, aberta por CD (cada um com o seu prazo)
+    cab_cd = ["CD", "SKU", "Descrição", "ENVIAR (un)", "Ação", "Estoque no CD", "% do estoque do SKU",
+              "Venda rateada no ciclo", "Venda média/dia", "Cobertura (dias)", "Prazo do CD (dias)",
+              "Dias a cobrir", "Alvo (un)", "m³ do envio"]
+    ls_cd = [[x["cd"], x["sku"], x.get("descricao") or "", x["sugestao"], x.get("acao"), x["estoque"],
+              x["parte"], x["vendidas"], x["media_dia"], x["cobertura"], x["prazo"], x["dias_cobrir"],
+              x["alvo"], x["sug_m3"]] for x in e.get("por_cd", []) if x["sugestao"]]
+    _aba(wb, "Enviar_por_CD", cab_cd, ls_cd, [22, 16, 42, 12, 11, 14, 18, 20, 15, 15, 16, 13, 11, 12])
+
+    sair = [m for m in e["por_sku"] if m.get("acao") in ("RETIRAR", "excesso")]
+    cab2 = ["SKU", "Descrição", "Ação", "Estoque hoje", "Vendidas no ciclo", "Cobertura (dias)",
+            "Valor parado (R$)", "m³ ocupados", "Armazenagem paga (R$)", "Aniversário pago (R$)", "CD"]
+    ls2 = [[m["sku"], m.get("descricao") or "", ("RETIRAR — sem venda no ciclo" if m["acao"] == "RETIRAR"
+                                                 else "EXCESSO — cobertura acima do dobro do alvo"),
+            m["estoque"], m["vendidas"], m["cobertura"], m["valor_estoque"], m["volume"],
+            m["custo_arm"], m["aniversario_rs"], m.get("cd") or ""]
+           for m in sorted(sair, key=lambda x: -x["valor_estoque"])]
+    _aba(wb, "Tirar_do_CD", cab2, ls2, [16, 44, 34, 13, 16, 15, 16, 12, 18, 18, 26], moeda=(7, 9, 10))
+
+    # a tela inteira, SKU a SKU
+    cab3 = ["SKU", "Descrição", "Ação", "ENVIAR (un)", "Estoque hoje", "Valor do estoque (R$)",
+            "Vendidas no ciclo", "Venda média/dia", "Cobertura (dias)", "Alvo (un)", "m³ ocupados",
+            "Armazenagem no ciclo (R$)", "Aniversário pago (R$)", "Dias com estoque no ciclo", "CD"]
+    ls3 = [[m["sku"], m.get("descricao") or "", m.get("acao"), m.get("sugestao"), m["estoque"],
+            m["valor_estoque"], m["vendidas"], m["media_dia"], m["cobertura"], m.get("alvo"),
+            m["volume"], m["custo_arm"], m["aniversario_rs"], m.get("dias_no_ciclo"), m.get("cd") or ""]
+           for m in e["por_sku"]]
+    _aba(wb, "Estoque_Full", cab3, ls3, [16, 44, 12, 12, 13, 18, 16, 15, 15, 11, 12, 20, 18, 20, 26],
+         moeda=(6, 12, 13))
+
+    # a foto dia a dia
+    _aba(wb, "Estoque_dia_a_dia", ["Dia", "Unidades em estoque", "SKUs", "Armazenagem do dia (R$)"],
+         [[datetime.fromisoformat(d["dia"]), d["unidades"], d["skus"], d["custo"]] for d in e["por_dia"]],
+         [14, 18, 10, 20], moeda=(4,))
+
+    _aba(wb, "Como_ler", ["Item", "Explicação"], [
+        ["Base", f"foto de estoque de {e.get('foto', '')} e vendas do Fulfillment da competência {comp}"],
+        ["ENVIAR", f"venda média por dia × ({dias_alvo} dias de cobertura + o prazo do CD) − estoque de hoje. "
+                   "O prazo do CD é o tempo entre pedir a coleta e a peça ficar vendável lá (Parâmetros)"],
+        ["URGENTE", "a cobertura de hoje é MENOR que o prazo de chegada — o SKU rompe antes da reposição entrar"],
+        ["Venda média/dia", "unidades vendidas no Full no ciclo ÷ dias de venda do período"],
+        ["Custo da coleta", "m³ do envio × a tarifa do m³ do ciclo — é o que o Magalu cobra para BUSCAR a mercadoria"],
+        ["Manuseio quando vender", "unidades × a faixa de manuseio do SKU. NÃO é custo de colocar no Full: "
+                                   "o manuseio é cobrado no movimento, então entra quando a peça sair"],
+        ["RETIRAR", "estoque no CD sem UMA venda no ciclo: paga armazenagem, paga aniversário e ocupa m³"],
+        ["EXCESSO", f"cobertura acima de {2 * dias_alvo} dias — mais que o dobro do alvo"],
+        ["Atenção", "produto parado NÃO recebe sugestão de envio; ele tem que sair do CD"],
+        ["Enviar_por_CD", "a mesma sugestão aberta por CD, cada um com o seu prazo"],
+        ["Venda rateada", "o relatório do Magalu NÃO informa de qual CD saiu cada venda (a coluna 'CD de Origem' "
+                          "vem vazia no Fulfillment). Até o canal mandar esse dado, a venda do SKU é rateada pela "
+                          "participação de cada CD no estoque dele — é estimativa, não medição"],
+    ], [26, 100])
     bio = io.BytesIO(); wb.save(bio); bio.seek(0)
     return bio
 

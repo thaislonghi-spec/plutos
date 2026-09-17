@@ -326,3 +326,11 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
   -webkit-text-fill-color:var(--tinta)!important;-webkit-background-clip:text!important;background-clip:text!important;
   -webkit-box-shadow:0 0 0 40px var(--sup) inset!important;box-shadow:0 0 0 40px var(--sup) inset!important;
   transition:background-color 100000s ease-in-out 0s!important}
+
+tr.linha-alerta td{background:#fff6f4}
+tr.linha-alerta td:first-child{box-shadow:inset 3px 0 0 #c0392b}
+
+th.ord{cursor:pointer;user-select:none}
+th.ord:hover{color:#c9a227}
+th.ord.asc::after{content:' ▲';font-size:9px;color:#c9a227}
+th.ord.desc::after{content:' ▼';font-size:9px;color:#c9a227}

@@ -26,7 +26,7 @@ from werkzeug.utils import secure_filename
 from motor import meli, erp, magalu, magalu_vendas, magalu_full, shopee, madeira, webcont, colombo
 import planilhas
 
-VERSAO = "2026-09-16l"
+VERSAO = "2026-09-17f"
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(RAIZ), "dados")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -225,10 +225,28 @@ def parametros() -> dict:
               "comissoes": COMISSAO_PADRAO,
               # canais em que o % do ERP embute uma taxa financeira (antecipação):
               # o Linha a linha separa "Comissão canal" e "Tx financeira canal"
-              "tx_financeira": {"madeira": 4.0, "webcont": 1.0}}
+              "tx_financeira": {"madeira": 4.0, "webcont": 1.0},
+              # PRAZO DE ENVIO AO FULL, em dias, por CD (regra da Thaís, 17/09/2026):
+              #   manuseio     = o nosso tempo de separar, embalar e faturar
+              #   transferencia = o trânsito até o CD do canal
+              # A sugestão de envio soma manuseio + transferência à cobertura desejada.
+              "prazos_full": {"Guarulhos - SP": {"manuseio": 2, "transferencia": 4},
+                              "Candeias - BA": {"manuseio": 2, "transferencia": 20}},
+              "prazo_full_padrao": {"manuseio": 2, "transferencia": 10}}
     p = _json_ler(pasta("parametros.json"), {})
     p = _corrigir_comissoes(p)
-    return {**padrao, **p}
+    p = {**padrao, **p}
+    # prazo antigo (um número só) → {manuseio, transferencia}, sem perder o valor
+    def _pz(v, tra_padrao=0):
+        if isinstance(v, dict):
+            return {"manuseio": int(v.get("manuseio") or 0), "transferencia": int(v.get("transferencia") or 0)}
+        try:
+            return {"manuseio": 0, "transferencia": int(v or 0)}
+        except (TypeError, ValueError):
+            return {"manuseio": 0, "transferencia": tra_padrao}
+    p["prazo_full_padrao"] = _pz(p.get("prazo_full_padrao"))
+    p["prazos_full"] = {k: _pz(v) for k, v in (p.get("prazos_full") or {}).items()}
+    return p
 
 
 # Correções de cadastro que o app aplica UMA VEZ na tabela salva (e registra em
@@ -914,6 +932,47 @@ def processar_magalu_full(destino: str, nome: str, quem: str) -> str:
     troca = f" (substituiu as {antes} anteriores desta competência)" if antes else ""
     return (f"Fulfillment · {magalu_full.TIPOS[qual]} lido em {f_mesano(comp_)} — {diag['linhas']} cobranças{per} · "
             f"{diag['skus']} SKUs · R$ {diag['valor']:,.2f}{troca}".replace(",", "@").replace(".", ",").replace("@", "."))
+
+
+def prazo_dias(v) -> int:
+    """Prazo em dias a partir do cadastro: {manuseio, transferencia} ou um número."""
+    if isinstance(v, dict):
+        return int(v.get("manuseio") or 0) + int(v.get("transferencia") or 0)
+    try:
+        return int(v or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def cubagem_por_sku() -> dict:
+    """SKU → cubagem (m³) do cadastro de SKUs. A coleta do Magalu é cobrada por
+    m³, então é a cubagem que reparte esse custo entre os produtos."""
+    cad = descricoes_ler()["skus"]
+    out = {}
+    for k, v in cad.items():
+        c = (v or {}).get("cubagem")
+        if c:
+            out[k] = float(c)
+            out[sku_chave(k)] = float(c)
+    return out
+
+
+def vendidos_full_sku(comp: str) -> dict:
+    """Unidades vendidas no Fulfillment por SKU (Planilha 2 · Vendas), sem
+    cancelados. Serve de divisor quando o SKU não teve manuseio no ciclo."""
+    v = vendas_magalu_ler()
+    canc, ff = set(), set()
+    for p in v["pacotes"].values():
+        if p.get("cancelado"):
+            canc.add(p["pedido"])
+        elif p.get("full"):
+            ff.add(p["pedido"])
+    out: dict[str, float] = {}
+    for i in v["itens"].values():
+        if i.get("competencia") != comp or i["pedido"] in canc or i["pedido"] not in ff:
+            continue
+        out[i.get("sku") or "—"] = out.get(i.get("sku") or "—", 0.0) + (i.get("qtd") or 0.0)
+    return out
 
 
 def copart_por_sku(comp: str) -> dict:
@@ -2114,6 +2173,33 @@ def parametros_tela():
             _json_gravar(pasta("parametros.json"), p)
             flash(f"Tabela de comissões gravada: {len(linhas)} canais.")
             return redirect(url_for("parametros_tela"))
+        if acao == "prazos_full":
+            # dois prazos por CD: o nosso manuseio + a transferência até o CD
+            def _d(v):
+                try:
+                    return max(0, min(180, int(v or 0)))
+                except ValueError:
+                    return 0
+            prazos = {}
+            for k, v in request.form.items():
+                if not k.startswith("man_"):
+                    continue
+                cd = k[4:].replace("__", " ")
+                if not cd:
+                    continue
+                man = _d(v)
+                tra = _d(request.form.get(f"tra_{k[4:]}"))
+                if man or tra:
+                    prazos[cd] = {"manuseio": man, "transferencia": tra}
+            p["prazos_full"] = prazos
+            p["prazo_full_padrao"] = {"manuseio": _d(request.form.get("man_padrao")),
+                                      "transferencia": _d(request.form.get("tra_padrao"))}
+            p["prazos_full_quando"] = agora().isoformat(); p["prazos_full_quem"] = session["usuario"]
+            _json_gravar(pasta("parametros.json"), p)
+            pad = p["prazo_full_padrao"]
+            flash(f"Prazos de envio ao Full gravados: {len(prazos)} CD(s) · padrão "
+                  f"{pad['manuseio']} + {pad['transferencia']} = {pad['manuseio'] + pad['transferencia']} dias.")
+            return redirect(url_for("parametros_tela"))
         if acao in ("descricoes_arquivo", "custos_arquivo"):
             f = request.files.get("arquivo")
             if not f or not f.filename:
@@ -2220,7 +2306,9 @@ def parametros_tela():
             recalcular_canais(comp)
         flash("Parâmetros gravados e rebates recalculados.")
         return redirect(url_for("parametros_tela"))
-    return render_template("parametros.html", DESC=descricoes_ler())
+    # CDs que já apareceram nas cobranças do Full (para a tabela de prazos)
+    cds_full = sorted({c["cd"] for c in full_magalu_ler()["cobrancas"].values() if c.get("cd")})
+    return render_template("parametros.html", DESC=descricoes_ler(), CDS_FULL=cds_full)
 
 
 # --------------------------------------------------------------------------
@@ -2335,7 +2423,13 @@ def fulfillment():
     for i in vendas_magalu_ler()["itens"].values():
         if i.get("sku") and i.get("produto") and i["sku"] not in nomes:
             nomes[i["sku"]] = i["produto"]
-    custo = magalu_full.resumo(cob, copart_por_sku(comp), nomes)
+    cub = cubagem_por_sku()
+    cub_sku = {}
+    for m in {c["sku"] for c in cob if c["sku"]} | set(copart_por_sku(comp)):
+        v = cub.get(m) or cub.get(sku_chave(m))
+        if v:
+            cub_sku[m] = v
+    custo = magalu_full.resumo(cob, copart_por_sku(comp), nomes, vendidos_full_sku(comp), cub_sku)
     ult_full = fl["uploads"][-1] if fl["uploads"] else None
     return render_template("fulfillment.html", c=canal_por_chave()["magalu"], comp=comp, r=r,
                            ff=ff, propria=propria, dias=dias, piores=piores, n=len(linhas),
@@ -2352,7 +2446,13 @@ def _custo_full(comp: str, q: str = "", cd: str = "todos") -> list[dict]:
     for i in vendas_magalu_ler()["itens"].values():
         if i.get("sku") and i.get("produto") and i["sku"] not in nomes:
             nomes[i["sku"]] = i["produto"]
-    s_ = magalu_full.resumo(cob, copart_por_sku(comp), nomes)
+    cub = cubagem_por_sku()
+    cub_sku = {}   # aceita o SKU como vem do Magalu (sem ponto)
+    for m in {c["sku"] for c in cob if c["sku"]} | set(copart_por_sku(comp)):
+        v = cub.get(m) or cub.get(sku_chave(m))
+        if v:
+            cub_sku[m] = v
+    s_ = magalu_full.resumo(cob, copart_por_sku(comp), nomes, vendidos_full_sku(comp), cub_sku)
     desc = descricoes_ler()["skus"]
     itens = []
     for m in s_["por_sku"]:
@@ -2362,6 +2462,7 @@ def _custo_full(comp: str, q: str = "", cd: str = "todos") -> list[dict]:
         m["peso"] = e.get("peso") or e.get("peso_any")
         # R$/kg é do CUSTO POR UNIDADE (o peso é de uma peça, não do lote)
         m["custo_kg"] = (m["por_unidade"] / m["peso"]) if (m.get("peso") and m.get("por_unidade")) else None
+        m["custo_kg"] = round(m["custo_kg"], 2) if m["custo_kg"] else None
         m["cd"] = " · ".join(m.get("cds") or []) or "—"
         itens.append(m)
     if cd and cd != "todos":
@@ -2370,6 +2471,9 @@ def _custo_full(comp: str, q: str = "", cd: str = "todos") -> list[dict]:
         qs = [t for t in unidecode_lower(q).split() if t]
         itens = [m for m in itens if all(t in unidecode_lower(f"{m['sku']} {m['descricao']} {m['cd']}") for t in qs)]
     itens.sort(key=lambda m: -m["custo_total"])
+    for m in itens:
+        m["_tarifa_m3"] = s_.get("tarifa_m3", 0.0)
+        m["_m3_agendas"] = s_.get("m3_agendas", 0.0)
     return itens
 
 
@@ -2388,13 +2492,21 @@ def custo_full():
             contagem[x] = contagem.get(x, 0) + 1
     itens = _custo_full(comp, q, cd)
     tot = {k: round(sum(m[k] for m in itens), 2) for k in
-           ("manuseio", "armazenagem", "tempo_estoque", "copart", "coleta_rateio", "custo_total")}
+           ("manuseio", "armazenagem", "tempo_estoque", "copart", "coleta_rateio", "custo_total", "custo_full")}
     tot["qtd"] = round(sum(m["qtd"] for m in itens), 0)
+    tot["unidades"] = round(sum(m["unidades"] for m in itens), 0)
+    tot["full_un"] = round(tot["custo_full"] / tot["unidades"], 2) if tot["unidades"] else 0.0
+    tot["copart_un"] = round(tot["copart"] / tot["unidades"], 2) if tot["unidades"] else 0.0
+    tot["por_unidade"] = round(tot["custo_total"] / tot["unidades"], 2) if tot["unidades"] else 0.0
+    sem_un = [m["sku"] for m in itens if not m["unidades"] and m["custo_total"]]
+    sem_cub = [m["sku"] for m in itens if not m.get("cubagem")]
+    tot["tarifa_m3"] = itens[0]["_tarifa_m3"] if itens else 0.0
+    tot["volume"] = round(sum(m.get("volume") or 0 for m in itens), 2)
     dts = sorted({c["data"] for c in full_magalu_ler()["cobrancas"].values()
                   if c.get("comp", comp) == comp and c.get("data")})
     periodo = f"{f_dia(dts[0])} a {f_dia(dts[-1])}" if dts else ""
     return render_template("custo_full.html", c=canal_por_chave()["magalu"], comp=comp, itens=itens,
-                           q=q, cd=cd, contagem=contagem, tot=tot, periodo=periodo,
+                           q=q, cd=cd, contagem=contagem, tot=tot, periodo=periodo, sem_un=sem_un, sem_cub=sem_cub,
                            sem_peso=sum(1 for m in todos if not m.get("peso")),
                            cds=sorted(k for k in contagem if k != "todos"))
 
@@ -2408,6 +2520,91 @@ def baixar_custo_full():
     bio = planilhas.custo_full_xlsx(_custo_full(comp_atual(), q, cd), comp_atual(), q, cd)
     return send_file(bio, as_attachment=True,
                      download_name=f"PLUTOS_CustoFull_{agora().strftime('%d%m%Y_%H%M')}.xlsx",
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+@app.route("/canal/magalu/estoque-full")
+@logado
+def estoque_full():
+    """ESTOQUE FULL — o que está guardado no CD do Magalu hoje, quanto vale,
+    quanto está custando de armazenagem e o que está parado pagando aniversário.
+    Nasce da foto diária de estoque que vem nas Cobranças do Fulfillment."""
+    comp = comp_atual()
+    fl = full_magalu_ler()
+    cob = [c for c in fl["cobrancas"].values() if c.get("comp", comp) == comp]
+    vend = vendidos_full_sku(comp)
+    dias_venda = len({i["data"] for i in vendas_magalu_ler()["itens"].values()
+                      if i.get("competencia") == comp}) or 1
+    cad = descricoes_ler()["skus"]
+    cadastro = {}
+    for k in {c["sku"] for c in cob if c["sku"]}:
+        cadastro[k] = cadastro_sku(k, cad)
+    # tarifa do m³ da coleta e a faixa de manuseio, para custear a sugestão
+    m3 = round(sum(c.get("espaco") or 0.0 for c in cob if c["tipo"] == "coleta"), 4)
+    coleta_rs = round(sum(c["valor"] for c in cob if c["tipo"] == "coleta"), 2)
+    tarifa_m3 = round(coleta_rs / m3, 2) if m3 else 0.0
+    unit_man = {}
+    for c in cob:
+        if c["tipo"] == "manuseio" and c["sku"] and c.get("unit"):
+            unit_man[c["sku"]] = c["unit"]
+    try:
+        dias_alvo = max(7, min(120, int(request.args.get("dias") or 30)))
+    except ValueError:
+        dias_alvo = 30
+    par = parametros()
+    prazos_cad = par.get("prazos_full") or {}
+    prazos = {k: prazo_dias(v) for k, v in prazos_cad.items()}
+    prazo_padrao = prazo_dias(par.get("prazo_full_padrao"))
+    e = magalu_full.estoque(cob, vend, dias_venda, cadastro, dias_alvo, tarifa_m3, unit_man,
+                            prazos, prazo_padrao)
+    q = (request.args.get("q") or "").strip()
+    cd_sel = (request.args.get("cd") or "todos").strip()
+    cds = sorted({x["cd"] for x in e["por_cd"] if x.get("cd")})
+    por_cd = cd_sel != "todos"
+    itens = [x for x in e["por_cd"] if x["cd"] == cd_sel] if por_cd else e["por_sku"]
+    if q:
+        qs = [t for t in unidecode_lower(q).split() if t]
+        itens = [m for m in itens
+                 if all(t in unidecode_lower(f"{m['sku']} {m.get('descricao', '')} {m.get('cd', '')}") for t in qs)]
+    # o que a tela soma no rodapé muda quando o filtro é de um CD só
+    tot = {"enviar_un": round(sum(m["sugestao"] for m in itens), 0),
+           "estoque": round(sum(m["estoque"] for m in itens), 0),
+           "m3_envio": round(sum((m.get("sug_m3") or 0) for m in itens), 2)}
+    return render_template("estoque_full.html", c=canal_por_chave()["magalu"], comp=comp, e=e,
+                           itens=itens, q=q, dias_venda=dias_venda, dias_alvo=dias_alvo,
+                           cd_sel=cd_sel, cds=cds, por_cd=por_cd, tot=tot,
+                           tarifa_m3=tarifa_m3, prazos=prazos, prazo_padrao=prazo_padrao,
+                           prazos_cad=prazos_cad)
+
+
+@app.route("/baixar/sugestao-full")
+@logado
+@exige("exportar")
+def baixar_sugestao_full():
+    """A lista de envio para o Full, do jeito que está na tela."""
+    comp = comp_atual()
+    fl = full_magalu_ler()
+    cob = [c for c in fl["cobrancas"].values() if c.get("comp", comp) == comp]
+    vend = vendidos_full_sku(comp)
+    dias_venda = len({i["data"] for i in vendas_magalu_ler()["itens"].values()
+                      if i.get("competencia") == comp}) or 1
+    cad = descricoes_ler()["skus"]
+    cadastro = {k: cadastro_sku(k, cad) for k in {c["sku"] for c in cob if c["sku"]}}
+    m3 = round(sum(c.get("espaco") or 0.0 for c in cob if c["tipo"] == "coleta"), 4)
+    coleta_rs = round(sum(c["valor"] for c in cob if c["tipo"] == "coleta"), 2)
+    tarifa = round(coleta_rs / m3, 2) if m3 else 0.0
+    unit_man = {c["sku"]: c["unit"] for c in cob if c["tipo"] == "manuseio" and c["sku"] and c.get("unit")}
+    try:
+        dias_alvo = max(7, min(120, int(request.args.get("dias") or 30)))
+    except ValueError:
+        dias_alvo = 30
+    par = parametros()
+    e = magalu_full.estoque(cob, vend, dias_venda, cadastro, dias_alvo, tarifa, unit_man,
+                            {k: prazo_dias(v) for k, v in (par.get("prazos_full") or {}).items()},
+                            prazo_dias(par.get("prazo_full_padrao")))
+    bio = planilhas.sugestao_full_xlsx(e, comp, dias_alvo)
+    return send_file(bio, as_attachment=True,
+                     download_name=f"PLUTOS_EnvioFull_{dias_alvo}d_{agora().strftime('%d%m%Y_%H%M')}.xlsx",
                      mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
