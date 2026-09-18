@@ -27,13 +27,18 @@ A REGRA DA COMISSÃO (medida em 575 pedidos de 12–18/09/2026, ao centavo):
   Em 302 pedidos da faixa cheia (10,5% = 9% + 1,5%) o total fechou com R$ 0,13
   de diferença.
 
-  O cadastro da casa tem UM percentual para toda a Amazon (10,5%). Por isso a
-  diferença é separada em duas — problemas diferentes, donos diferentes:
-    · REBATE DE COMISSÃO = faixa da categoria × base − comissão cobrada.
-      Erro de cobrança da Amazon; é o que a Gabi cobra de volta.
-    · DESVIO DE CADASTRO = % do cadastro × base − faixa da categoria × base.
-      Não é rebate: é o sistema prevendo comissão errada em categoria de
-      comissão menor. Estraga margem e preço (ORION); corrige-se no cadastro.
+  REBATE DE COMISSÃO (regra da casa, 18/09/2026, confirmada pela CEO): é a
+  diferença entre a COMISSÃO DO SISTEMA — 10,5% (9% negociado + 1,5% de taxa)
+  sobre o TOTAL DO PEDIDO na NF do ERP — e a coluna "Tarifas da Amazon", que já
+  vem com comissão + taxa juntas. Mesma régua do Colombo, do Madeira e da
+  Webcontinental: sistema − cobrado.
+
+  A abertura por faixa NÃO muda o rebate; ela diz DE ONDE ele veio, e isso muda
+  a ação de quem recebe o número:
+    · parte que vem de CATEGORIA COM COMISSÃO MENOR que 10,5% → o custo previsto
+      no ORION está acima do real naquelas categorias (preço/margem).
+    · parte que vem de COBRANÇA FORA DA FAIXA da própria categoria → é conversa
+      com o canal.
 
 Chave do pedido = "ID do pedido" (701-/702-…), que é a própria Ordem de compra
 do ERP — o casamento é direto, sem de-para.

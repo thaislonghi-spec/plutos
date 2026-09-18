@@ -26,7 +26,7 @@ from werkzeug.utils import secure_filename
 from motor import meli, erp, magalu, magalu_vendas, magalu_full, shopee, madeira, webcont, colombo, amazon
 import planilhas
 
-VERSAO = "2026-09-18f"
+VERSAO = "2026-09-18g"
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(RAIZ), "dados")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -1677,8 +1677,8 @@ LINHA_COLS = {
         ("Faixa da categoria", "tipo", "t"), ("% negociado (sem a taxa)", "negociada", "p"),
         ("Comissão pela faixa R$", "faixa_rs", "n"),
         ("Comissão cadastro R$", "sis_rs", "n"), ("% cadastro", "sis_pct", "p"), ("% no ERP", "erp_pct", "p"),
-        ("Desvio de cadastro", "desvio_cadastro", "n"),
-        ("Diferença = rebate comissão", "diferenca", "n"), ("Reembolso", "reembolso", "n"),
+        ("Do rebate: categoria menor", "desvio_cadastro", "n"), ("Do rebate: fora da faixa", "erro_amazon", "n"),
+        ("REBATE COMISSÃO (sistema − cobrado)", "diferenca", "n"), ("Reembolso", "reembolso", "n"),
         ("Rebate R$", "rebate_rs", "n"), ("Rebate comissão", "rebate_comissao", "n"), ("Rebate frete", "rebate_frete", "n"),
         ("REBATE TOTAL", "rebate_total", "n"),
     ],

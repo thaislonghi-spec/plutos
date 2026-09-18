@@ -5,8 +5,8 @@
 {% else %}
 {% set s = r.resumo %}
 <div class="kpis cinco">
-  <div class="kpi bom"><span class="l">Rebate em comissão</span><span class="v">R$ {{ s.rebate_comissao|brl(0) }}</span><span class="o">sistema (10,5% da NF) − Tarifas da Amazon · {{ s.dif_pos }} a favor · {{ s.dif_neg }} contra</span></div>
-  <div class="kpi {{ 'crit' if s.desvio_cadastro|abs > 100 else 'preto' }}"><span class="l">Explicado pela categoria</span><span class="v">R$ {{ s.desvio_cadastro|brl(0) }}</span><span class="o">do rebate acima, o que é <b>categoria com comissão menor</b> — não é erro da Amazon · erro real R$ {{ s.erro_amazon|brl(0) }}</span></div>
+  <div class="kpi bom"><span class="l">Rebate em comissão</span><span class="v">R$ {{ s.rebate_comissao|brl(0) }}</span><span class="o">comissão do sistema (10,5% da NF) − Tarifas da Amazon (comissão + taxa) · {{ s.dif_pos }} a favor · {{ s.dif_neg }} contra</span></div>
+  <div class="kpi preto"><span class="l">De onde vem o rebate</span><span class="v">{{ (100 * s.desvio_cadastro / s.rebate_comissao)|brl(0) if s.rebate_comissao else 0 }}%</span><span class="o">R$ {{ s.desvio_cadastro|brl(0) }} de <b>categoria com comissão menor</b> que 10,5% + R$ {{ s.erro_amazon|brl(0) }} de cobrança fora da faixa</span></div>
   <div class="kpi crit"><span class="l">Publicidade (Amazon Ads)</span><span class="v">R$ {{ s.publicidade|brl(0) }}</span><span class="o">{{ s.servicos_dias }} dia(s) no arquivo · custo de mídia, fora do rebate</span></div>
   <div class="kpi {{ 'crit' if s.devolvidos else 'bom' }}"><span class="l">Devolvidos (fora)</span><span class="v">{{ s.devolvidos }}</span><span class="o">{{ s.reembolsos }} reembolso(s) · R$ {{ s.reembolso_rs|brl(0) }} · {{ s.erp_ok }} de {{ s.pedidos }} com par no ERP</span></div>
   <div class="kpi ouro"><span class="l">Rebate total</span><span class="v">R$ {{ s.rebate_total|brl(0) }}</span><span class="o">{{ s.pct_sobre_venda|brl(2) }}% de R$ {{ s.venda|brl(0) }} de produto · {{ s.pedidos }} pedidos</span></div>
@@ -14,12 +14,12 @@
 
 <div class="kpis tres-com">
   <div class="kpi preto"><span class="l">Comissão sistema (deveria ser)</span><span class="v">R$ {{ s.com_sistema|brl(0) }}</span><span class="o">{{ s.com_sistema_pct|brl(2) }}% × R$ {{ s.base_sistema|brl(0) }} (total do pedido na NF){% if s.corrigidos %} · <b>{{ s.corrigidos }} pedido(s) recalculados</b> de 9,2% para 10,5%{% endif %}</span></div>
-  <div class="kpi bom"><span class="l">Comissão pela faixa da categoria</span><span class="v">R$ {{ s.com_faixa|brl(0) }}</span><span class="o">{{ s.com_faixa_pct|brl(2) }}% · negociada da categoria + 1,5% de taxa — é o que a Amazon DEVE cobrar</span></div>
+  <div class="kpi bom"><span class="l">Comissão pela faixa da categoria</span><span class="v">R$ {{ s.com_faixa|brl(0) }}</span><span class="o">{{ s.com_faixa_pct|brl(2) }}% · negociada da categoria + 1,5% — a tabela que a Amazon aplicou (diagnóstico, não muda o rebate)</span></div>
   <div class="kpi crit"><span class="l">Comissão real (cobrada)</span><span class="v">R$ {{ s.com_real|brl(0) }}</span><span class="o">{{ s.com_real_pct|brl(2) }}% de R$ {{ s.base|brl(0) }} de base (produto − desconto + frete)</span></div>
 </div>
 
 {% if s.desvio_cadastro|abs > 100 %}
-<div class="aviso" style="margin-bottom:14px"><b>Atenção antes de cobrar:</b> dos R$ {{ s.rebate_comissao|brl }} de rebate, <b>R$ {{ s.desvio_cadastro|brl }} são categoria com comissão menor que 10,5%</b> — a Amazon cobrou certo, o cadastro é que prevê a mais. O erro de cobrança de verdade é de <b>R$ {{ s.erro_amazon|brl }}</b>. Cobrar o valor cheio do canal não se sustenta; o resto se resolve ajustando a comissão por categoria no cadastro (e isso muda preço e margem no ORION).</div>
+<div class="nota" style="margin:0 0 12px"><b>Abertura do rebate de R$ {{ s.rebate_comissao|brl }}:</b> R$ {{ s.desvio_cadastro|brl }} vêm de pedidos de <b>categoria com comissão negociada menor</b> que os 10,5% (9% + 1,5%) do cadastro, e R$ {{ s.erro_amazon|brl }} de cobrança fora da faixa da própria categoria. Os dois são rebate de comissão; a abertura serve para o <b>ORION</b> saber onde o custo previsto está acima do real e para a negociação com o canal saber o que é tabela e o que é erro.</div>
 {% endif %}
 {% if s.sem_erp_base %}
 <div class="nota" style="margin:0 0 12px"><a href="{{ url_for('amazon_faltantes', mes=comp) }}" style="float:right">abrir Pedidos faltantes →</a><b>{{ s.sem_erp_base }} de {{ s.pedidos }} pedidos ainda sem par no ERP</b> — neles a comissão do sistema foi calculada sobre a base do próprio relatório da Amazon (produto − desconto + frete), não sobre o total da NF. Suba o ERP · Pedidos Marketplace que cubra {{ comp|mesano }} para fechar a conta.</div>
@@ -31,7 +31,7 @@
 <div class="bloco">
   <h2>Comissão por faixa de categoria <span class="qtd">{{ s.faixas|length }} faixas · {{ comp|mesano }}</span></h2>
   <div class="rol fit"><table data-sem-ordenar>
-    <thead><tr><th>Faixa cobrada</th><th>= negociada</th><th class="n">Pedidos</th><th class="n">Base</th><th class="n">% da base</th><th class="n">Comissão real</th><th class="n">Pelo cadastro</th><th class="n">Desvio de cadastro</th></tr></thead>
+    <thead><tr><th>Faixa cobrada</th><th>= negociada</th><th class="n">Pedidos</th><th class="n">Base</th><th class="n">% da base</th><th class="n">Comissão real</th><th class="n">Pelo cadastro (10,5%)</th><th class="n">Rebate</th></tr></thead>
     <tbody>
     {% for k, f in s.faixas.items() %}
     <tr class="{{ 'linha-alerta' if f.desvio|abs > 200 }}">
@@ -44,7 +44,7 @@
     <tr class="linha-total"><td><b>Total</b></td><td></td><td class="n"><b>{{ s.pedidos }}</b></td><td class="n"><b>{{ s.base|brl }}</b></td><td class="n"><b>100%</b></td>
       <td class="n"><b>{{ s.com_real|brl }}</b></td><td class="n"><b>{{ s.com_sistema|brl }}</b></td><td class="n"><b>{{ s.desvio_cadastro|brl }}</b></td></tr>
     </tbody></table></div>
-  <div class="nota">Cada faixa é a <b>comissão negociada da categoria + 1,5% de taxa por pedido</b>, cobrada sobre <b>produto − desconto promocional + frete</b>. A faixa não vem escrita no relatório: o PLUTOS a <b>mede</b> pedido a pedido e só aceita quando fecha ao centavo. Desvio alto numa faixa = cadastro único de {{ s.com_sistema_pct|brl(2) }}% aplicado a uma categoria que paga menos.</div>
+  <div class="nota">Cada faixa é a <b>comissão negociada da categoria + 1,5% de taxa por pedido</b>, cobrada sobre <b>produto − desconto promocional + frete</b>. A faixa não vem escrita no relatório: o PLUTOS a <b>mede</b> pedido a pedido e só aceita quando fecha ao centavo. A coluna <b>Rebate</b> é a diferença para o cadastro de {{ s.com_sistema_pct|brl(2) }}%: onde ela é alta, a categoria paga bem menos do que o sistema prevê — é ali que o ORION está calculando custo a mais.</div>
 </div>
 
 <div class="bloco">
@@ -72,8 +72,8 @@
     <li><b>Arquivo:</b> TRANSAÇÕES do Seller Central (Pagamentos → Todas as transações). Vem <b>1 linha por transação</b>, não por pedido, e os arquivos se sobrepõem — a base acumula transação a transação e monta o pedido, então o mesmo ID entra <b>uma vez só</b>.</li>
     <li><b>Base da comissão:</b> produto − desconto promocional + frete (o "Outros" do relatório).</li>
     <li><b>Comissão real:</b> a coluna "Tarifas da Amazon".</li>
-    <li><b>Rebate de comissão</b> = faixa da categoria × base − comissão cobrada. Só pega <b>erro de cobrança da Amazon</b>.</li>
-    <li><b>Desvio de cadastro</b> = cadastro × base − faixa × base. Não é rebate: é o sistema prevendo comissão errada onde a categoria paga menos.</li>
+    <li><b>Rebate de comissão</b> = comissão do sistema (<b>10,5% = 9% + 1,5% de taxa</b>, sobre o total do pedido na NF) <b>−</b> a coluna <b>Tarifas da Amazon</b> (comissão + taxa). É a mesma régua dos outros canais.</li>
+    <li><b>Abertura por categoria:</b> o PLUTOS mede a faixa que a Amazon aplicou em cada pedido e mostra quanto do rebate vem de <b>categoria com comissão menor</b> e quanto vem de <b>cobrança fora da faixa</b>. Não muda o rebate — serve para o ORION e para a negociação.</li>
     <li><b>Fora do rebate:</b> pedidos com <b>reembolso</b> (devolução) e as <b>Tarifas de serviço</b> (publicidade).</li>
   </ul>
 </div>
