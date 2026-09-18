@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block conteudo %}
+{% if not tem %}
+<div class="aviso"><b>Sem a Planilha 2 do Magalu.</b> Suba o zip <b>MagazineLuiza_Vendas_…</b> em <a href="{{ url_for('arquivos', mes=comp) }}">Arquivos</a>, no box Magazine Luiza (Planilha 2 · Vendas no período). Ele traz os dois csv — pedidos e pacotes.</div>
+{% elif not s.pacotes %}
+<div class="aviso"><b>Nenhum pacote Fulfillment em {{ comp|mesano }}.</b> A Planilha 2 que está aqui cobre: {{ comps|join(', ') }}.</div>
+{% else %}
+<div class="kpis cinco">
+  <div class="kpi crit"><span class="l">Custo do frete Full</span><span class="v">R$ {{ s.frete|brl(0) }}</span><span class="o">{{ s.pct|brl(2) }}% da venda Full (R$ {{ s.venda|brl(0) }})</span></div>
+  <div class="kpi preto"><span class="l">Pacotes Full</span><span class="v">{{ s.pacotes }}</span><span class="o">{{ s.cancelados }} cancelados ficaram fora</span></div>
+  <div class="kpi ouro"><span class="l">Frete médio por pacote</span><span class="v">R$ {{ s.medio|brl(2) }}</span><span class="o">média dos {{ s.pacotes }} pacotes da competência</span></div>
+  <div class="kpi preto"><span class="l">Pacotes sem frete</span><span class="v">{{ s.sem_frete }}</span><span class="o">frete zero no relatório — retirada ou frete grátis do canal</span></div>
+  <div class="kpi bom"><span class="l">Venda Full</span><span class="v">R$ {{ s.venda|brl(0) }}</span><span class="o">valor total dos pacotes Fulfillment</span></div>
+</div>
+
+<div class="bloco">
+  <h2>Dia a dia · {{ comp|mesano }}</h2>
+  <div class="rol" style="max-height:44vh"><table class="cols-6">
+    <thead><tr><th>Dia</th><th class="n">Pacotes</th><th class="n">Venda Full</th><th class="n">Custo do frete</th><th class="n">Frete médio</th><th class="n">% da venda</th></tr></thead>
+    <tbody>
+    {% for d in s.por_dia %}
+    <tr><td>{{ d.dia|dia }}</td><td class="n">{{ d.pacotes }}</td><td class="n">{{ d.venda|brl(0) }}</td><td class="n"><b>{{ d.frete|brl }}</b></td><td class="n">{{ d.medio|brl(2) }}</td><td class="n">{{ d.pct|brl(2) }}%</td></tr>
+    {% endfor %}
+    <tr class="linha-total"><td><b>Total</b></td><td class="n"><b>{{ s.pacotes }}</b></td><td class="n"><b>{{ s.venda|brl(0) }}</b></td><td class="n"><b>{{ s.frete|brl }}</b></td><td class="n"><b>{{ s.medio|brl(2) }}</b></td><td class="n"><b>{{ s.pct|brl(2) }}%</b></td></tr>
+    </tbody></table></div>
+</div>
+
+<div class="bloco">
+  <h2>Por estado — onde o frete Full dói <span class="qtd">{{ s.por_uf|length }} UFs</span></h2>
+  <div class="rol" style="max-height:48vh"><table class="cols-6">
+    <thead><tr><th>UF</th><th class="n">Pacotes</th><th class="n">Venda Full</th><th class="n">Custo do frete</th><th class="n">Frete médio</th><th class="n">% da venda</th></tr></thead>
+    <tbody>
+    {% for u in s.por_uf %}
+    <tr><td>{{ u.uf }}</td><td class="n">{{ u.pacotes }}</td><td class="n">{{ u.venda|brl(0) }}</td><td class="n"><b>{{ u.frete|brl }}</b></td><td class="n">{{ u.medio|brl(2) }}</td><td class="n">{{ u.pct|brl(2) }}%</td></tr>
+    {% endfor %}
+    </tbody></table></div>
+  <div class="nota">Fonte: Planilha 2 · <b>relatorio_vendas_pacotes</b>, coluna "Frete total do pacote", só Modalidade de entrega = <b>Magalu entregas - Fulfillment</b>, sem os pacotes cancelados.{% if ult %} Última leitura: {{ ult.nome }} em {{ ult.quando[:10]|dia }} por {{ ult.quem }}.{% endif %}</div>
+</div>
+{% endif %}
+{% endblock %}
