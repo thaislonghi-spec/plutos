@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<div class="bloco">
+  <h2>Empresa e regras editáveis</h2>
+  <form method="post" class="filtros" style="gap:14px;align-items:flex-end">
+    <input type="hidden" name="acao" value="geral">
+    <label style="font-size:12px;color:var(--tinta3)">Empresa<br><input name="empresa" value="{{ PARAM.empresa }}" class="obs" {{ '' if PODE.parametros else 'disabled' }}></label>
+    <label style="font-size:12px;color:var(--tinta3)" data-tip="Diferença de comissão (sistema − cobrada) abaixo disso é arredondamento, não rebate">Tolerância da diferença de comissão (R$)<br><input name="tolerancia" value="{{ PARAM.tolerancia_comissao|brl }}" class="val" {{ '' if PODE.parametros else 'disabled' }}></label>
+    <label style="font-size:12px;color:var(--tinta3)" data-tip="Madeira Madeira: o ERP traz 21% = 17% de comissão + 4% de taxa financeira (antecipação). O Linha a linha separa as duas.">Tx financeira Madeira Madeira (%)<br><input name="tx_madeira" value="{{ (PARAM.tx_financeira or {}).get('madeira', 4)|brl(1) }}" class="val" {{ '' if PODE.parametros else 'disabled' }}></label>
+    <label style="font-size:12px;color:var(--tinta3)" data-tip="Webcontinental: o ERP traz 20% = 19% de comissão + 1% de taxas financeiras. O Linha a linha separa as duas.">Tx financeira Webcontinental (%)<br><input name="tx_webcont" value="{{ (PARAM.tx_financeira or {}).get('webcont', 1)|brl(1) }}" class="val" {{ '' if PODE.parametros else 'disabled' }}></label>
+    {% if PODE.parametros %}<button class="bt pri" type="submit">Gravar e recalcular</button>{% endif %}
+  </form>
+  <div class="nota">As REGRAS ficam dentro do PLUTOS; aqui só o que muda de empresa para empresa.</div>
+</div>
+
+<form method="post" class="bloco" id="comissoes">
+  <input type="hidden" name="acao" value="comissoes"><input type="hidden" name="n" value="{{ PARAM.comissoes|length }}">
+  <div class="cab-acoes"><h2 style="margin:0">Comissão cadastrada por canal <span class="qtd">{{ PARAM.comissoes|length }}</span></h2>
+    {% if PODE.parametros %}<button class="bt pri" type="submit">Gravar tabela</button>{% endif %}</div>
+  <div class="rol fit"><table class="acesso comis" data-sem-ordenar>
+    <thead><tr><th>Código</th><th>Canal</th><th>Gestor</th><th class="n">Comissão %</th><th class="n">Taxa extra R$</th><th>Tipo</th>{% if PODE.parametros %}<th>Tirar</th>{% endif %}</tr></thead>
+    <tbody>
+    {% for l in PARAM.comissoes %}{% set i = loop.index0 %}
+    <tr>
+      {% if PODE.parametros %}
+      <td><input class="cel n" name="codigo_{{ i }}" value="{{ l.codigo }}"></td>
+      <td><input class="cel" name="canal_{{ i }}" value="{{ l.canal }}"></td>
+      <td><input class="cel" name="gestor_{{ i }}" value="{{ l.gestor }}"></td>
+      <td class="n"><input class="cel n" name="comissao_{{ i }}" value="{{ l.comissao }}" data-tip="Em %. Dupla como no Meli: 16,5/11,5 (Premium/Clássico)"></td>
+      <td class="n"><input class="cel n" name="taxa_{{ i }}" value="{{ l.taxa }}" data-tip="R$ por item, quando existir"></td>
+      <td><select name="tipo_{{ i }}" class="cel">{% for t in ['GMV','Produto','-'] %}<option {{ 'selected' if l.tipo == t }}>{{ t }}</option>{% endfor %}</select></td>
+      <td><input type="checkbox" name="del_{{ i }}" value="1"></td>
+      {% else %}
+      <td class="n">{{ l.codigo }}</td><td>{{ l.canal }}</td><td>{{ l.gestor }}</td><td class="n">{{ l.comissao }}%</td><td class="n">{{ l.taxa or '—' }}</td><td>{{ l.tipo }}</td>
+      {% endif %}
+    </tr>
+    {% endfor %}
+    {% if PODE.parametros %}
+    <tr class="nova"><td><input class="cel n" name="codigo_novo" placeholder="cód."></td><td><input class="cel" name="canal_novo" placeholder="novo canal"></td><td><input class="cel" name="gestor_novo"></td><td><input class="cel n" name="comissao_novo" placeholder="%"></td><td><input class="cel n" name="taxa_novo" placeholder="R$"></td><td><select name="tipo_novo" class="cel"><option>GMV</option><option>Produto</option><option>-</option></select></td><td></td></tr>
+    {% endif %}
+    </tbody></table></div>
+  <div class="nota">Comissão em %, sobre <b>GMV</b> (produto + frete) ou sobre <b>Produto</b>; taxa extra em R$ por item. No Mercado Livre a comissão é dupla: Premium / Clássico. {% if PARAM.comissoes_quando %}Última gravação {{ PARAM.comissoes_quando|quando }} por {{ PARAM.comissoes_quem }}.{% endif %}</div>
+</form>
+{% if PODE.parametros %}
+<div class="bloco">
+  <h2>Subir a tabela por planilha</h2>
+  <form method="post" enctype="multipart/form-data" class="upl" style="margin:0">
+    <input type="hidden" name="acao" value="comissoes_arquivo">
+    <input type="file" name="arquivo" accept=".xlsx,.xls,.csv" required>
+    <button class="bt sec" type="submit">Substituir a tabela pela planilha</button>
+    <span class="nota" style="margin:0">colunas: Código · Canal · Gestor · Comissão · Taxa Extra · Tipo (a mesma da casa)</span>
+  </form>
+</div>
+{% endif %}
+
+{% if PODE.parametros %}
+<div class="bloco">
+  <h2>Prazos de envio ao Full (dias)</h2>
+  <div class="nota" style="margin:0 0 10px">O que a sugestão de envio precisa esperar até a peça ficar <b>vendável no CD</b>:
+  <b>manuseio</b> (o nosso tempo de separar, embalar e faturar) + <b>transferência</b> (o trânsito até o CD do canal).
+  A sugestão soma os dois à cobertura desejada — sem isso a reposição chega depois da ruptura.</div>
+  <form method="post" class="upl" style="margin:0;display:block">
+    <input type="hidden" name="acao" value="prazos_full">
+    <div class="rol fit"><table data-sem-ordenar>
+      <thead><tr><th>CD do Full</th><th class="n">Manuseio (nosso)</th><th class="n">Transferência</th><th class="n">Total</th></tr></thead>
+      <tbody>
+      {% for cd in CDS_FULL %}
+      {% set pz = PARAM.prazos_full.get(cd) or {} %}
+      <tr><td>{{ cd }}</td>
+        <td class="n"><input type="number" min="0" max="180" style="width:80px;text-align:right" name="man_{{ cd|replace(' ', '__') }}" value="{{ pz.manuseio if pz.manuseio is defined else '' }}" placeholder="{{ PARAM.prazo_full_padrao.manuseio }}"></td>
+        <td class="n"><input type="number" min="0" max="180" style="width:80px;text-align:right" name="tra_{{ cd|replace(' ', '__') }}" value="{{ pz.transferencia if pz.transferencia is defined else '' }}" placeholder="{{ PARAM.prazo_full_padrao.transferencia }}"></td>
+        <td class="n"><b>{{ (pz.manuseio or 0) + (pz.transferencia or 0) }} d</b></td></tr>
+      {% else %}
+      <tr><td colspan="4" class="vazio">Nenhum CD ainda — suba as Cobranças do Fulfillment no box Magazine Luiza.</td></tr>
+      {% endfor %}
+      <tr class="linha-total"><td><b>Padrão (CD sem prazo próprio)</b></td>
+        <td class="n"><input type="number" min="0" max="180" style="width:80px;text-align:right" name="man_padrao" value="{{ PARAM.prazo_full_padrao.manuseio }}"></td>
+        <td class="n"><input type="number" min="0" max="180" style="width:80px;text-align:right" name="tra_padrao" value="{{ PARAM.prazo_full_padrao.transferencia }}"></td>
+        <td class="n"><b>{{ PARAM.prazo_full_padrao.manuseio + PARAM.prazo_full_padrao.transferencia }} d</b></td></tr>
+      </tbody></table></div>
+    <button class="bt sec" type="submit" style="margin-top:10px">Gravar prazos</button>
+    {% if PARAM.prazos_full_quando %}<div class="cad-st ok">gravado {{ PARAM.prazos_full_quando|quando }} por {{ PARAM.prazos_full_quem }}</div>{% endif %}
+  </form>
+</div>
+{% endif %}
+
+{% if PODE.parametros %}
+<div class="dois-cad">
+<div class="bloco">
+  <h2>Cadastro de SKUs (descrição)</h2>
+  <form method="post" enctype="multipart/form-data" class="upl" style="margin:0">
+    <input type="hidden" name="acao" value="descricoes_arquivo">
+    <input type="file" name="arquivo" accept=".xlsx,.xls,.csv" required>
+    <button class="bt sec" type="submit">Subir / atualizar</button>
+  </form>
+  <div class="nota">Export do Anymarket "Cadastros … Skus x Descrição": chave = <b>CÓDIGO FORNECEDOR / SKU INTERNO</b>, descrição = <b>TÍTULO SKU</b>. Vale para todos os canais.</div>
+  {% if DESC.anymarket %}<div class="cad-st ok">{{ DESC.anymarket.n }} SKUs · {{ DESC.anymarket.arquivo }} · por {{ DESC.anymarket.quem }}</div><div class="ok-canto"><span class="pill-ok">ok · {{ DESC.anymarket.quando|quando }}</span></div>{% else %}<div class="ok-canto"><span class="pill-nao">sem cadastro</span></div>{% endif %}
+</div>
+<div class="bloco">
+  <h2>Tabela de Custos MUL (peso oficial)</h2>
+  <form method="post" enctype="multipart/form-data" class="upl" style="margin:0">
+    <input type="hidden" name="acao" value="custos_arquivo">
+    <input type="file" name="arquivo" accept=".xlsx,.xls,.csv" required>
+    <button class="bt sec" type="submit">Subir / atualizar</button>
+  </form>
+  <div class="nota">Planilha "CustoProduto_MUL…": <b>MODELO · Descricao · Peso · Cubagem · CUSTO TOTAL</b>. O <b>peso daqui é o oficial</b> (R$/kg do Coletas); o do Anymarket só vale para SKU sem peso aqui.</div>
+  {% if DESC.custos %}<div class="cad-st ok">{{ DESC.custos.n }} SKUs · {{ DESC.custos.arquivo }} · por {{ DESC.custos.quem }}</div><div class="ok-canto"><span class="pill-ok">ok · {{ DESC.custos.quando|quando }}</span></div>{% else %}<div class="ok-canto"><span class="pill-nao">sem tabela de custos</span></div>{% endif %}
+</div>
+</div>
+{% endif %}
+
+<div class="bloco">
+  <h2>As três formas de rebate (regra da casa)</h2>
+  <div class="rol fit"><table data-sem-ordenar>
+    <thead><tr><th>Forma</th><th>O que é</th><th>Prova</th></tr></thead>
+    <tbody>
+      <tr class="linha-forma"><td>1 · R$</td><td>volta em dinheiro na conta</td><td>extrato / export do canal</td></tr>
+      <tr class="linha-forma"><td>2 · Comissão</td><td>desconto no % de comissão — não volta dinheiro, paga-se menos</td><td>comissão do sistema × comissão cobrada</td></tr>
+      <tr class="linha-forma"><td>3 · Frete</td><td>o canal ajuda a pagar o frete: devolve, não cobra, ou encontro de contas</td><td>extrato / ausência de cobrança / conciliação</td></tr>
+    </tbody></table></div>
+</div>
+{% endblock %}

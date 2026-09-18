@@ -1,0 +1,1288 @@
+
+/* OS CINZAS DE TEXTO PUXADOS PARA O PRETO (03/09/2026).
+   O sistema é lido em telas de sala, com luz por cima, e o cinza claro dos
+   rótulos ("PEDIDOS", "produto R$ 194.137 + frete") sumia. Os três níveis de
+   tinta continuam existindo - a hierarquia é o que faz a tela ser lida em
+   ordem -, só que agora todos mais escuros:
+     tinta2  #54575A -> #2F3236   (subtítulo, texto secundário)
+     tinta3  #83878B -> #585C61   (rótulo, observação, nota)
+   O contraste sobre o fundo #F3F3F1 sai de 4,0:1 para 7,4:1 no tinta3. */
+:root{--fundo:#F3F3F1;--sup:#FFF;--sup2:#FAFAF9;--linha:#E4E4E1;--linha2:#C4C4C0;
+ --tinta:#131315;--tinta2:#2F3236;--tinta3:#585C61;--bom:#15794F;--crit:#CC2E23;
+ --aten:#7A5507;--marca:#CC2E23}
+*{box-sizing:border-box}
+body{margin:0;background:var(--fundo);color:var(--tinta);
+ font-family:Archivo,-apple-system,"Segoe UI",sans-serif;font-size:15px;line-height:1.55}
+.mono,.n{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+/* ---------------------------------------------------------------------
+   LAYOUT COM MENU A ESQUERDA (padrao HERCULES)
+   A barra preta em cima virou coluna fixa a esquerda: a navegacao fica
+   sempre visivel e o conteudo ganha a largura inteira da tela.
+   --------------------------------------------------------------------- */
+.app{display:flex;min-height:100vh;align-items:stretch}
+.lateral{width:255px;flex:0 0 255px;background:#0A0A0B;color:#E2E4E6;
+ display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto}
+/* A logo fecha com a MESMA linha vermelha da faixa do topo e na MESMA altura:
+   a linha atravessa a tela inteira e o menu comeca embaixo dela. */
+.marca-lateral{display:flex;align-items:center;min-height:78px;padding:0 20px;
+ border-bottom:3px solid var(--marca);flex:0 0 auto}
+.marca-lateral .logo-tropa{height:30px}
+/* coluna toda preta; cada item e um botao. O aberto fica VERMELHO, igual as
+   abas pretas que existiam no topo antes. */
+.menu{display:flex;flex-direction:column;padding:10px 10px 0;gap:4px}
+.menu .item{display:block;background:#18181B;color:#E4E5E6;text-decoration:none;
+ font:600 13px Archivo,sans-serif;padding:10px 13px;border-radius:2px;white-space:nowrap;
+ overflow:hidden;text-overflow:ellipsis;transition:background .12s,color .12s}
+.menu .item:hover{background:#2C2C2E;color:#fff}
+.menu .item.on{background:var(--marca);color:#fff}
+.menu .item.on:hover{background:var(--marca)}
+/* separa o que a equipe ve do que so a direcao ve, sem escrever "Direção" */
+.menu .divide{height:1px;background:#2C2C2E;margin:14px 4px 10px}
+.rodape-menu{padding-bottom:16px;border-top:1px solid #2C2C2E;padding-top:8px}
+/* Arquivos, Conta e Sair sao UM grupo, com o mesmo respiro de sempre entre
+   eles. O risco que separava Arquivos dos outros dois picava o rodape em dois
+   pedacos pequenos e so fazia barulho. */
+.rodape-menu .saindo{color:#9DA0A3}
+.conteudo{flex:1;min-width:0;display:flex;flex-direction:column}
+/* faixa preta emendando com a coluna da esquerda: as duas leem como uma peca so */
+.topo-tela{display:flex;align-items:center;justify-content:space-between;gap:16px;
+ flex-wrap:wrap;background:#0A0A0B;padding:12px clamp(14px,2vw,26px);min-height:78px;
+ border-bottom:3px solid var(--marca)}
+.topo-tela h1{margin:0;font-size:20px;font-weight:600;color:#F2F2F0;letter-spacing:-.01em}
+.topo-tela .sub{font-size:12.5px;color:#A9ACAF;margin-top:1px}
+.acoes-topo{display:flex;gap:7px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+/* os botoes de janela agora vivem sobre o preto */
+.topo-tela .janela{background:#18181B;border-color:#2C2C2E;color:#E2E4E6}
+.topo-tela .janela:hover{background:#2C2C2E;border-color:#3A3A3E;color:#fff}
+.topo-tela .janela.on{background:var(--marca);border-color:var(--marca);color:#fff}
+@media (max-width:900px){
+  .app{flex-direction:column}
+  .lateral{width:100%;flex:none;height:auto;position:static}
+  .menu{flex-direction:row;flex-wrap:wrap;padding:8px}
+  .menu .divide{display:none}
+  .rodape-menu{margin-top:0;border-top:none}
+}
+
+.faixa{background:#0A0A0B;border-bottom:3px solid var(--marca)}
+.faixa .dentro,.wrap{max-width:1480px;margin:0 auto;padding:0 clamp(14px,2.2vw,28px)}
+.faixa .dentro{padding-top:14px;padding-bottom:14px;display:flex;flex-wrap:wrap;
+ align-items:center;gap:12px 24px}
+.logo-tropa{height:34px;display:block} .logo-multi{height:18px;display:block}
+.logo-casa{height:42px;display:block}
+.divisor{width:1px;align-self:stretch;background:#2C2C2E;min-height:30px}
+h1{margin:0;font-size:15px;font-weight:600;color:#F2F2F0;letter-spacing:.02em}
+h1 i{font-style:normal;color:#A9ACAF}
+.papel{margin-left:auto;display:flex;gap:0;border:1px solid #2C2C2E;border-radius:2px;overflow:hidden}
+.papel button{background:none;border:none;color:#A9ACAF;font:600 11px Archivo,sans-serif;
+ letter-spacing:.1em;text-transform:uppercase;padding:7px 15px;cursor:pointer}
+.papel button.on{background:var(--marca);color:#fff}
+/* A barra de abas do topo saiu (virou menu lateral). A regra generica "nav"
+   pintava fundo BRANCO e vazava para o <nav class="menu"> da lateral: a coluna
+   preta ficava com uma faixa branca no meio e o texto sumia. */
+/* o conteudo agora usa a largura toda, ao lado do menu */
+/* o rodape com as logos saiu: a ultima caixa fecha na mesma altura do
+   'Sair' da coluna, sem a faixa vazia que esticava a tela */
+.wrap{max-width:none;margin:0;padding:16px clamp(14px,2vw,26px) 18px}
+section{display:none} section.on{display:block}
+h2{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--tinta3);
+ font-weight:600;margin:0 0 10px}
+.bloco{background:var(--sup);border:1px solid var(--linha);padding:16px 18px;
+ box-shadow:0 1px 2px rgba(19,19,21,.05);margin-bottom:10px}
+.wrap>.bloco:last-child,.wrap>div:last-child{margin-bottom:0}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;margin-bottom:10px}
+.kpi{background:var(--sup);border:1px solid var(--linha);border-left:3px solid var(--c);
+ padding:12px 15px;box-shadow:0 1px 2px rgba(19,19,21,.05)}
+.kpi .l{font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:var(--tinta3);display:block}
+.kpi .v{font-family:"IBM Plex Mono",monospace;font-size:24px;font-weight:600;color:var(--c);
+ letter-spacing:-.02em;display:block;line-height:1.2;white-space:nowrap}
+.kpi .o{font-size:11px;color:var(--tinta3);display:block}
+/* Oito boxes numa fileira so ficavam espremidos, o valor quebrava em duas
+   linhas e sobrava buraco embaixo dos menores. Cinco em cima, tres embaixo,
+   todos do mesmo tamanho e o valor sempre numa linha so. */
+.kpis.cinco{grid-template-columns:repeat(5,minmax(0,1fr));align-items:stretch;
+ grid-auto-rows:1fr}
+.kpis.cinco .kpi{display:flex;flex-direction:column;justify-content:flex-start;min-width:0}
+.kpis.cinco .kpi .v{font-size:clamp(16px,1.32vw,22px)}
+.kpis.cinco .kpi .o{margin-top:auto;padding-top:3px}
+@media (max-width:1250px){ .kpis.cinco{grid-template-columns:repeat(3,minmax(0,1fr))} }
+@media (max-width:820px){ .kpis.cinco{grid-template-columns:repeat(2,minmax(0,1fr))} }
+/* Os seis boxes ficavam de tamanhos diferentes porque cada um tinha um numero
+   de arquivos dentro. Agora: colunas iguais, altura igual, a lista de arquivos
+   rola dentro do box e o botao fica sempre colado no rodape. */
+.arqs{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;
+ align-items:stretch}
+.arq{border:1px solid var(--linha2);background:var(--sup2);padding:12px 14px;
+ min-height:250px}
+/* com um arquivo por dia a lista fica longa: mostra mais antes de rolar,
+   e todos os boxes crescem junto para continuarem do mesmo tamanho */
+.arq .lista-pecas{max-height:158px;overflow-y:auto;margin-top:4px}
+.arq-top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.arq-top b{font-size:13.5px}
+.ok{font-size:9px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;
+ background:var(--bom);color:#fff;padding:2px 7px;border-radius:2px}
+.arq-sub{font-size:12px;color:var(--tinta2);margin-top:2px}
+.arq-n{font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--tinta3);margin-top:5px}
+.solta{border:2px dashed var(--linha2);padding:26px;text-align:center;color:var(--tinta3);
+ font-size:13.5px;margin-top:10px;background:var(--sup2)}
+.passos{display:flex;flex-direction:column;gap:1px;background:var(--linha);border:1px solid var(--linha)}
+.passo{background:var(--sup);padding:12px 16px;display:grid;grid-template-columns:26px 1fr auto;
+ gap:0 14px;align-items:center}
+.passo .n{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--marca);font-weight:600}
+.passo .t{font-size:13.5px} .passo .t small{display:block;color:var(--tinta3);font-size:11.5px}
+.passo .s{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;
+ padding:2px 8px;border-radius:2px}
+.s.verde{background:rgba(21,121,79,.12);color:var(--bom)}
+.s.amarelo{background:rgba(143,100,9,.14);color:var(--aten)}
+.s.vermelho{background:rgba(204,46,35,.12);color:var(--crit)}
+.acoes{display:flex;gap:9px;margin-top:12px;flex-wrap:wrap}
+.bt{border:none;padding:11px 20px;font:600 13px Archivo,sans-serif;cursor:pointer;border-radius:2px}
+.bt.pri{background:var(--marca);color:#fff}
+.bt.sec{background:var(--sup);color:var(--tinta);border:1px solid var(--linha2)}
+.filtros{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+select,input[type=search]{background:var(--sup);color:var(--tinta);border:1px solid var(--linha2);
+ padding:6px 10px;font:500 12.5px Archivo,sans-serif;border-radius:2px;min-width:160px}
+input[type=search]{min-width:250px}
+.conta{margin-left:auto;font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--tinta3)}
+.rol{overflow:auto;border:1px solid var(--linha);max-height:66vh;background:var(--sup)}
+table{border-collapse:collapse;width:100%;min-width:900px;font-size:12.5px}
+th,td{padding:7px 11px;text-align:left;border-bottom:1px solid var(--linha);white-space:nowrap}
+thead th{position:sticky;top:0;background:var(--sup2);font-size:9.5px;letter-spacing:.12em;
+ text-transform:uppercase;color:var(--tinta3);font-weight:600;border-bottom:1px solid var(--linha2);z-index:2}
+tbody tr:hover{background:var(--sup2)}
+td.n,th.n{text-align:right;font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums}
+td.neg{color:var(--crit)} td.pos{color:var(--bom)} td.c{font-weight:600}
+td.desc{max-width:290px;overflow:hidden;text-overflow:ellipsis;color:var(--tinta2)}
+.tag{font-size:9px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;
+ padding:2px 7px;border-radius:2px}
+.tag.prev{background:rgba(143,100,9,.16);color:var(--aten)}
+.tag.real{background:var(--sup2);color:var(--tinta3);border:1px solid var(--linha2)}
+.nota{font-size:12px;color:var(--tinta3);margin-top:9px}
+.aviso{background:#FFF6F5;border:1px solid rgba(204,46,35,.3);border-left:3px solid var(--marca);
+ padding:12px 16px;font-size:13px;color:var(--tinta2);margin-bottom:12px}
+.aviso b{color:var(--tinta)}
+/* o aviso VERDE. Chamava-se ".aviso ok" e herdava do selo ".ok" (o cracha
+   verde de "recebido"): o texto inteiro saia em CAIXA ALTA de 9px com o
+   espacamento do cracha. Sexta colisao de nome do sistema - por isso o nome
+   proprio aqui em vez de mais um ".ok". */
+.aviso.bom{background:#F1F8F4;border-color:rgba(21,121,79,.3);border-left-color:var(--bom)}
+.rodape{background:#0A0A0B;border-top:3px solid var(--marca);margin-top:30px}
+.rodape .dentro{max-width:1480px;margin:0 auto;padding:18px clamp(14px,2.2vw,28px);
+ display:flex;flex-wrap:wrap;align-items:center;gap:14px 28px}
+.rodape .selo{margin-left:auto;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#6F7276}
+.usuario{display:flex;align-items:center;gap:9px}
+.usuario span{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:#9DA0A3}
+.usuario select{background:#15181B;color:#F2F2F0;border:1px solid #2C2C2E;padding:7px 11px;
+ font:600 12px Archivo,sans-serif;border-radius:2px;min-width:0}
+.usuario select:focus-visible{outline:2px solid var(--marca);outline-offset:1px}
+.quando{margin-left:auto;text-align:right;font-size:11px;color:#A9ACAF;line-height:1.6}
+.quando b{color:#E6E6E4;font-weight:600;font-family:"IBM Plex Mono",monospace}
+.quando #quem{color:var(--marca);font-weight:600;letter-spacing:.06em;font-size:10px;
+ text-transform:uppercase}
+.arquivos-sel{margin-top:10px;font-size:12.5px;color:var(--tinta2)}
+.arquivos-sel div{font-family:"IBM Plex Mono",monospace;font-size:11.5px;padding:3px 0;
+ border-bottom:1px solid var(--linha)}
+.equipe-off{display:none}
+body.equipe .so-direcao{display:none!important}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+#dica{position:fixed;pointer-events:none;opacity:0;transition:opacity .12s;z-index:99;
+ background:#0A0A0B;color:#F2F2F0;font:500 11.5px Archivo,sans-serif;padding:6px 10px;
+ border-radius:2px;max-width:280px;line-height:1.45;box-shadow:0 4px 14px rgba(0,0,0,.25)}
+
+/* barra de cima: acao e conta ficam aqui, nao na primeira tela */
+.usuario .topo{padding:7px 15px;font-size:12.5px;line-height:1.2}
+.usuario .topo.sec{background:#fff;color:#131315;border:none}
+.usuario .sairzinho{color:#A9ACAF;font-size:12px;text-decoration:none;padding:0 2px}
+.usuario .sairzinho:hover{color:#E6E6E4}
+.conta-linha{display:grid;grid-template-columns:1fr auto auto;gap:14px;align-items:center;
+ padding:11px 0;border-bottom:1px solid var(--linha)}
+.conta-linha:last-child{border-bottom:none}
+.conta-linha b{font-size:14px}
+.papelzinho{font-size:9px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;
+ padding:2px 8px;border-radius:2px;background:var(--sup2);color:var(--tinta3);border:1px solid var(--linha2)}
+.papelzinho.dir{background:var(--tinta);color:#fff;border-color:var(--tinta)}
+
+/* cabecalho clicavel: ordena a tabela */
+thead th.ord{cursor:pointer;user-select:none;position:relative;padding-right:20px}
+thead th.ord:hover{color:var(--tinta)}
+thead th.ord::after{content:"⇅";position:absolute;right:7px;opacity:.35;font-size:10px}
+thead th.ord.asc::after{content:"▲";opacity:1;color:var(--marca);font-size:8px;top:11px}
+thead th.ord.desc::after{content:"▼";opacity:1;color:var(--marca);font-size:8px;top:11px}
+
+/* exportar a tabela - mesmo tamanho dos botoes de pagina, em vermelho */
+.bt-excel{display:inline-block;background:var(--marca);color:#fff;text-decoration:none;
+ font:600 12.5px Archivo,sans-serif;padding:5px 15px;border-radius:2px;border:1px solid var(--marca)}
+.bt-excel:hover{background:#B12820;border-color:#B12820}
+.rodape-tabela{display:flex;gap:6px;align-items:center;margin-top:12px;font-size:12.5px;
+ color:var(--tinta3);flex-wrap:wrap}
+.rodape-tabela .direita{margin-left:auto}
+
+/* cada box tem o proprio botao: o sistema nao precisa adivinhar pelo nome */
+.arq{display:flex;flex-direction:column}
+.arq .peca{display:flex;gap:8px;align-items:flex-start;justify-content:space-between;
+ padding:4px 0;border-bottom:1px dashed var(--linha)}
+.arq .peca:last-of-type{border-bottom:none}
+.arq .peca .x{background:none;border:none;color:var(--tinta3);font-size:17px;line-height:1;
+ cursor:pointer;padding:0 3px}
+.arq .peca .x:hover{color:var(--crit)}
+.arq .incluir{margin-top:auto;padding-top:9px}
+.arq .incluir label{display:inline-block;background:var(--tinta);color:#fff;cursor:pointer;
+ font:600 11.5px Archivo,sans-serif;padding:6px 13px;border-radius:2px}
+.arq .incluir label:hover{background:var(--marca)}
+/* estados do envio: nao pode existir botao parado sem o usuario saber por que */
+.arq .incluir.enviando label{background:var(--tinta3);cursor:progress}
+.arq .incluir.falhou   label{background:var(--crit)}
+.arq .incluir.enviando label:hover{background:var(--tinta3)}
+
+/* box dos itens mais vendidos: fechado por padrao, abre no clique */
+.caixa-itens{border:1px solid var(--linha2);background:var(--sup2);margin-bottom:10px}
+.caixa-itens>summary{cursor:pointer;padding:10px 14px;font:600 12px Archivo,sans-serif;
+ letter-spacing:.06em;text-transform:uppercase;color:var(--tinta2);list-style:none;
+ display:flex;justify-content:space-between;gap:10px;align-items:center}
+.caixa-itens>summary::-webkit-details-marker{display:none}
+.caixa-itens>summary:hover{color:var(--marca)}
+.caixa-itens>summary span{font-size:10.5px;letter-spacing:.1em;color:var(--tinta3);
+ text-transform:none;font-weight:500}
+.caixa-itens[open]>summary{border-bottom:1px solid var(--linha)}
+.caixa-itens[open]>summary span::after{content:" · fechar"}
+.caixa-itens>.rol,.caixa-itens>.nota{padding:0 14px}
+.caixa-itens>.nota{padding-bottom:11px}
+
+/* trocar a janela do radar sem recalcular */
+.janelas{display:flex;gap:5px;flex-wrap:wrap}
+.janela{text-decoration:none;background:var(--sup);border:1px solid var(--linha2);
+ color:var(--tinta2);font:600 11.5px Archivo,sans-serif;padding:7px 12px;border-radius:3px;
+ white-space:nowrap}
+.janela:hover{border-color:var(--tinta3);color:var(--tinta)}
+.janela.on{background:var(--marca);border-color:var(--marca);color:#fff}
+
+/* clicar na linha abre a composicao da conta daquela venda */
+/* LINHA QUE ABRE ALGO: a mao do ponteiro e o unico aviso de que da para
+   clicar. Sem ela a linha parece morta e ninguem descobre que ha uma tela
+   inteira do outro lado. Vale para as duas formas: a classe .clicavel e o
+   data-abrir, que o script do rodape trata. */
+tr.clicavel,tr[data-abrir]{cursor:pointer}
+tr.clicavel:hover,tr[data-abrir]:hover{background:#FFF6F5}
+tr[data-abrir]:hover td:first-child{box-shadow:inset 3px 0 0 var(--marca)}
+tr.clicavel:hover .abrir-linha{color:var(--marca);border-bottom-color:var(--marca)}
+.abrir-linha{color:var(--tinta);border-bottom:1px dotted var(--tinta3);
+ font-family:"IBM Plex Mono",monospace}
+a.abrir-linha{text-decoration:none}
+a.abrir-linha:hover{color:var(--marca);border-bottom-color:var(--marca)}
+
+/* SKU sem custo virava lucro em silencio: agora grita em todas as telas */
+.alerta-grave{background:#FFF1EF;border:1px solid var(--crit);border-left:5px solid var(--crit);
+ padding:13px 17px;margin-bottom:14px;border-radius:2px;display:flex;flex-direction:column;gap:5px}
+.alerta-grave b{color:var(--crit)}
+.alerta-grave>span{font-size:13px;color:var(--tinta2);line-height:1.55}
+.alerta-grave>span b{color:var(--crit)}
+
+/* nome de arquivo longo estava vazando do retangulo */
+.arq-n,.arq .peca span{overflow-wrap:anywhere;word-break:break-word;min-width:0}
+.arq .peca span{flex:1}
+.arq .peca form{flex:0 0 auto}
+
+.arq .acoes-arq{margin-top:auto;padding-top:9px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.arq .acoes-arq .incluir{padding-top:0;margin-top:0}
+/* JÁ MANDEI ESTE HOJE. Pílula sólida no canto inferior direito do box, só
+   onde a resposta é SIM - o que falta é o box SEM ela. margin-left:auto joga
+   para a direita sem depender da ordem dos botões. */
+.arq .acoes-arq .pil-hoje{order:99;margin-left:auto;background:var(--marca);
+ color:#fff;font:700 11px Archivo,sans-serif;letter-spacing:.08em;
+ padding:5px 11px;border-radius:3px;cursor:help;line-height:1;
+ align-self:center}
+.limpar-tudo{background:none;border:none;color:var(--crit);cursor:pointer;
+ font:600 11.5px Archivo,sans-serif;text-decoration:underline;padding:0}
+.limpar-tudo:hover{color:#8E1F19}
+
+/* Regua de crescimento: barras divergentes, mesma linguagem do Radar.
+   O sinal nunca fica so na cor - a barra vai para um lado ou para o outro e o
+   rotulo traz + ou -, entao quem nao distingue verde de vermelho continua lendo. */
+.regua{width:100%;height:auto;display:block;overflow:visible}
+.gr .rot{font:500 11.5px Archivo,sans-serif;fill:var(--tinta2)}
+.gr .val{font:600 11px "IBM Plex Mono",monospace}
+.gr .eixo{stroke:var(--linha2);stroke-width:1}
+.gr .eixo-rot{font:500 10px Archivo,sans-serif;fill:var(--tinta3)}
+.gr .barra{transition:opacity .12s}
+.gr .barra:hover{opacity:.72;cursor:default}
+.bloco-regua{padding-bottom:6px}
+
+/* dois quadros lado a lado, do mesmo tamanho */
+.dois-blocos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;
+ align-items:stretch}
+.dois-blocos>.bloco{margin-bottom:10px;display:flex;flex-direction:column}
+.dois-blocos>.bloco>.rol{flex:1}
+@media (max-width:1100px){ .dois-blocos{grid-template-columns:1fr} }
+
+/* ---------------------------------------------------------------------
+   OS BOXES DE SINAL (topo da Evolucao)
+   Cada box e uma situacao que a base detectou sozinha. A cor e a tarja da
+   esquerda dizem a gravidade; o texto termina sempre numa acao, nunca so
+   no diagnostico.
+   --------------------------------------------------------------------- */
+.bloco-sinais h2{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.bloco-sinais h2 .quantos{font:500 11.5px "IBM Plex Mono",monospace;color:var(--tinta3);
+ letter-spacing:.02em;text-transform:none}
+.sinais{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));
+ gap:10px;grid-auto-rows:1fr;margin-top:12px}
+.sinal{display:flex;flex-direction:column;gap:5px;background:var(--sup2);
+ border:1px solid var(--linha);border-left:4px solid var(--tinta3);
+ padding:12px 14px 11px;border-radius:2px;min-width:0}
+.sinal .rot{font:700 10px Archivo,sans-serif;letter-spacing:.09em;
+ text-transform:uppercase;color:var(--tinta3)}
+.sinal .canal{font:600 13px Archivo,sans-serif;color:var(--tinta2);
+ white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sinal .valor{font:600 26px/1.05 "IBM Plex Mono",monospace;color:var(--tinta);
+ white-space:nowrap;letter-spacing:-.01em}
+.sinal .texto{font-size:12.5px;line-height:1.5;color:var(--tinta2);flex:1 1 auto}
+.sinal .acao{margin-top:2px;padding-top:8px;border-top:1px solid var(--linha);
+ font:600 11.5px Archivo,sans-serif;color:var(--tinta)}
+.sinal .acao::before{content:"→ ";color:var(--tinta3)}
+.sinal.crit{border-left-color:var(--crit);background:#FFF6F5;border-color:rgba(204,46,35,.22)}
+.sinal.crit .rot,.sinal.crit .valor{color:var(--crit)}
+.sinal.aten{border-left-color:var(--aten);background:#FFFBF2;border-color:rgba(143,100,9,.22)}
+.sinal.aten .rot,.sinal.aten .valor{color:var(--aten)}
+.sinal.bom{border-left-color:var(--bom);background:#F4FAF7;border-color:rgba(21,121,79,.22)}
+.sinal.bom .rot,.sinal.bom .valor{color:var(--bom)}
+.sinal.geral{background:var(--sup);border-style:solid}
+.sinal.geral .canal{color:var(--tinta)}
+@media (max-width:760px){.sinais{grid-template-columns:1fr}}
+.sinal .valor.longo{font-size:19px;letter-spacing:-.02em}
+
+/* filtro que aceita VARIAS medidas marcadas ao mesmo tempo */
+.janela.marcavel{display:inline-flex;align-items:center;gap:6px}
+.janela.marcavel .marca{font:700 11px "IBM Plex Mono",monospace;opacity:.55;
+ width:11px;text-align:center;flex:0 0 11px}
+.janela.marcavel.on .marca{opacity:1}
+/* tabela com mais de uma medida por mes: a borda separa os meses, nao as colunas */
+table.multi th.mes{border-left:2px solid var(--linha2);text-align:center}
+table.multi th.mes:first-of-type{border-left:none}
+table.multi tr.sub th{font-size:10.5px;font-weight:600;color:var(--tinta3);
+ text-transform:uppercase;letter-spacing:.04em;padding-top:2px;padding-bottom:5px}
+table.multi th.primeira,table.multi td.primeira{border-left:2px solid var(--linha2)}
+table.multi thead tr.sub th:first-child{border-left:none}
+
+/* ---------------------------------------------------------------------
+   FILTRO DE ANO + CAIXINHAS DE MES (Evolucao)
+   Marcar/desmarcar aplica na hora; nao existe botao "Filtrar".
+   --------------------------------------------------------------------- */
+.filtro-meses{background:var(--sup);border:1px solid var(--linha);
+ padding:12px 16px 13px;margin-bottom:12px;border-radius:2px;
+ display:flex;flex-direction:column;gap:10px}
+.filtro-meses .linha-filtro{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.filtro-meses .rotulo{font:700 10px Archivo,sans-serif;letter-spacing:.09em;
+ text-transform:uppercase;color:var(--tinta3);width:52px;flex:0 0 52px}
+.caixinhas{display:flex;gap:6px;flex-wrap:wrap}
+.mescx{display:inline-flex;align-items:center;gap:6px;cursor:pointer;user-select:none;
+ background:var(--sup2);border:1px solid var(--linha2);border-radius:2px;
+ padding:6px 11px 6px 9px;font:600 12.5px Archivo,sans-serif;color:var(--tinta3);
+ transition:background .1s,border-color .1s,color .1s}
+.mescx input{appearance:none;-webkit-appearance:none;margin:0;width:13px;height:13px;
+ border:1.5px solid var(--linha2);border-radius:2px;background:#fff;flex:0 0 13px;
+ position:relative;cursor:pointer}
+.mescx.on{background:#0A0A0B;border-color:#0A0A0B;color:#fff}
+.mescx.on input{background:var(--marca);border-color:var(--marca)}
+.mescx.on input::after{content:"";position:absolute;left:3.5px;top:.5px;width:3.5px;height:7px;
+ border:solid #fff;border-width:0 2px 2px 0;transform:rotate(43deg)}
+.mescx:hover{border-color:var(--tinta3)}
+.atalhos{display:flex;align-items:center;gap:8px;margin-left:auto}
+.atalhos button{background:none;border:1px solid var(--linha2);border-radius:2px;
+ padding:5px 11px;font:600 11.5px Archivo,sans-serif;color:var(--tinta2);cursor:pointer}
+.atalhos button:hover{border-color:var(--tinta);color:var(--tinta)}
+.atalhos .quantos-meses{font:500 11.5px "IBM Plex Mono",monospace;color:var(--tinta3)}
+.aviso-recorte{background:#FFFBF2;border:1px solid rgba(143,100,9,.28);
+ border-left:4px solid var(--aten);padding:10px 15px;font-size:12.5px;
+ line-height:1.55;color:var(--tinta2);margin-bottom:12px;border-radius:2px}
+@media (max-width:760px){.filtro-meses .rotulo{width:auto;flex:none}
+ .atalhos{margin-left:0}}
+/* seta de baixar UM arquivo, ao lado do X de remover */
+.arq .peca{gap:6px}
+.arq .peca .baixa-um{text-decoration:none;color:var(--tinta3);
+ font:600 13px/1 Archivo,sans-serif;border:1px solid var(--linha2);border-radius:2px;
+ padding:3px 6px;flex:0 0 auto;transition:border-color .1s,color .1s}
+.arq .peca .baixa-um:hover{color:var(--bom);border-color:var(--bom)}
+/* % ADS e outras razoes: nao somam, entao ficam visualmente separadas */
+table.multi td.derivada{color:var(--tinta2);font-style:normal;background:#FCFCFB}
+
+/* ---------------------------------------------------------------------
+   TELA DO RADAR
+   O quadro tinha altura fixa e sobrava uma faixa vazia embaixo da nota.
+   Agora ele estica para ocupar o que sobra da tela e a NOTA e a ultima
+   coisa da pagina - nada de rolagem so para ver espaco em branco.
+   --------------------------------------------------------------------- */
+.tela-radar{display:flex;flex-direction:column;gap:8px;
+ height:calc(100vh - 78px - 30px)}          /* faixa preta do topo + respiro */
+/* sem moldura: o radar embutido ja e uma superficie branca, igual as outras
+   telas - a borda fazia parecer um quadro colado dentro da pagina */
+.tela-radar iframe{flex:1 1 auto;min-height:360px;width:100%;display:block;
+ border:0;background:var(--sup)}
+.tela-radar .nota{flex:0 0 auto;margin:0}
+@media (max-width:900px){.tela-radar{height:auto}
+ .tela-radar iframe{height:70vh}}
+/* opcao que existe mas nao vale no recorte atual */
+.janela.fraca{opacity:.45}
+
+/* filtro de periodo na Base: o calendario do navegador, com rotulo curto */
+.filtros .periodo{display:inline-flex;align-items:center;gap:6px}
+.filtros .periodo label{font:600 11px Archivo,sans-serif;color:var(--tinta3);
+ text-transform:uppercase;letter-spacing:.08em}
+.filtros input[type=date]{background:var(--sup);color:var(--tinta);
+ border:1px solid var(--linha2);padding:5px 9px;border-radius:2px;
+ font:500 12.5px Archivo,sans-serif;min-width:140px}
+.filtros input[type=date]:focus{border-color:var(--marca);outline:none}
+
+/* ---------------------------------------------------------------------------
+   PAINEL NEXUS - a tela que abre. Prefixo nx- de proposito: o sistema ja teve
+   colisao de .cx, .faixa, .tag e .conta entre telas diferentes, e cada uma
+   custou um bug silencioso. Namespace proprio resolve de uma vez.
+   --------------------------------------------------------------------------- */
+.nx-cab{display:flex;justify-content:space-between;align-items:center;gap:14px;
+  flex-wrap:wrap;font-size:13px;color:var(--tinta2);margin-bottom:12px;
+  padding-bottom:10px;border-bottom:1px solid var(--linha)}
+.nx-conf{font:500 12px "IBM Plex Mono",monospace;color:var(--aten);text-align:right}
+/* NAO usar .ok aqui: .ok e uma etiqueta verde global (linha ~110) e
+   pintava o bloco inteiro de verde, escondendo o texto. */
+.nx-conf.certo{color:var(--bom)}
+.nx-conf-obs{display:block;font:400 10.5px Archivo,sans-serif;color:var(--tinta3)}
+.nx-quantos{font:500 11.5px "IBM Plex Mono",monospace;color:var(--tinta3);
+  text-transform:none;letter-spacing:0;margin-left:8px}
+.bloco h2:has(.nx-quantos){display:flex;align-items:baseline;gap:4px;flex-wrap:wrap}
+.nx-sub{font-size:12.5px;color:var(--tinta2);margin:0 0 12px}
+
+.nx-cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+@media (max-width:1250px){.nx-cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:640px){.nx-cards{grid-template-columns:1fr}}
+.nx-card{background:var(--sup);border:1px solid var(--linha);
+  border-left:3px solid var(--tinta3);padding:12px 14px;border-radius:2px;
+  display:flex;flex-direction:column;min-width:0}
+.nx-card.bom{border-left-color:var(--bom)}
+.nx-card.aten{border-left-color:var(--aten)}
+.nx-card.crit{border-left-color:var(--crit)}
+.nx-card.vazio{border-left-color:var(--linha2);opacity:.7}
+.nx-rot{font:700 9.5px Archivo,sans-serif;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--tinta3);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.nx-marca{background:var(--aten);color:#fff;border-radius:2px;padding:1px 5px;
+  font-size:8.5px;letter-spacing:.08em;cursor:help}
+.nx-valor{font-family:"IBM Plex Mono",monospace;font-size:clamp(20px,1.9vw,29px);
+  font-weight:600;line-height:1.15;margin:6px 0 2px}
+.nx-card.bom .nx-valor{color:var(--bom)}
+.nx-card.aten .nx-valor{color:var(--aten)}
+.nx-card.crit .nx-valor{color:var(--crit)}
+.nx-explica{font-size:11.5px;color:var(--tinta2);line-height:1.35}
+/* rodape do card: variacao a esquerda, reais a direita, NA MESMA LINHA.
+   margin-top:auto joga o rodape para o fundo do card - como a grade estica
+   todos os cards a mesma altura, os oito rodapes fecham alinhados. */
+/* SEMPRE duas linhas, nunca uma: com o valor em reais ao lado da variacao,
+   um card com numero longo quebrava e outro nao, e a linha inteira ficava
+   torta. Duas linhas fixas deixam os quatro cards da fileira identicos. */
+.nx-pe{margin-top:auto;padding-top:8px;border-top:1px dotted var(--linha2)}
+.nx-deltas{display:flex;flex-direction:column;gap:2px}
+.nx-deltas span{font:500 11px "IBM Plex Mono",monospace;cursor:help}
+
+/* a regua: a barra e o custo fixo do mes; o preenchido e o que ja foi coberto */
+.nx-regua{margin:4px 0 14px}
+.nx-barra{position:relative;height:26px;border-radius:2px;
+  background:linear-gradient(90deg,#F3E3E1,#F7EEDC 55%,#E7F2EB);
+  border:1px solid var(--linha2)}
+.nx-preenche{position:absolute;left:0;top:0;bottom:0;border-radius:1px;
+  background:linear-gradient(90deg,var(--crit),#D98324 62%,var(--bom));opacity:.85}
+.nx-agulha{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--tinta);
+  transform:translateX(-1px)}
+.nx-agulha span{position:absolute;left:50%;top:-19px;transform:translateX(-50%);
+  background:var(--tinta);color:#fff;font:600 10.5px "IBM Plex Mono",monospace;
+  padding:1px 6px;border-radius:2px;white-space:nowrap}
+.nx-pontas{display:flex;justify-content:space-between;gap:10px;margin-top:7px;
+  font-size:11px;color:var(--tinta3)}
+.nx-numeros{margin-top:2px}
+.nx-alav{margin:0;padding-left:20px;font-size:13px;color:var(--tinta);line-height:1.75}
+.nx-alav li::marker{font-family:"IBM Plex Mono",monospace;color:var(--marca);font-weight:600}
+
+/* EXPORTAR no topo de toda tela. Separado por uma linha para nao se confundir
+   com os filtros da propria tela, que vivem ao lado. */
+.baixar-topo{margin-left:8px;padding-left:12px;border-left:1px solid #2C2C2E}
+.topo-tela .janela.baixar{color:#F2F2F0;border-color:#3A3A3E}
+.topo-tela .janela.baixar:hover{background:var(--marca);border-color:var(--marca);color:#fff}
+@media (max-width:900px){.baixar-topo{margin-left:0;padding-left:0;border-left:0}}
+
+/* ANO CONTRA ANO - linha = ano, coluna = mes. O total do ano fica destacado
+   porque e a leitura que se procura primeiro. */
+table.ano-ano td.c{font-family:"IBM Plex Mono",monospace;font-size:14px}
+table.ano-ano td.total{border-left:2px solid var(--linha2);background:var(--sup2);font-weight:600}
+table.ano-ano th:last-child{border-left:2px solid var(--linha2)}
+table.ano-ano .sem{color:var(--tinta3)}
+table.ano-ano small{display:block;font-size:10px}
+.filtro-meses select{background:var(--sup);border:1px solid var(--linha2);color:var(--tinta);
+  font:600 12.5px Archivo,sans-serif;padding:6px 10px;border-radius:3px;max-width:340px}
+
+/* caixa de explicacao dentro da grade de arquivos - nao e um arquivo, e a
+   instrucao ao lado dele */
+.arq.ajuda{background:var(--sup2);border-style:dashed}
+.arq.ajuda b{font-size:13.5px}
+
+/* card do Nexus que leva para outra tela */
+a.nx-card{text-decoration:none;color:inherit;transition:border-color .12s,box-shadow .12s}
+a.nx-card:hover{box-shadow:0 2px 12px rgba(0,0,0,.09)}
+.nx-proj{font:700 8.5px "IBM Plex Mono",monospace;letter-spacing:.08em;
+  border:1px solid var(--linha2);color:var(--tinta3);border-radius:2px;padding:1px 5px}
+.nx-reais{font-family:"IBM Plex Mono",monospace;font-size:15px;font-weight:600;
+  text-align:right;white-space:nowrap;margin-top:5px}
+.nx-vaza{font:700 9px Archivo,sans-serif;letter-spacing:.1em;text-transform:uppercase;
+  vertical-align:2px;margin-left:3px}
+.nx-reais.neg{color:var(--crit)} .nx-reais.pos{color:var(--bom)}
+/* a seta vive no cabecalho do card: no rodape ela ocupava uma linha so nos
+   cards clicaveis e desalinhava o rodape dos que nao sao clicaveis */
+.nx-seta{margin-left:auto;color:var(--linha2);font-size:13px;line-height:1;cursor:help}
+a.nx-card:hover .nx-seta{color:var(--marca)}
+
+/* a regra de conversao de faturamento em ponto de equilibrio */
+.nx-conversao{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;
+  margin-top:12px}
+.nx-conversao .nx-conv-t{grid-column:1/-1;font-size:12px;color:var(--tinta2);
+  line-height:1.5;border-top:1px solid var(--linha);padding-top:9px}
+.nx-conv-n{background:var(--sup2);border:1px solid var(--linha);
+  border-left:3px solid var(--tinta);padding:11px 13px;border-radius:2px}
+.nx-conv-n .l{display:block;font:700 9.5px Archivo,sans-serif;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--tinta3)}
+.nx-conv-n .v{display:block;font-family:"IBM Plex Mono",monospace;font-size:22px;
+  font-weight:600;color:var(--tinta);margin:3px 0 1px}
+.nx-conv-n .o{display:block;font-size:11.5px;color:var(--tinta2)}
+@media (max-width:760px){.nx-conversao{grid-template-columns:1fr}}
+
+/* META x VENDA */
+.mt-regua{margin:2px 0 12px}
+.mt-barra{position:relative;height:30px;border-radius:2px;background:var(--sup2);
+  border:1px solid var(--linha2)}
+.mt-feito{position:absolute;left:0;top:0;bottom:0;border-radius:1px;
+  background:linear-gradient(90deg,#1F8A5C,var(--bom));opacity:.9}
+.mt-esperado{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--tinta);
+  transform:translateX(-1px)}
+.mt-esperado span{position:absolute;left:50%;top:-19px;transform:translateX(-50%);
+  background:var(--tinta);color:#fff;font:600 10.5px "IBM Plex Mono",monospace;
+  padding:1px 6px;border-radius:2px;white-space:nowrap}
+.mt-pontas{display:flex;justify-content:space-between;margin-top:7px;
+  font-size:11px;color:var(--tinta3)}
+td.mt-mini{width:110px;padding-right:12px}
+td.mt-mini span{display:block;height:7px;border-radius:2px;min-width:2px}
+td.mt-mini span.pos{background:var(--bom)}
+td.mt-mini span.neg{background:var(--crit)}
+
+/* nome clicavel nas tabelas do Meta x venda: recorta a tela inteira nele */
+a.mt-nome{color:inherit;text-decoration:none;border-bottom:1px dotted var(--linha2)}
+a.mt-nome:hover{color:var(--marca);border-bottom-color:var(--marca)}
+a.mt-nome.fraco{border-bottom-color:transparent}
+
+/* a linha de hoje no dia a dia do Meta x venda */
+tr.mt-hoje{background:#FFF6F5}
+tr.mt-hoje td{border-top:1px solid var(--marca);border-bottom:1px solid var(--marca);
+  font-weight:600}
+.mt-tag{font:700 8.5px Archivo,sans-serif;letter-spacing:.1em;text-transform:uppercase;
+  background:var(--marca);color:#fff;border-radius:2px;padding:1px 5px;vertical-align:1px}
+
+/* marcas dos sistemas irmaos na lateral - so o icone, sem caixa nem fundo */
+/* os icones descem ate quase encostar no risco de "Arquivos", e ficam ACIMA
+   dele. Sem linha propria em cima: duas linhas seguidas a dois dedos uma da
+   outra viram sujeira, e o risco do rodape ja separa o que precisa. O respiro
+   embaixo e o MESMO que o risco tem para o botao Arquivos - assim os tres
+   ficam com a mesma distancia entre si. */
+/* um bloco so, colado no fundo: icones em cima do risco, sem linha propria */
+.pe-lateral{margin-top:auto}
+/* QUATRO ICONES NA LARGURA DA COLUNA. Com o vao de 16px eram 232px de icone
+   para 231px de espaco util - o quarto caia para a linha de baixo sozinho, que
+   e pior do que nao ter o atalho. O vao fechou para 10px e os quatro cabem
+   numa linha so, com folga. */
+.irmaos{display:flex;align-items:center;justify-content:center;gap:10px;
+  padding:0 10px 8px;border-top:0;flex-wrap:nowrap}
+/* os dois icones tem fundos diferentes de origem: o do ORION e preto e some
+   contra a coluna, o do HERCULES tem borda dourada e aparece. Sem um ladrilho
+   igual embaixo dos dois, eles nao leem como um par - leem como um erro. */
+.irmaos a{display:flex;align-items:center;justify-content:center;
+  width:46px;height:46px;background:#18181B;border:1px solid #2C2C2E;
+  border-radius:10px;opacity:.75;transition:opacity .12s,border-color .12s,background .12s}
+.irmaos a:hover{opacity:1;background:#232327;border-color:#3A3A3E}
+.irmaos img{height:32px;width:32px;display:block;background:none;border:0;
+  border-radius:7px}
+@media (max-width:900px){.pe-lateral{margin-top:0}
+  .irmaos{justify-content:flex-start;padding:10px 12px}}
+
+/* versao que esta no ar - discreta, mas sempre a vista */
+.versao{font:500 10px "IBM Plex Mono",monospace;color:#4A4D50;text-align:center;
+  padding:10px 8px 4px;cursor:help;letter-spacing:.04em}
+
+/* A COMPOSICAO DO PERIODO - o quadro do canto inferior direito */
+.comp{margin-top:12px;border:1px solid var(--linha);background:var(--sup2);
+  padding:13px 15px;border-radius:2px}
+.comp-tit{font:700 10px Archivo,sans-serif;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--tinta3);margin-bottom:10px}
+.comp-n{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+@media (max-width:760px){.comp-n{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.comp-i{background:var(--sup);border:1px solid var(--linha);border-left:3px solid var(--linha2);
+  padding:9px 12px;border-radius:2px;min-width:0}
+.comp-i.total{border-left-color:var(--tinta)}
+.comp-i.reb{border-left-color:var(--bom)}
+.comp-i .l{display:block;font:700 9.5px Archivo,sans-serif;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--tinta3)}
+.comp-i .v{display:block;font-family:"IBM Plex Mono",monospace;font-size:clamp(15px,1.25vw,19px);
+  font-weight:600;color:var(--tinta);margin:2px 0 1px;white-space:nowrap}
+.comp-i.reb .v{color:var(--bom)}
+.comp-i .o{display:block;font-size:11px;color:var(--tinta3)}
+.comp-obs{font-size:11.5px;color:var(--tinta3);line-height:1.5;margin-top:9px}
+
+/* os dois periodos do Comparativo, lado a lado */
+.comp-par{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.comp-par .comp{margin-top:0}
+.comp-par .comp-n{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media (max-width:1100px){.comp-par{grid-template-columns:1fr}}
+
+/* ---------------------------------------------------------------------
+   CONTA FRETE - o fechamento do frete lido do PDF.
+   Prefixo cf- em TUDO: .conta, .faixa, .tag e .ok ja existem no sistema e
+   ja pintaram tela errada antes. Nomes curtos aqui custam caro.
+   --------------------------------------------------------------------- */
+.cf-cab{display:flex;justify-content:space-between;align-items:baseline;gap:12px;
+ flex-wrap:wrap;font-size:13px;color:var(--tinta2);margin-bottom:12px}
+.cf-fonte{font:500 11.5px "IBM Plex Mono",monospace;color:var(--tinta3)}
+.cf-quantos{font:500 11px "IBM Plex Mono",monospace;color:var(--tinta3);
+ text-transform:none;letter-spacing:0;margin-left:8px}
+/* a escada: cada degrau e uma linha da conta, do faturamento ao liquido */
+.cf-escada{display:flex;flex-direction:column;gap:1px;background:var(--linha);
+ border:1px solid var(--linha)}
+.cf-degrau{background:var(--sup);padding:11px 15px;display:grid;
+ grid-template-columns:minmax(190px,1.1fr) minmax(150px,auto) minmax(200px,1.6fr);
+ gap:0 16px;align-items:baseline;border-left:3px solid transparent}
+.cf-degrau .cf-rot{font-size:13.5px;font-weight:600}
+.cf-degrau .cf-val{font-family:"IBM Plex Mono",monospace;font-size:16px;font-weight:600;
+ text-align:right;font-variant-numeric:tabular-nums}
+.cf-degrau .cf-obs{font-size:12px;color:var(--tinta3)}
+.cf-degrau.forte{border-left-color:var(--tinta)}
+.cf-degrau.ruim{border-left-color:var(--crit);background:#FFF7F6}
+.cf-degrau.ruim .cf-val{color:var(--crit)}
+.cf-degrau.bom{border-left-color:var(--bom);background:#F5FAF7}
+.cf-degrau.bom .cf-val{color:var(--bom)}
+@media (max-width:820px){.cf-degrau{grid-template-columns:1fr auto}
+ .cf-degrau .cf-obs{grid-column:1/-1}}
+/* a serie mes a mes: barra deitada, o mes aberto em destaque */
+.cf-serie{display:flex;flex-direction:column;gap:5px}
+.cf-mes{display:grid;grid-template-columns:56px 1fr 78px;gap:10px;align-items:center}
+.cf-mes-rot{font:500 11.5px "IBM Plex Mono",monospace;color:var(--tinta3)}
+.cf-barra{display:block;height:14px;background:var(--sup2);border:1px solid var(--linha);
+ border-radius:2px;overflow:hidden}
+.cf-barra i{display:block;height:100%;background:rgba(204,46,35,.45);border-radius:0 2px 2px 0}
+.cf-mes-val{text-align:right;font-size:12.5px;color:var(--tinta2)}
+.cf-mes.atual .cf-mes-rot{color:var(--tinta);font-weight:700}
+.cf-mes.atual .cf-barra i{background:var(--crit)}
+.cf-mes.atual .cf-mes-val{color:var(--tinta);font-weight:700}
+/* as tabelinhas de canal: cabem inteiras, nao precisam de rolagem nem do
+   minimo de 900px que a tabela grande do sistema carrega */
+.cf-tres{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.cf-dois{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+@media (max-width:1100px){.cf-tres,.cf-dois{grid-template-columns:1fr}}
+table.cf-mini{min-width:0}
+table.cf-mini td,table.cf-mini th{padding:6px 8px}
+table.cf-mini td:first-child{white-space:normal}
+.cf-zero{color:var(--tinta3)}
+tr.cf-total td{font-weight:700;border-top:2px solid var(--linha2);border-bottom:none;
+ background:var(--sup2)}
+tr.cf-linha-forte td{font-weight:700;background:#F5FAF7}
+
+/* ---------------------------------------------------------------------
+   PAINEL GERAL - o box de cima: a venda em tres partes e o frete em tres.
+   Prefixo pg-, pelo mesmo motivo de sempre.
+   --------------------------------------------------------------------- */
+/* auto-fit e nao "duas colunas": quando so UMA das duas caixas existe - e e o
+   que acontece enquanto o PDF da Conta Frete nao subiu - a que existe ocupa a
+   largura inteira em vez de ficar espremida na metade, com meia tela vazia
+   do lado. */
+.pg-topo{display:grid;grid-template-columns:repeat(auto-fit,minmax(430px,1fr));
+ gap:12px;margin-bottom:12px}
+@media (max-width:1100px){.pg-topo{grid-template-columns:1fr}}
+.pg-caixa{margin-bottom:0;display:flex;flex-direction:column}
+.pg-tres{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.pg-i{border-left:3px solid var(--linha2);padding:2px 0 2px 11px;min-width:0}
+.pg-i.ruim{border-left-color:var(--crit)}
+.pg-i.ruim .v{color:var(--crit)}
+.pg-i .l{display:block;font:600 9.5px Archivo,sans-serif;letter-spacing:.15em;
+ text-transform:uppercase;color:var(--tinta3)}
+.pg-i .v{display:block;font-family:"IBM Plex Mono",monospace;font-weight:600;
+ font-size:clamp(15px,1.25vw,20px);margin:2px 0 1px;font-variant-numeric:tabular-nums}
+.pg-i .o{display:block;font-size:11px;color:var(--tinta3);line-height:1.4}
+.pg-obs{font-size:12px;color:var(--tinta3);margin-top:auto;padding-top:10px}
+.pg-obs b{color:var(--tinta2)}
+.pg-obs a{color:var(--marca);text-decoration:none;font-weight:600}
+.pg-obs a:hover{text-decoration:underline}
+/* Arquivos e Parametros dividem a linha do rodape do menu */
+.rodape-menu .par{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+.rodape-menu .par .item{padding-left:10px;padding-right:10px;font-size:12px;text-align:center}
+.pg-alerta{color:var(--crit)}
+/* faixas do markup de terceiros (MERCURIO) */
+.tag.mk-crit{background:rgba(204,46,35,.12);color:var(--crit)}
+.tag.mk-aten{background:rgba(143,100,9,.14);color:var(--aten)}
+.tag.mk-bom{background:rgba(21,121,79,.12);color:var(--bom)}
+.tag.mk-cinza{background:var(--sup2);color:var(--tinta3);border:1px solid var(--linha2)}
+/* a tabela por PECA ORIGEM, na tela do fornecedor */
+tr.to-multi td{background:#FCFCFB}
+.to-skus{margin:6px 0 2px;border-left:2px solid var(--linha2);padding-left:10px}
+.to-sku{display:grid;grid-template-columns:110px 1fr 70px 100px;gap:8px;
+ font-size:11.5px;color:var(--tinta2);padding:2px 0}
+.to-sku .n{font-family:"IBM Plex Mono",monospace;text-align:right}
+.to-sku span:nth-child(2){white-space:normal}
+td.desc details summary{cursor:pointer;white-space:normal}
+td.desc details summary::marker{color:var(--marca)}
+
+/* A PREVISAO DO MES FECHADO, colada no canto inferior direito do quadro.
+   O fechamento mostra o mes ate o dia que fechou (28 de 31) e comparar isso
+   com o mes passado inteiro e comparar coisas diferentes. O canto responde
+   "e no mes cheio?" sem tirar o numero real do meio do cartao. */
+.kpi{position:relative}
+.kpi-prev{position:absolute;right:10px;bottom:8px;text-align:right;
+ font:600 8.5px Archivo,sans-serif;letter-spacing:.1em;text-transform:uppercase;
+ color:var(--tinta3);line-height:1.25;pointer-events:auto}
+.kpi-prev b{display:block;font:600 12px "IBM Plex Mono",monospace;letter-spacing:0;
+ text-transform:none;color:var(--tinta2);font-variant-numeric:tabular-nums}
+/* o cartao precisa de espaco embaixo para o canto nao encostar no texto */
+.kpi:has(.kpi-prev) .o{padding-right:112px;min-height:26px}
+@media (max-width:900px){.kpi-prev{position:static;text-align:left;margin-top:6px}
+ .kpi:has(.kpi-prev) .o{padding-right:0}}
+/* o botao de Excel no TOPO da tabela, alinhado a direita do titulo */
+.bloco h2:has(.no-topo){display:flex;align-items:center;justify-content:space-between;gap:12px}
+.bt-excel.no-topo{margin-left:auto;text-transform:none;letter-spacing:0;font-size:12px;
+ padding:5px 14px}
+/* A EXPLICACAO DA TELA, fechada por padrao. Quatro paragrafos de instrucao
+   embaixo de um painel que se le todo dia viram ruido: quem ja sabe ler nao
+   releem, e quem precisa abre. */
+details.ajuda{margin-top:10px}
+details.ajuda>summary{cursor:pointer;list-style:none;display:inline-flex;align-items:center;
+ gap:6px;font:600 9.5px Archivo,sans-serif;letter-spacing:.14em;text-transform:uppercase;
+ color:var(--tinta3);user-select:none}
+details.ajuda>summary::-webkit-details-marker{display:none}
+details.ajuda>summary::before{content:"+";font:600 12px "IBM Plex Mono",monospace;
+ color:var(--marca);letter-spacing:0}
+details.ajuda[open]>summary::before{content:"–"}
+details.ajuda>summary:hover{color:var(--tinta)}
+details.ajuda .nota{margin-top:6px}
+/* CANAIS: largura fixa por coluna. Sem isto o navegador reparte a sobra pelo
+   texto de cada coluna e Receita x Resultado ficam desencontrados. */
+table.canais-tab{table-layout:fixed;min-width:1476px}
+table.canais-tab td{overflow:hidden;text-overflow:ellipsis}
+/* o cabecalho QUEBRA em duas linhas em vez de virar "TICKET M...": nome de
+   coluna cortado obriga a adivinhar o que a coluna e */
+table.canais-tab th{white-space:normal;line-height:1.25;vertical-align:bottom}
+/* a segunda linha da composicao: os mesmos numeros POR PEDIDO */
+.comp-ped{border-top:1px dashed var(--linha2);margin-top:8px;padding-top:8px}
+
+/* PREVIA: largura fixa e o hora a hora do dia escolhido, acima da tabela */
+table.prev-tab{table-layout:fixed;min-width:1116px}
+table.prev-tab th{white-space:normal;line-height:1.25;vertical-align:bottom}
+table.prev-tab td{overflow:hidden;text-overflow:ellipsis}
+a.prev-dia{color:var(--marca);text-decoration:none;font-weight:600}
+a.prev-dia:hover{text-decoration:underline}
+.hora-dia{border:1px solid var(--linha2);background:var(--sup2);padding:11px 14px;
+ margin-bottom:10px;border-left:3px solid var(--marca)}
+.hd-cab{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;font-size:12.5px;
+ color:var(--tinta2);margin-bottom:9px}
+.hd-cab b{font-size:14px;color:var(--tinta)}
+.hd-cab .janela{margin-left:auto;padding:3px 10px;font-size:11px}
+.hd-barras{display:flex;align-items:flex-end;gap:3px;height:96px}
+.hd-h{flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%;
+ min-width:0;text-align:center}
+.hd-h i{display:block;background:var(--marca);opacity:.75;border-radius:1px 1px 0 0;
+ min-height:1px}
+.hd-h:hover i{opacity:1}
+.hd-h span{font:500 9px "IBM Plex Mono",monospace;color:var(--tinta3);padding-top:3px}
+/* a segunda linha da caixa do frete: o que falta POR PEDIDO */
+.pg-ped{border-top:1px dashed var(--linha2);margin-top:10px;padding-top:10px}
+/* META x VENDA: a hora a hora do dia, aberta dentro da tabela do dia a dia */
+tr.mt-horas>td{background:var(--sup2);padding:12px 14px;border-left:3px solid var(--marca)}
+.mh-cab{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:8px;
+ font-size:12.5px;color:var(--tinta2)}
+.mh-cab b{font-size:14px;color:var(--tinta)}
+.mh-cab .janela{margin-left:auto;padding:3px 10px;font-size:11px}
+table.mh-tab{min-width:0;background:var(--sup)}
+table.mh-tab th,table.mh-tab td{padding:5px 9px}
+/* o cabecalho da tabela de dentro NAO gruda: dois cabecalhos grudados, um
+   sobre o outro, se sobrepoem na rolagem */
+table.mh-tab thead th{position:static}
+/* COMPARATIVO: as duas linhas no mesmo eixo */
+svg.gr.linhas{width:100%;height:auto;display:block}
+svg.gr.linhas .grade{stroke:var(--linha);stroke-width:1}
+svg.gr.linhas .rotulo-y{font:500 10px "IBM Plex Mono",monospace;fill:var(--tinta3);text-anchor:end}
+svg.gr.linhas .rotulo-x{font:500 10px "IBM Plex Mono",monospace;fill:var(--tinta3);text-anchor:middle}
+svg.gr.linhas .ponta{font:600 11px Archivo,sans-serif}
+svg.gr.linhas .col:hover{fill:rgba(19,19,21,.04)}
+/* Evolucao: o recado de que so ha um ano na base, do lado do seletor */
+.so-um-ano{font-size:12px;color:var(--tinta3);align-self:center;margin-left:6px}
+.so-um-ano a{color:var(--marca);text-decoration:none;font-weight:600}
+.so-um-ano a:hover{text-decoration:underline}
+/* FRETE NO PRECO: a conta em quatro linhas e a tabela SKU a SKU.
+   Prefixo fp- porque .conta e .cx ja existem em outras telas - colisao de
+   nome de classe ja quebrou tres telas neste projeto. */
+table.cf-conta{width:100%;border-collapse:collapse;background:var(--sup)}
+table.cf-conta td{padding:10px 14px;border-bottom:1px solid var(--linha);
+ font-size:13.5px;vertical-align:baseline}
+table.cf-conta td:first-child{font-weight:600}
+table.cf-conta td.n{font-family:"IBM Plex Mono",monospace;font-size:16px;
+ font-weight:600;text-align:right;white-space:nowrap;width:130px}
+table.cf-conta td:last-child{color:var(--tinta3);font-size:12px;width:42%}
+table.cf-conta .cf-fonte{display:block;font-weight:400;margin-top:2px}
+table.cf-conta tr.cf-forte td{border-top:2px solid var(--tinta);border-bottom:none;
+ background:var(--sup2)}
+table.cf-conta tr.cf-forte td.n.pos{color:var(--bom)}
+table.cf-conta tr.cf-forte td.n.neg{color:var(--crit)}
+/* colunas fixas: sem isso o navegador reparte a sobra pelo texto e os precos
+   de antes e de depois ficam desencontrados, que e justamente a comparacao */
+table.fp-tab{table-layout:fixed;width:100%}
+table.fp-tab th,table.fp-tab td{white-space:normal;overflow:hidden;text-overflow:ellipsis}
+table.fp-tab th:nth-child(1),table.fp-tab td:nth-child(1){width:112px}
+table.fp-tab th:nth-child(2),table.fp-tab td:nth-child(2){width:auto}
+table.fp-tab th:nth-child(3),table.fp-tab td:nth-child(3){width:88px}
+table.fp-tab th:nth-child(4),table.fp-tab td:nth-child(4),
+table.fp-tab th:nth-child(5),table.fp-tab td:nth-child(5){width:76px}
+table.fp-tab th:nth-child(6),table.fp-tab td:nth-child(6){width:84px}
+table.fp-tab th:nth-child(7),table.fp-tab td:nth-child(7),
+table.fp-tab th:nth-child(8),table.fp-tab td:nth-child(8),
+table.fp-tab th:nth-child(9),table.fp-tab td:nth-child(9){width:104px}
+table.fp-tab th:nth-child(10),table.fp-tab td:nth-child(10){width:70px}
+table.fp-tab th:nth-child(11),table.fp-tab td:nth-child(11){width:106px}
+table.fp-tab td:nth-child(9){font-weight:700;color:var(--tinta)}
+/* QUAL ARQUIVO ESTA VALENDO. Com dois arquivos no mesmo box - o que veio no
+   codigo e o que ela subiu pela tela - a lista mostrava os dois iguais e nao
+   dizia qual o sistema estava lendo. */
+.arq-n.peca.e-o-que-vale{background:#F1F8F4;border-left:2px solid var(--bom);
+ padding-left:6px;margin-left:-8px}
+/* O ULTIMO ENVIADO: primeiro da lista e em negrito, em TODOS os boxes.
+   Nao se confunde com o verde acima - verde e "o sistema esta lendo este",
+   negrito e "este foi o ultimo que voce mandou". Num box que acumula os dois
+   sao coisas diferentes. */
+.arq-n.peca.ultimo > span{font-weight:700;color:var(--tinta)}
+b.vale-agora{display:inline-block;color:var(--bom);font:700 9.5px Archivo,sans-serif;
+ letter-spacing:.1em;text-transform:uppercase;margin-top:2px}
+span.veio-codigo{display:inline-block;color:var(--tinta3);font:500 10px Archivo,sans-serif;
+ letter-spacing:.06em;text-transform:uppercase;margin-top:2px}
+/* TERCEIROS ANO A ANO: os tres numeros dentro da mesma celula. Peca em cima
+   (o volume), venda no meio (o dinheiro) e ticket embaixo (o preco). So o
+   real nao diz se o fornecedor cresceu porque vendeu mais ou cobrou mais. */
+table.to-ano td.to-cel{padding:6px 9px;line-height:1.25;vertical-align:top}
+table.to-ano td.to-cel span{display:block;font-family:"IBM Plex Mono",monospace;
+ text-align:right;white-space:nowrap}
+table.to-ano .to-pc{font-size:11px;color:var(--tinta3)}
+table.to-ano .to-rs{font-size:13px;font-weight:600;color:var(--tinta)}
+table.to-ano .to-tk{font-size:11px;color:var(--tinta2)}
+table.to-ano td.to-fim{background:var(--sup2)}
+table.to-ano tfoot .to-rs{font-size:13.5px}
+/* a seta que diz que a linha abre */
+.to-seta{display:inline-block;width:11px;color:var(--marca);font-size:10px}
+table.to-ano tr.aberta{background:#FFF7F6}
+table.to-ano tr.aberta td{border-bottom-color:var(--marca)}
+/* NIVEIS DE ACESSO: a grade de quem ve o que */
+table.perm td,table.perm th{padding:7px 10px}
+table.perm td:first-child{font-weight:600}
+table.perm input[type=checkbox]{width:16px;height:16px;accent-color:var(--marca);cursor:pointer}
+.perm-fixo{color:var(--bom);font-weight:700}
+.conta-linha select{border:1px solid var(--linha2);border-radius:2px;padding:3px 8px;
+ font:600 12px Archivo,sans-serif;background:var(--sup);color:var(--tinta);cursor:pointer}
+.conta-linha select:hover{border-color:var(--tinta3)}
+
+/* ---------------------------------------------------------------------
+   FATO x ESTIMATIVA no frete (ff-)
+   Prefixo ff- porque .barra, .fatia, .fato e .est sao nomes curtos demais
+   para um arquivo deste tamanho - ja perdemos uma tarde com colisao assim.
+   A leitura e uma so: ESCURO ja e fatura da transportadora e nao muda mais;
+   CLARO ainda e cotacao ou tabela e vai baixar quando o CTe chegar.
+   --------------------------------------------------------------------- */
+.ff-barra{display:flex;height:15px;border-radius:8px;overflow:hidden;
+ background:var(--linha);margin:4px 0 14px;border:1px solid var(--linha)}
+.ff-fatia{height:100%;transition:opacity .15s}
+.ff-fatia:hover{opacity:.78}
+.ff-fatia.fato{background:var(--bom)}
+.ff-fatia.est{background:repeating-linear-gradient(45deg,
+ var(--aten) 0 5px,color-mix(in srgb,var(--aten) 55%,#fff) 5px 10px)}
+.ff-pt{display:inline-block;width:8px;height:8px;border-radius:50%;
+ margin-right:7px;vertical-align:middle}
+.ff-pt.fato{background:var(--bom)}
+.ff-pt.est{background:var(--aten)}
+
+/* o link do checklist, no canto do titulo da caixa de relatorios.
+   Prefixo bt-check porque .check e .bt-pdf ja existem noutro contexto. */
+.bt-check{float:right;font:600 11px/1 "IBM Plex Mono",monospace;
+ color:var(--tinta2);background:var(--sup);border:1px solid var(--linha);
+ border-radius:6px;padding:5px 9px;text-decoration:none;text-transform:none;
+ letter-spacing:0;transition:border-color .15s,color .15s}
+.bt-check:hover{border-color:var(--marca);color:var(--marca)}
+
+/* no card de resultado, o R$ e o resultado ACUMULADO, nao o desvio - esta
+   etiqueta e o que impede a leitura errada de "1,02% deu 2,41 milhoes" */
+.nx-outra{display:block;font:500 10px/1.3 "IBM Plex Mono",monospace;
+ color:var(--tinta3);margin-top:3px;text-transform:none;letter-spacing:0}
+
+/* AS DUAS LEITURAS: valores todos na MESMA altura.
+   Os rotulos tem tamanhos diferentes ("Meta de venda do mes" cabe numa linha,
+   "Projecao de venda do mes · Nexus" quebra em duas) e o valor de cada cartao
+   comecava onde o rotulo dele acabava - sete cartoes, sete alturas, uma
+   escadinha subindo e descendo. Agora o rotulo reserva sempre a mesma altura
+   e o valor e empurrado para a base: o olho corre reto pela linha dos numeros,
+   que e o unico jeito de comparar sete valores de uma vez. */
+.nx-numeros .kpi{display:flex;flex-direction:column}
+.nx-numeros .kpi .l{min-height:2.7em;display:block}
+.nx-numeros .kpi .v{margin-top:auto}
+
+/* ---------------------------------------------------------------------
+   A CONTA ABERTA DE UM CANAL (ct-)
+   Prefixo ct- porque .escada, .fam, .saldo e .seta sao nomes curtos demais
+   para conviver com o resto deste arquivo.
+   A leitura e de cima para baixo: os blocos dizem ONDE o dinheiro foi, a
+   escada diz EM QUE DEGRAU ele foi embora, e a coluna do saldo mostra o
+   momento exato em que o canal virou prejuizo.
+   --------------------------------------------------------------------- */
+.ct-familias{display:grid;grid-template-columns:repeat(auto-fit,minmax(178px,1fr));
+ gap:10px}
+.ct-fam{border:1px solid var(--linha);border-radius:8px;padding:11px 13px;
+ background:var(--sup)}
+.ct-fam-rot{font-size:11.5px;font-weight:600;color:var(--tinta2);
+ text-transform:uppercase;letter-spacing:.3px}
+.ct-fam-v{font:700 19px/1.2 "IBM Plex Mono",monospace;margin:5px 0 7px}
+.ct-fam-barra{height:5px;background:var(--linha);border-radius:3px;overflow:hidden}
+.ct-fam-barra span{display:block;height:5px;border-radius:3px;max-width:100%}
+.ct-fam-pct{font:500 10.5px "IBM Plex Mono",monospace;color:var(--tinta3);
+ margin-top:5px}
+
+.ct-escada td,.ct-escada th{padding:7px 12px}
+.ct-escada tr.ct-topo td,.ct-escada tr.ct-final td{background:var(--sup2)}
+.ct-escada tr.ct-final td{border-top:2px solid var(--tinta)}
+.ct-escada tr.ct-fam-linha td{background:transparent;padding:13px 12px 4px;
+ font:600 10.5px "IBM Plex Mono",monospace;color:var(--tinta3);
+ text-transform:uppercase;letter-spacing:.6px;border:0}
+/* a coluna do saldo e a que conta a historia: fonte mais forte que as outras */
+.ct-escada .ct-saldo{font-weight:600;color:var(--tinta)}
+.ct-escada .ct-saldo.neg{color:var(--crit)}
+.ct-seta{display:inline-block;width:0;height:0;margin-right:8px;
+ vertical-align:middle;border-left:4px solid transparent;
+ border-right:4px solid transparent}
+.ct-seta.desce{border-top:5px solid var(--crit)}
+.ct-seta.sobe{border-bottom:5px solid var(--bom)}
+
+/* os dois KPIs que viraram porta para a conta aberta */
+.kpi-link{text-decoration:none;color:inherit;cursor:pointer;
+ transition:border-color .15s,transform .1s}
+.kpi-link:hover{border-color:var(--marca)}
+.kpi-link:hover .kpi-lupa{opacity:1}
+.kpi-lupa{font:600 10px "IBM Plex Mono",monospace;color:var(--marca);
+ opacity:.45;margin-left:7px;transition:opacity .15s;letter-spacing:0}
+
+/* com / sem a conta frete, no titulo da escada */
+.ct-alterna{float:right;display:inline-flex;gap:0;border:1px solid var(--linha);
+ border-radius:6px;overflow:hidden}
+.ct-alterna a{font:600 10.5px/1 "IBM Plex Mono",monospace;padding:6px 10px;
+ color:var(--tinta3);text-decoration:none;background:var(--sup);
+ text-transform:none;letter-spacing:0}
+.ct-alterna a.on{background:var(--tinta);color:#fff}
+.ct-alterna a:not(.on):hover{color:var(--marca)}
+
+/* a fileira "por pedido": cabe mais uma caixa com o numero um pouco menor */
+.ct-miudo .kpi .v{font-size:19px}
+.ct-miudo .kpi{padding:11px 13px}
+
+/* ---------------------------------------------------------------------
+   TERCEIROS: os anos em colunas DE PE (tc-)
+   Barra deitada serve para ranking (quem e o maior); coluna de pe serve para
+   serie no tempo (o que aconteceu ao longo dos anos) - e e essa a pergunta
+   aqui. O mes a mes continua deitado, dentro do ano aberto, onde ele volta a
+   ser um ranking de doze.
+   --------------------------------------------------------------------- */
+.tc-anos{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap}
+.tc-ano{flex:1 1 96px;min-width:96px;display:flex;flex-direction:column;
+ align-items:center;gap:6px;text-decoration:none;padding:9px 6px 8px;
+ border:1px solid var(--linha);border-radius:8px;background:var(--sup);
+ transition:border-color .15s}
+.tc-ano:hover{border-color:var(--marca)}
+.tc-ano.on{border-color:var(--tinta);background:var(--sup2)}
+.tc-ano-v{font:700 13px/1 "IBM Plex Mono",monospace;color:var(--tinta)}
+.tc-ano-col{display:block;width:34px;height:96px;background:var(--linha);
+ border-radius:3px;position:relative;overflow:hidden}
+.tc-ano-col i{position:absolute;bottom:0;left:0;right:0;display:block;
+ background:rgba(19,19,21,.35);border-radius:3px}
+.tc-ano.on .tc-ano-col i{background:var(--marca)}
+.tc-ano-rot{font:600 11.5px "IBM Plex Mono",monospace;color:var(--tinta2)}
+.tc-ano-var{font:600 10.5px "IBM Plex Mono",monospace}
+.tc-ano-var.pos{color:var(--bom)}
+.tc-ano-var.neg{color:var(--crit)}
+
+/* as pilhas do fornecedor estavam coladas no nome e umas nas outras */
+td .tag{margin-left:7px}
+
+
+/* ---------------------------------------------------------------------
+   A TELA GERAL COM A MESMA LETRA DO RESTO
+   Os cards do Nexus usavam um numero de tamanho variavel (ate 29px) enquanto
+   TODA tela do sistema usa 24px fixo. Lado a lado, a Geral parecia outro
+   produto. Nada mais muda: mesma familia, mesmo peso, mesmo espacamento.
+   --------------------------------------------------------------------- */
+.nx-valor{font-size:24px;letter-spacing:-.02em}
+.nx-rot{font-weight:600;letter-spacing:.15em;font-size:9.5px}
+
+/* os botoes de baixar, no canto do titulo da Evolucao */
+.ev-baixar{float:right;display:inline-flex;gap:7px}
+
+/* o simulador do frete no preco */
+.fp-sim{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px}
+.fp-sim input[type=text]{font:600 13px "IBM Plex Mono",monospace;padding:6px 9px;
+ border:1px solid var(--linha2);border-radius:6px;text-align:right}
+.fp-sim select{font-size:13px;padding:6px 9px;border:1px solid var(--linha2);
+ border-radius:6px;background:var(--sup)}
+tr.fp-meu td{background:rgba(204,46,35,.05);font-weight:600}
+
+/* ---------------------------------------------------------------------
+   META x VENDA: o mes em colunas (mtc-)
+
+   O PREFIXO E mtc-, E NAO mt-, POR UM MOTIVO CARO.
+   A regua "o mes ate aqui" ja usava .mt-feito ha muito tempo. Ao criar o
+   grafico de colunas eu chamei a barra dele de .mt-feito tambem - e como o
+   arquivo e lido de cima para baixo, a regra nova ("left:18%") venceu a
+   antiga ("left:0"). Resultado: a barra da regua passou a comecar a 18% da
+   esquerda, com um pedaco branco na frente do verde, numa tela que nao tinha
+   sido tocada. Nome curto demais e barato de escrever e caro de descobrir.
+   Duas barras por dia, na MESMA base: a cinza atras e a meta do dia pela
+   curva da casa, a colorida na frente e o que vendeu. Verde passou, vermelho
+   faltou. Trinta e um dias cabem numa olhada; a tabela abaixo continua para
+   quem quer o numero.
+   --------------------------------------------------------------------- */
+.mtc-grade{display:flex;gap:3px;align-items:flex-end;height:150px;
+ padding:6px 0 0;overflow-x:auto}
+.mtc-col{flex:1 1 0;min-width:14px;display:flex;flex-direction:column;
+ align-items:center;gap:4px;height:100%}
+.mtc-col.futuro{opacity:.45}
+.mtc-par{position:relative;flex:1;width:100%;display:block}
+.mtc-par i{position:absolute;bottom:0;display:block;border-radius:2px 2px 0 0}
+.mtc-meta{left:0;right:0;background:var(--linha2)}
+.mtc-feito{left:18%;right:18%}
+.mtc-feito.ok{background:var(--bom)}
+.mtc-feito.faltou{background:var(--crit)}
+.mtc-dia{font:500 9px "IBM Plex Mono",monospace;color:var(--tinta3)}
+.mtc-frete{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
+ gap:10px;margin-top:16px;padding-top:14px;border-top:1px solid var(--linha)}
+.mtc-f-rot{display:block;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;
+ color:var(--tinta3)}
+.mtc-f-v{display:block;font:600 20px "IBM Plex Mono",monospace;color:var(--tinta);
+ margin:3px 0 1px}
+.mtc-f-v.neg{color:var(--crit)}
+.mtc-f-v.pos{color:var(--bom)}
+.mtc-f-o{display:block;font-size:11px;color:var(--tinta3)}
+
+/* o dia que o PDF do Nexus traz DENTRO - o nome dele diz outra data */
+.dia-dentro{display:inline-block;margin-left:6px;font:700 9px "IBM Plex Mono",monospace;
+ background:var(--sup2);border:1px solid var(--linha2);border-radius:2px;
+ padding:1px 5px;color:var(--tinta2)}
+
+/* a distancia entre o dia em que o painel foi GERADO e o dia que ele CONSOLIDA */
+.nx-defasagem{display:inline-block;margin-left:8px;font:600 10px "IBM Plex Mono",monospace;
+ background:rgba(143,100,9,.14);color:var(--aten);border-radius:3px;padding:2px 7px;
+ cursor:help}
+
+/* DE QUE PERÍODO SÃO OS NÚMEROS DESTA TELA.
+   Discreto quando o fechamento é do mês corrente; alerta cheio quando não é. */
+.sel-per{display:inline-block;margin:0 0 10px;font:600 10px "IBM Plex Mono",monospace;
+ letter-spacing:.06em;text-transform:uppercase;color:var(--tinta2);
+ background:var(--sup2);border:1px solid var(--linha);border-radius:3px;
+ padding:3px 9px;cursor:help}
+.alerta-grave.sel-fech{margin-bottom:12px}
+/* a barra de meses das telas do fechamento - mesma linguagem do Meta x venda,
+   só que aqui dentro do corpo da página e não na faixa preta do topo */
+.janelas.jan-fech{display:flex;gap:5px;flex-wrap:wrap;margin:0 0 8px}
+.janelas.jan-fech .janela{background:var(--sup);border:1px solid var(--linha2);
+ color:var(--tinta2);border-radius:4px;padding:4px 10px;text-decoration:none;
+ font:600 11px "IBM Plex Mono",monospace}
+.janelas.jan-fech .janela:hover{border-color:var(--tinta3);color:var(--tinta)}
+.janelas.jan-fech .janela.on{background:var(--crit);border-color:var(--crit);color:#fff}
+/* O CALENDÁRIO: os anos em cima, os doze meses embaixo. Mês sem venda fechada
+   fica no lugar dele, apagado - é assim que o buraco aparece. */
+.cal-fech{margin:0 0 10px}
+.janelas.jan-ano{display:flex;gap:5px;flex-wrap:wrap;margin:0 0 5px}
+.janelas.jan-ano .janela{background:transparent;border:1px solid var(--linha2);
+ color:var(--tinta3);border-radius:4px;padding:2px 10px;text-decoration:none;
+ font:700 10px "IBM Plex Mono",monospace;letter-spacing:.04em}
+.janelas.jan-ano .janela:hover{border-color:var(--tinta3);color:var(--tinta)}
+.janelas.jan-ano .janela.on{background:var(--tinta);border-color:var(--tinta);color:#fff}
+.janelas.jan-fech .janela.vazia{background:transparent;border-style:dashed;
+ border-color:var(--linha);color:var(--linha2);cursor:help}
+.janelas.jan-fech .janela.vazia.futuro{border-color:transparent;color:#C9C9C5}
+/* o terceiro nivel: os dias do mes. Menores que os meses, porque sao 31 e
+   porque o mes e a decisao - o dia e o detalhe dentro dela. */
+.janelas.jan-dia{display:flex;gap:3px;flex-wrap:wrap;margin:5px 0 0}
+.janelas.jan-dia .janela{background:var(--sup);border:1px solid var(--linha2);
+ color:var(--tinta2);border-radius:3px;padding:2px 6px;text-decoration:none;
+ font:500 10px "IBM Plex Mono",monospace;min-width:22px;text-align:center}
+.janelas.jan-dia .janela:hover{border-color:var(--tinta3);color:var(--tinta)}
+.janelas.jan-dia .janela.on{background:var(--crit);border-color:var(--crit);
+ color:#fff;font-weight:700}
+.janelas.jan-dia .janela.vazia{background:transparent;border-style:dashed;
+ border-color:var(--linha);color:var(--linha2);cursor:help}
+.janelas.jan-dia .janela.vazia.futuro{border-color:transparent;color:#CFCFCB}
+
+/* A LINHA DO TOTAL ABRE A CONTA DA EMPRESA INTEIRA.
+   Era a única linha morta da tabela - e justamente a que a pessoa olha
+   primeiro. Agora ela se comporta como as outras: cursor de mão, realce no
+   hover e a seta indicando que leva a algum lugar. */
+/* ATÉ QUANDO A BASE ENXERGA — primeira linha do corpo, à direita, em vermelho.
+   Texto, não caixa: é contexto, não botão. Vermelho porque é a única coisa da
+   tela que diz se o que está sendo lido é de agora ou de ontem - e essa
+   pergunta não pode depender de alguém reparar num cinza. */
+.ult-base{text-align:right;font:600 12px Archivo,sans-serif;color:var(--marca);
+ margin:0 0 10px;cursor:help;letter-spacing:.01em}
+
+/* O REBATE GERAL: o card que FECHA a soma dos três. Ganha peso porque é o
+   número inteiro - os outros três são as partes dele. */
+.kpi.kpi-geral{background:#F4FAF7;border:1px solid rgba(21,121,79,.28)}
+.kpi.kpi-geral .v{color:var(--bom)}
+
+tr.linha-total{cursor:pointer}
+tr.linha-total:hover{background:#F0F0EE !important}
+tr.linha-total a.abre-total{color:inherit;text-decoration:none;display:inline-flex;
+ align-items:center;gap:6px}
+tr.linha-total a.abre-total .nx-seta{color:var(--marca);font-weight:700;opacity:0;
+ transition:opacity .12s}
+tr.linha-total:hover a.abre-total .nx-seta{opacity:1}
+
+/* CONTRA O MÊS ANTERIOR - a faixa fina abaixo do selo de período.
+   Número sozinho não diz se melhorou; esta linha é o "comparado com o quê". */
+.vs-mes{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px;margin:0 0 12px;
+ padding:6px 10px;background:var(--sup2);border:1px solid var(--linha);border-radius:4px}
+.vs-mes .vs-rot{font:700 9.5px Archivo,sans-serif;letter-spacing:.1em;
+ text-transform:uppercase;color:var(--tinta3)}
+.vs-mes .vs-item{font:400 11px Archivo,sans-serif;color:var(--tinta2);cursor:help}
+.vs-mes .vs-item b{font:700 11.5px "IBM Plex Mono",monospace;margin-left:3px}
+.vs-mes .vs-item b.pos{color:var(--bom)}
+.vs-mes .vs-item b.neg{color:var(--crit)}
+.vs-mes .vs-obs{flex:1 0 100%;font:400 10.5px Archivo,sans-serif;color:var(--tinta3);
+ border-top:1px dashed var(--linha);padding-top:4px;margin-top:2px}
+
+/* o mes fechado - numero oficial, nao mais um dia do acompanhamento */
+.nx-fechado{display:inline-block;font:700 10px "IBM Plex Mono",monospace;
+ letter-spacing:.06em;text-transform:uppercase;background:var(--tinta);color:#fff;
+ border-radius:3px;padding:2px 7px;vertical-align:1px}
+
+/* redefinir a senha de alguem, na tela Conta */
+.conta-reset{display:flex;gap:6px;align-items:center;margin:0 0 10px;padding:0 0 10px;
+ border-bottom:1px solid var(--linha)}
+.conta-reset input{flex:1;min-width:0;font-size:12.5px;padding:6px 9px;
+ border:1px solid var(--linha2);border-radius:6px}
+.conta-reset .bt{white-space:nowrap;padding:6px 11px;font-size:12px}
+
+/* UMA LINHA POR PESSOA na tela Conta (pedido de 07/09/2026).
+   Antes eram tres blocos empilhados por pessoa - nome/nivel, senha, tirar - e
+   com sete pessoas a lista virava uma coluna de vinte e uma linhas.
+   O truque e o display:contents nos formularios: sao TRES formularios de
+   verdade (senao um clique mandaria as tres acoes juntas), mas eles deixam de
+   ser caixa e os campos entram direto na grade da linha. */
+.pessoas-cab,.pessoa{display:grid;
+ grid-template-columns:minmax(88px,.85fr) 118px 104px minmax(150px,1fr) auto auto;
+ gap:10px;align-items:center}
+.pessoas-cab{padding:0 0 6px;border-bottom:1px solid var(--linha2);
+ font:600 9.5px Archivo,sans-serif;letter-spacing:.12em;text-transform:uppercase;
+ color:var(--tinta3)}
+.pessoa{padding:9px 0;border-bottom:1px solid var(--linha)}
+.pessoa form{display:contents}
+.pessoa b{font-size:14px;overflow:hidden;text-overflow:ellipsis}
+.pessoa select{border:1px solid var(--linha2);border-radius:2px;padding:4px 8px;
+ font-size:12.5px;background:var(--sup);color:var(--tinta);min-width:0}
+.pessoa select:hover{border-color:var(--tinta3)}
+.pessoa .estado{font-size:11px;color:var(--tinta3);white-space:nowrap}
+.pessoa .estado.inicial{color:var(--aten)}
+.pessoa input[type=password]{width:100%;min-width:0;font-size:12.5px;padding:6px 9px;
+ border:1px solid var(--linha2);border-radius:6px;background:var(--sup)}
+.pessoa .bt{white-space:nowrap;padding:6px 11px;font-size:12px}
+.pessoa .tirar{background:none;border:0;padding:0;cursor:pointer;white-space:nowrap;
+ font:500 11px Archivo,sans-serif;color:var(--tinta3);text-decoration:underline}
+.pessoa .tirar:hover{color:var(--crit)}
+/* em tela estreita a linha unica nao cabe - volta a empilhar, que e melhor do
+   que espremer seis colunas em 380px */
+@media (max-width:820px){
+  .pessoas-cab{display:none}
+  .pessoa{display:block;padding:10px 0}
+  .pessoa form{display:flex;gap:6px;align-items:center;margin:0 0 5px}
+  .pessoa input[type=password]{flex:1}
+}
+
+/* criar acesso e tirar acesso, na tela Conta */
+.conta-novo{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:12px 0 4px;
+ padding-top:12px;border-top:1px solid var(--linha)}
+.conta-novo input,.conta-novo select{font-size:12.5px;padding:6px 9px;
+ border:1px solid var(--linha2);border-radius:6px;min-width:0}
+.conta-novo input[name=novo]{width:108px;text-transform:uppercase;
+ font:600 12.5px "IBM Plex Mono",monospace}
+.conta-novo input[name=senha_nova]{flex:1;min-width:120px}
+.conta-tirar .tirar{background:none;border:0;padding:0;cursor:pointer;
+ font:500 11px Archivo,sans-serif;color:var(--tinta3);text-decoration:underline}
+.conta-tirar .tirar:hover{color:var(--crit)}
+
+/* A PASTA DO DRIVE — o sistema busca em vez de esperar o envio.
+   Fica no topo do Fechamento, antes das caixas, porque e a resposta para
+   "preciso mesmo subir treze arquivos a mao?". Discreta de proposito: ela nao
+   e um numero, e um estado - so precisa dizer que esta viva e o que trouxe. */
+.drive h2{display:flex;align-items:center;gap:9px}
+.drive-selo{background:var(--bom);color:#fff;border-radius:3px;padding:2px 7px;
+ font:700 9.5px Archivo,sans-serif;letter-spacing:.12em}
+.drive-agora{margin-left:auto}
+.drive-agora .bt{padding:5px 11px;font-size:11.5px}
+.drive-linha{font-size:13px;color:var(--tinta2);line-height:1.5}
+.drive-linha b{color:var(--tinta)}
+.drive-lista{margin-top:10px;display:flex;flex-direction:column;gap:1px;
+ background:var(--linha);border:1px solid var(--linha)}
+.drive-item{background:var(--sup2);padding:7px 11px;display:flex;gap:10px;
+ align-items:baseline;font-size:12.5px}
+.drive-item b{color:var(--tinta);min-width:150px}
+.drive-arq{font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--tinta3);
+ overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.drive-q{margin-left:auto;font-size:11.5px;color:var(--tinta3);white-space:nowrap}
+.drive-fora{margin-top:10px;font-size:12.5px;color:var(--tinta2);line-height:1.5;
+ border-left:3px solid var(--linha2);padding-left:10px}
+.drive-conta{margin-top:10px;font-size:11.5px;color:var(--tinta3)}
+.drive-conta b{font-family:"IBM Plex Mono",monospace;color:var(--tinta2)}
+.drive-off{background:var(--sup2);border:1px dashed var(--linha2);padding:11px 14px;
+ margin-bottom:14px;font-size:12.5px;color:var(--tinta2);line-height:1.55}
+.drive-off b{color:var(--tinta)}
+.drive-off code{font-family:"IBM Plex Mono",monospace;font-size:11.5px;
+ background:var(--fundo);padding:1px 5px;border-radius:3px;color:var(--tinta2)}
+.drive-falta{display:inline-block;margin-top:5px;color:var(--marca);font-weight:600}
+
+/* ARQUIVOS EM VERMELHO. O unico botao do menu que e uma acao de todo dia; os
+   outros sao telas para olhar. Como o vermelho ja significava "voce esta
+   aqui", o estado de estar na tela ganhou um vermelho mais fechado com um
+   risco branco na borda - sem isso o botao ficaria identico em toda tela e a
+   pessoa perderia a pista de onde esta. */
+.menu .item.item-acao{background:var(--marca);color:#fff;font-weight:600}
+.menu .item.item-acao:hover{background:#B12820}
+.menu .item.item-acao.on{background:#9E2019;box-shadow:inset 2px 0 0 #fff}
+.menu .item.item-acao.on:hover{background:#9E2019}
+/* o dia que veio da data de geracao, e nao da frase do painel: uma conta, nao
+   uma leitura - e a tela precisa dizer isso sem gritar */
+.nx-deduzido{display:inline-block;margin-left:8px;background:#FFF6F5;color:var(--marca);
+ border:1px solid rgba(204,46,35,.35);border-radius:3px;padding:1px 7px;
+ font:600 10.5px Archivo,sans-serif;vertical-align:1px;cursor:help}
+
+/* A CAMERA AO LADO DO CODIGO DO PRODUTO.
+   Discreta em repouso e vermelha no hover: ela acompanha o codigo em toda
+   tela, e um icone forte repetido centenas de vezes numa tabela viraria
+   ruido. So aparece quando existe foto - icone que nao abre nada ensina a
+   pessoa a nao clicar, e ai ela para de clicar tambem onde funciona. */
+.foto-sku{display:inline-flex;align-items:center;justify-content:center;
+ width:17px;height:17px;margin-left:5px;vertical-align:-3px;border-radius:3px;
+ color:var(--tinta3);text-decoration:none;transition:color .12s,background .12s}
+.foto-sku svg{width:13px;height:13px;fill:currentColor}
+.foto-sku:hover{color:#fff;background:var(--marca)}
+td .foto-sku{opacity:.5}
+tr:hover td .foto-sku,td .foto-sku:hover{opacity:1}
+
+/* o quadro da foto, por cima da tela */
+.foto-quadro{position:fixed;inset:0;z-index:200;display:none;
+ align-items:center;justify-content:center;background:rgba(10,10,11,.82);
+ padding:24px}
+.foto-quadro.abre{display:flex}
+.foto-caixa{background:var(--sup);border-radius:4px;padding:12px;max-width:min(92vw,760px);
+ max-height:92vh;display:flex;flex-direction:column;gap:8px;
+ box-shadow:0 18px 50px rgba(0,0,0,.45)}
+.foto-caixa img{max-width:100%;max-height:74vh;object-fit:contain;display:block;
+ background:var(--sup2);border-radius:3px}
+.foto-topo{display:flex;align-items:baseline;gap:10px}
+.foto-topo b{font:600 13px "IBM Plex Mono",monospace;color:var(--tinta)}
+.foto-topo .foto-fecha{margin-left:auto;background:none;border:0;cursor:pointer;
+ font:600 12px Archivo,sans-serif;color:var(--tinta3)}
+.foto-topo .foto-fecha:hover{color:var(--marca)}
+.foto-topo a{font-size:11.5px;color:var(--tinta3)}
+.foto-erro{font-size:12.5px;color:var(--tinta2);padding:20px 8px;text-align:center}
