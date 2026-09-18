@@ -54,7 +54,8 @@ from . import arred
 CANAL = "amazon"
 TAXA_PADRAO = 0.015          # a taxa por pedido embutida no % cobrado
 # faixas cobradas pela Amazon = % negociado da categoria + 1,5% de taxa
-FAIXAS = (0.055, 0.065, 0.075, 0.080, 0.085, 0.090, 0.095, 0.105, 0.115, 0.120, 0.150, 0.165)
+FAIXAS = (0.055, 0.060, 0.065, 0.070, 0.075, 0.080, 0.085, 0.090, 0.095, 0.100, 0.105,
+          0.115, 0.120, 0.150, 0.165)
 TOL_FAIXA = 0.0015           # 0,15 p.p. de folga (arredondamento de centavos)
 # Dias entre o PEDIDO e a TRANSAÇÃO de pagamento: medido entre 2 e 17 dias
 # (mediana 8) nos pedidos que casaram com o ERP. Abaixo dessa folga, o pedido
@@ -142,6 +143,14 @@ def _ler_bruto(caminho: str) -> pd.DataFrame:
             break
         except UnicodeDecodeError:
             continue
+    # O Seller Central às vezes entrega o csv com a LINHA INTEIRA entre aspas e
+    # as aspas internas dobradas ("01/09/2026,""Liberado"",…"). Sem desembrulhar,
+    # o arquivo vira uma coluna só e nada é lido. Desfaz antes de parsear.
+    linhas = txt.splitlines()
+    envolvidas = sum(1 for l in linhas[:50] if len(l) > 2 and l[0] == '"' and l[-1] == '"' and '""' in l)
+    if envolvidas >= max(2, len(linhas[:50]) // 2):
+        txt = "\n".join((l[1:-1].replace('""', '"') if (len(l) > 2 and l[0] == '"' and l[-1] == '"') else l)
+                        for l in linhas)
     amostra = txt[:4000]
     sep = max((",", ";", "\t"), key=lambda s: amostra.count(s))
     return pd.read_csv(io.StringIO(txt), sep=sep, dtype=str, quoting=csv.QUOTE_MINIMAL)
@@ -190,7 +199,7 @@ def ler(caminho: str) -> tuple[pd.DataFrame, dict]:
     df["competencia"] = df["data"].map(lambda s: s[:7])
 
     serv = df[df["t"] == T_SERV]
-    reem = df[df["t"] == T_REEMB]
+    reem = df[df["t"].str.startswith(T_REEMB)]      # inclui "Reembolso de estorno"
     pag = df[df["t"] == T_PEDIDO]
     diag: dict[str, Any] = {
         "aba": "transações", "linhas_brutas": brutas, "linhas": int(len(df)),
@@ -220,7 +229,7 @@ def pedidos(tx: pd.DataFrame) -> pd.DataFrame:
     pag = pag[pag["pedido"] != ""]
     if not len(pag):
         return pd.DataFrame()
-    reem = tx[tx["t"] == T_REEMB]
+    reem = tx[tx["t"].str.startswith(T_REEMB)]      # reembolso e reembolso de estorno
     reemb = reem.groupby("pedido")["repasse"].sum().to_dict() if len(reem) else {}
     reemb_n = reem.groupby("pedido")["repasse"].size().to_dict() if len(reem) else {}
 
@@ -270,7 +279,11 @@ def calcular(ped: pd.DataFrame, pct: float, taxa_pct: float = TAXA_PADRAO,
         sis_rs = round(base_sis * pct_cad, 2)                   # o que o sistema deveria ter previsto
         faixa = float(r.faixa) if (r.faixa is not None and r.faixa == r.faixa) else None
         faixa_rs = round(base * faixa, 2) if faixa else None
-        alvo = faixa_rs if faixa_rs is not None else sis_rs      # o que a Amazon DEVERIA cobrar pela faixa
+        # Sem faixa identificada quase sempre é PEDIDO MISTO (itens de categorias
+        # diferentes): o % efetivo cai entre duas faixas e a cobrança pode estar
+        # certa. Nesses o alvo é a própria cobrança — não inventa rebate —, e a
+        # linha fica marcada para conferência.
+        alvo = faixa_rs if faixa_rs is not None else real
         # REBATE = comissão do sistema (ERP a 10,5% da NF) − comissão cobrada.
         # É a régua da casa, a mesma dos outros canais.
         dif = round(sis_rs - real, 2)

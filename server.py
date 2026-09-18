@@ -26,7 +26,7 @@ from werkzeug.utils import secure_filename
 from motor import meli, erp, magalu, magalu_vendas, magalu_full, shopee, madeira, webcont, colombo, amazon
 import planilhas
 
-VERSAO = "2026-09-18e"
+VERSAO = "2026-09-18f"
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(RAIZ), "dados")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -1311,7 +1311,7 @@ def amazon_extra() -> dict:
         return out
     for cp, sub in tx.groupby("competencia"):
         serv = sub[sub["t"] == amazon.T_SERV]
-        reem = sub[sub["t"] == amazon.T_REEMB]
+        reem = sub[sub["t"].str.startswith(amazon.T_REEMB)]
         pub = serv[serv["produto"].astype(str).str.lower().str.contains("public")]
         out[str(cp)] = {
             "servicos": round(-float(serv["repasse"].sum()), 2),

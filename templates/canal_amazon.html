@@ -25,7 +25,7 @@
 <div class="nota" style="margin:0 0 12px"><a href="{{ url_for('amazon_faltantes', mes=comp) }}" style="float:right">abrir Pedidos faltantes →</a><b>{{ s.sem_erp_base }} de {{ s.pedidos }} pedidos ainda sem par no ERP</b> — neles a comissão do sistema foi calculada sobre a base do próprio relatório da Amazon (produto − desconto + frete), não sobre o total da NF. Suba o ERP · Pedidos Marketplace que cubra {{ comp|mesano }} para fechar a conta.</div>
 {% endif %}
 {% if s.sem_faixa %}
-<div class="nota" style="margin:0 0 12px"><b>{{ s.sem_faixa }} pedido(s)</b> com percentual fora das faixas conhecidas (R$ {{ s.sem_faixa_rs|brl }} de comissão). Nesses, a conta cai para o cadastro — vale conferir no <a href="{{ url_for('linha', chave='amazon', mes=comp) }}">linha a linha</a>.</div>
+<div class="nota" style="margin:0 0 12px"><b>{{ s.sem_faixa }} pedido(s)</b> com percentual entre duas faixas (R$ {{ s.sem_faixa_rs|brl }} de comissão) — quase sempre <b>pedido misto</b>, com itens de categorias diferentes, em que o % efetivo fica no meio. Nesses o PLUTOS <b>não presume erro</b>: o alvo é a própria cobrança, e a linha fica marcada para conferência no <a href="{{ url_for('linha', chave='amazon', mes=comp) }}">linha a linha</a>.</div>
 {% endif %}
 
 <div class="bloco">
