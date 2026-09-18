@@ -26,7 +26,7 @@ from werkzeug.utils import secure_filename
 from motor import meli, erp, magalu, magalu_vendas, magalu_full, shopee, madeira, webcont, colombo, amazon
 import planilhas
 
-VERSAO = "2026-09-18g"
+VERSAO = "2026-09-18h"
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(RAIZ), "dados")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -3279,9 +3279,14 @@ code{{font:12px ui-monospace,monospace;color:#8A8A86;word-break:break-all}}</sty
 
 @app.route("/saude")
 def saude():
+    cs = canais()
     return jsonify({"ok": True, "versao": VERSAO, "hora_brasilia": agora().strftime("%d/%m/%Y %H:%M:%S"),
                     "fuso": "America/Sao_Paulo (UTC-3), fixo no código — não depende do relógio do servidor",
-                    "data_dir": DATA_DIR})
+                    "data_dir": DATA_DIR,
+                    "boxes_ativos": [c["nome"] for c in cs if c["ativo"]],
+                    "boxes_em_construcao": [c["nome"] for c in cs if not c["ativo"]],
+                    "motores": {m: (m in globals() and globals()[m] is not None)
+                                for m in ("meli", "magalu", "shopee", "madeira", "webcont", "colombo", "amazon")}})
 
 
 @app.errorhandler(403)
