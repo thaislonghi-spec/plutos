@@ -1,0 +1,13 @@
+PLUTOS · Rebates · Multimóveis
+==============================
+Rodar local:   pip install -r requirements.txt && cd app && python server.py   → http://localhost:5055
+Contas iniciais: THAIS (Admin, senha Plutos@2026) · GABI (Operador, senha Rebate@2026) — troca obrigatória no 1º acesso.
+Render: subir este repositório no GitHub → New Web Service → usa o render.yaml (disco em /var/data).
+Variáveis: DATA_DIR=/var/data · PLUTOS_SENHA (porta de recuperação da THAIS) · SECRET_KEY · PLUTOS_TOKEN (JSON para o Tropa/ORION).
+
+Estrutura
+  app/server.py       telas, contas, rodadas
+  app/motor/meli.py   o box do Mercado Livre (o método da Gabi, automatizado)
+  app/planilhas.py    PLUTOS_Rebates_AAAAMM.xlsx e a tabela Faltante
+  app/templates       layout do Tropa de Elite nas cores do PLUTOS
+  dados/<empresa>/    arquivos/, rodadas/, manual/faltante_meli.json, parametros.json

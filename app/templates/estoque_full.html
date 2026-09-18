@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block acoes_ult %}
+{% if PODE.exportar and e.tem and e.enviar_skus %}<a class="bt-excel" href="{{ url_for('baixar_sugestao_full', dias=dias_alvo) }}" data-tip="A lista de envio para o Full + o que tirar do CD">↓ EXCEL · envio</a>{% endif %}
+{% endblock %}
+{% block conteudo %}
+{% if not e.tem %}
+<div class="aviso"><b>Sem a foto de estoque do Full.</b> Ela vem dentro das <b>Cobranças do Fulfillment</b> (produtos_armazenados) — suba o zip <b>CSV-156171</b> em <a href="{{ url_for('arquivos', mes=comp) }}">Arquivos</a>, box Magazine Luiza.</div>
+{% else %}
+<div class="kpis cinco">
+  <div class="kpi preto"><span class="l">Estoque no CD do Magalu</span><span class="v">{{ e.unidades|brl(0) }}</span><span class="o">unidades em {{ e.skus }} SKUs · foto de {{ e.foto|dia }}</span></div>
+  <div class="kpi ouro"><span class="l">Valor do estoque</span><span class="v">R$ {{ e.valor_estoque|brl(0) }}</span><span class="o">custo do cadastro × unidades · {{ e.volume|brl(1) }} m³ ocupados</span></div>
+  <div class="kpi preto"><span class="l">Armazenagem no ciclo</span><span class="v">R$ {{ e.custo_arm|brl(0) }}</span><span class="o">{{ e.dias }} dias de foto · {{ e.de|dia }} a {{ e.foto|dia }}</span></div>
+  <div class="kpi {{ 'crit' if e.aniversario_rs else 'bom' }}"><span class="l">Aniversário pago</span><span class="v">R$ {{ e.aniversario_rs|brl(0) }}</span><span class="o">penalidade de produto parado no CD</span></div>
+  <div class="kpi {{ 'crit' if e.parados else 'bom' }}"><span class="l">Parados (sem venda)</span><span class="v">{{ e.parados|length }}</span><span class="o">R$ {{ e.parados_rs|brl(0) }} de estoque sem uma venda no ciclo</span></div>
+</div>
+
+<div class="kpis quatro">
+  <div class="kpi {{ 'crit' if e.urgentes else 'bom' }}"><span class="l">Sugestão de envio</span><span class="v">{{ e.enviar_un|brl(0) }}</span><span class="o">unidades em {{ e.enviar_skus }} SKUs · cobrir {{ dias_alvo }} dias + prazo de chegada{% if e.urgentes %} · <b>{{ e.urgentes|length }} URGENTES</b>{% endif %}</span></div>
+  <div class="kpi preto"><span class="l">Volume do envio</span><span class="v">{{ e.enviar_m3|brl(2) }} m³</span><span class="o">o que o caminhão da coleta precisa levar</span></div>
+  <div class="kpi ouro"><span class="l">Custo da coleta do envio</span><span class="v">R$ {{ e.enviar_coleta|brl(0) }}</span><span class="o">{{ e.enviar_m3|brl(1) }} m³ × R$ {{ tarifa_m3|brl(2) }}/m³ · o manuseio (R$ {{ e.enviar_manuseio|brl(0) }}) só é cobrado quando vender</span></div>
+  <div class="kpi {{ 'crit' if e.excesso else 'bom' }}"><span class="l">Excesso no CD</span><span class="v">{{ e.excesso|length }}</span><span class="o">cobertura acima de {{ 2 * dias_alvo }} dias · R$ {{ e.excesso_rs|brl(0) }} parados</span></div>
+</div>
+
+<div class="bloco">
+  <h2>Estoque dia a dia · {{ e.de|dia }} a {{ e.foto|dia }}</h2>
+  {% set maxu = e.por_dia|map(attribute='unidades')|max %}
+  <div class="barras">
+    {% for d in e.por_dia %}
+    <div class="b" style="height:{{ (100 * d.unidades / maxu) if maxu else 0 }}%" data-tip="{{ d.dia|dia }} · {{ d.unidades|brl(0) }} unidades · {{ d.skus }} SKUs"><i>{{ d.dia[8:10] }}</i></div>
+    {% endfor %}
+  </div>
+  <div class="nota" style="margin-top:10px">Cada barra é a foto do estoque naquele dia. A curva caindo é venda saindo mais rápido que reposição; subindo é abastecimento — e cada dia de estoque parado vira armazenagem e, depois do prazo, aniversário.</div>
+</div>
+
+<div class="bloco">
+  <form method="get" class="barra-massa filtro-mlb" id="ffiltro">
+    <input type="hidden" name="dias" id="fdias" value="{{ dias_alvo }}">
+    <input type="hidden" name="cd" id="fcd" value="{{ cd_sel }}">
+    <input type="search" name="q" id="fq" value="{{ q }}" placeholder="Buscar SKU, descrição ou CD…" autocomplete="off">
+    <div class="chips">
+      <span class="nota" style="margin:0 6px 0 0">cobertura alvo:</span>
+      {% for d in [15, 30, 45, 60] %}
+      <button type="button" class="chip {{ 'on' if dias_alvo == d }}" data-tipo="{{ d }}">{{ d }} dias</button>
+      {% endfor %}
+      <span class="nota" style="margin:0 6px 0 14px">CD:</span>
+      <button type="button" class="chip cdchip {{ 'on' if cd_sel == 'todos' }}" data-cd="todos">Todos</button>
+      {% for x in cds %}
+      <button type="button" class="chip cdchip {{ 'on' if cd_sel == x }}" data-cd="{{ x }}">{{ x }}</button>
+      {% endfor %}
+    </div>
+    <span class="nota" style="margin:0">{{ itens|length }} de {{ e.por_sku|length }} SKUs</span>
+  </form>
+  <div class="nota" style="margin:8px 0 0">Cobertura = estoque de hoje ÷ venda média por dia no Full ({{ dias_venda }} dias de venda no período). Prazo do CD: {% for cd in prazos %}{{ cd }} {{ prazos[cd] }}d · {% endfor %}padrão {{ prazo_padrao }}d — edite em <a href="{{ url_for('parametros_tela') }}">Parâmetros</a>. <b>ENVIAR</b> = venda média/dia × ({{ dias_alvo }} dias + o <b>prazo do CD</b>) − estoque de hoje — o estoque tem que aguentar até a reposição chegar. <b>URGENTE</b> = a cobertura de hoje é menor que o prazo de chegada: esse SKU rompe antes do caminhão entrar. <b>RETIRAR</b> = sem uma venda no ciclo: paga armazenagem, paga aniversário e ocupa m³ que poderia ser de item que gira — esse não recebe sugestão, tem que sair. <b>EXCESSO</b> = cobertura acima de {{ 2 * dias_alvo }} dias.
+  <b>Por CD:</b> o relatório do Magalu não diz de qual CD saiu cada venda, então a venda do SKU é <b>rateada pela participação de cada CD no estoque dele</b> — é estimativa até o canal mandar o dado. O envio total é a soma dos CDs, cada um com o seu prazo.</div>
+  <div class="rol"><table class="cols-cf">
+    {% if por_cd %}
+    <thead><tr><th>SKU</th><th>Descrição</th><th class="n">ENVIAR</th><th class="n">Ação</th><th class="n">Estoque no CD</th>
+      <th class="n">% do estoque</th><th class="n">Venda rateada</th><th class="n">Média/dia</th><th class="n">Cobertura (dias)</th>
+      <th class="n">Prazo CD</th><th class="n">Alvo (un)</th><th class="n">m³ do envio</th><th>CD</th></tr></thead>
+    {% else %}
+    <thead><tr><th>SKU</th><th>Descrição</th><th class="n">ENVIAR</th><th class="n">Ação</th><th class="n">Estoque hoje</th><th class="n">Valor do estoque</th>
+      <th class="n">Vendidas no ciclo</th><th class="n">Média/dia</th><th class="n">Cobertura (dias)</th><th class="n">Prazo CD</th>
+      <th class="n">m³ ocupados</th><th class="n">Armazenagem</th><th class="n">Aniversário</th><th>CD</th></tr></thead>
+    {% endif %}
+    <tbody>
+    {% if por_cd %}
+    {% for m in itens %}
+    <tr class="{{ 'linha-alerta' if m.parado }}">
+      <td class="n" style="text-align:left">{{ m.sku }}</td><td>{{ m.descricao or '—' }}</td>
+      <td class="n"><b>{{ m.sugestao|brl(0) if m.sugestao else '—' }}</b></td>
+      <td><span class="tag {{ 'crit' if m.acao in ('RETIRAR', 'URGENTE') else ('mk-aten' if m.acao == 'excesso' else ('ouro' if m.acao == 'ENVIAR' else 'ok2')) }}">{{ m.acao }}</span></td>
+      <td class="n">{{ m.estoque|brl(0) }}</td>
+      <td class="n">{{ m.parte|brl(1) }}%</td>
+      <td class="n">{{ m.vendidas|brl(0) }}</td>
+      <td class="n">{{ m.media_dia|brl(2) }}</td>
+      <td class="n" data-ord="{{ m.cobertura if m.cobertura is not none else 9999 }}">{% if m.cobertura is not none %}{{ m.cobertura|brl(0) }}{% else %}—{% endif %}</td>
+      <td class="n">{{ m.prazo }} d{% if m.rompe %} <span class="tag crit" style="font-size:9px">rompe</span>{% endif %}</td>
+      <td class="n">{{ m.alvo|brl(0) }}</td>
+      <td class="n">{{ m.sug_m3|brl(2) if m.sug_m3 else '—' }}</td>
+      <td>{{ m.cd }}</td></tr>
+    {% else %}
+    <tr><td colspan="13" class="vazio">Nada com esse filtro.</td></tr>
+    {% endfor %}
+    <tr class="linha-total"><td><b>Total {{ cd_sel }}</b></td><td></td><td class="n"><b>{{ tot.enviar_un|brl(0) }}</b></td><td></td>
+      <td class="n"><b>{{ tot.estoque|brl(0) }}</b></td><td></td><td></td><td></td><td></td><td></td><td></td>
+      <td class="n"><b>{{ tot.m3_envio|brl(2) }}</b></td><td></td></tr>
+    {% else %}
+    {% for m in itens %}
+    <tr class="{{ 'linha-alerta' if m.parado }}">
+      <td class="n" style="text-align:left">{{ m.sku }}</td><td>{{ m.descricao or '—' }}</td>
+      <td class="n"><b>{{ m.sugestao|brl(0) if m.sugestao else '—' }}</b></td>
+      <td><span class="tag {{ 'crit' if m.acao == 'RETIRAR' else ('mk-aten' if m.acao == 'excesso' else ('ouro' if m.acao == 'ENVIAR' else 'ok2')) }}">{{ m.acao }}</span></td>
+      <td class="n">{{ m.estoque|brl(0) }}</td>
+      <td class="n">{{ m.valor_estoque|brl(0) if m.valor_estoque else '—' }}</td>
+      <td class="n">{{ m.vendidas|brl(0) }}</td>
+      <td class="n">{{ m.media_dia|brl(2) }}</td>
+      <td class="n" data-ord="{{ m.cobertura if m.cobertura is not none else 9999 }}">{% if m.cobertura is not none %}{{ m.cobertura|brl(0) }}{% elif m.estoque %}<span class="tag pend">sem venda</span>{% else %}—{% endif %}</td>
+      <td class="n" data-ord="{{ m.prazo }}">{{ m.prazo }} d{% if m.rompe %} <span class="tag crit" style="font-size:9px">rompe</span>{% endif %}</td>
+      <td class="n">{{ m.volume|brl(2) if m.volume else '—' }}</td>
+      <td class="n">{{ m.custo_arm|brl }}</td>
+      <td class="n">{{ m.aniversario_rs|brl if m.aniversario_rs else '—' }}</td>
+      <td>{{ m.cd or '—' }}</td></tr>
+    {% else %}
+    <tr><td colspan="14" class="vazio">Nada com esse filtro.</td></tr>
+    {% endfor %}
+    <tr class="linha-total"><td><b>Total</b></td><td></td><td class="n"><b>{{ e.enviar_un|brl(0) }}</b></td><td></td><td class="n"><b>{{ e.unidades|brl(0) }}</b></td>
+      <td class="n"><b>{{ e.valor_estoque|brl(0) }}</b></td><td></td><td></td><td></td>
+      <td></td><td class="n"><b>{{ e.volume|brl(2) }}</b></td><td class="n"><b>{{ e.custo_arm|brl }}</b></td>
+      <td class="n"><b>{{ e.aniversario_rs|brl }}</b></td><td></td></tr>
+    {% endif %}
+    </tbody>
+  </table></div>
+</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+(function(){
+  var f=document.getElementById('ffiltro'); if(!f) return;
+  var q=document.getElementById('fq'),fd=document.getElementById('fdias'),t;
+  var fc=document.getElementById('fcd');
+  document.querySelectorAll('.chip').forEach(function(b){b.addEventListener('click',function(){
+    if(b.classList.contains('cdchip')){fc.value=b.getAttribute('data-cd');}else{fd.value=b.getAttribute('data-tipo');}
+    f.submit();});});
+  q.addEventListener('input',function(){clearTimeout(t);t=setTimeout(function(){f.submit();},450);});
+  q.focus(); q.setSelectionRange(q.value.length,q.value.length);
+})();
+</script>
+{% endblock %}
