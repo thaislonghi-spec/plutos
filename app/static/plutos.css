@@ -334,3 +334,9 @@ th.ord{cursor:pointer;user-select:none}
 th.ord:hover{color:#c9a227}
 th.ord.asc::after{content:' ▲';font-size:9px;color:#c9a227}
 th.ord.desc::after{content:' ▼';font-size:9px;color:#c9a227}
+
+/* lista de arquivos: só os 2 mais recentes, o resto abre na setinha */
+.ca-lista .ca-oculto{display:none}
+.ca-lista.aberta .ca-oculto{display:block}
+.ca-mais{display:block;width:100%;margin-top:6px;padding:6px 8px;background:transparent;border:1px dashed var(--linha2);border-radius:2px;color:var(--tinta3);font:600 11px Archivo,sans-serif;cursor:pointer;letter-spacing:.04em}
+.ca-mais:hover{border-color:var(--ouro);color:#8A6508}

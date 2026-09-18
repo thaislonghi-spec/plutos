@@ -12,7 +12,7 @@
     <div class="card-arq">
       <div class="ca-topo"><div><b class="ca-tit">Pedidos Marketplace</b><div class="ca-sub">export de vendas do ERP</div></div>
         {% if erp_idx.uploads %}<span class="tag ca-st ok">Recebido</span>{% else %}<span class="tag ca-st pend">Pendente</span>{% endif %}</div>
-      <div class="ca-lista">
+      <div class="ca-lista" id="ca-erp">
         {% for x in pend_por.get('erp', [])|reverse %}
         <div class="ca-item espera">
           <div class="ca-nome">{{ x.nome }}</div>
@@ -21,7 +21,7 @@
         </div>
         {% endfor %}
         {% for u in erp_idx.uploads|reverse %}
-        <div class="ca-item {{ 'vale' if loop.first }}">
+        <div class="ca-item {{ 'vale' if loop.first }}{{ ' ca-oculto' if loop.index > 2 }}">
           <div class="ca-nome">{{ u.nome }}</div>
           <div class="ca-meta">{{ ((u.bytes or 0) / 1048576)|brl(1) }} MB · {{ u.quando|quando }} · {{ u.linhas }} pedidos · {{ u.novas }} novas</div>
           <div class="ca-rot">{% if loop.first %}mais recente · no índice{% else %}anterior · no índice{% endif %}</div>
@@ -33,6 +33,9 @@
         {% else %}
         <div class="ca-vazio">Nenhum export ainda. Inclua o arquivo e clique OK.</div>
         {% endfor %}
+        {% if erp_idx.uploads|length > 2 %}
+        <button type="button" class="ca-mais" data-alvo="ca-erp">▾ ver os outros {{ erp_idx.uploads|length - 2 }} arquivos</button>
+        {% endif %}
       </div>
       {% if PODE.arquivos %}
       <form method="post" action="{{ url_for('subir_erp') }}" enctype="multipart/form-data" class="ca-pe" id="ferp">

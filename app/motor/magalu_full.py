@@ -28,7 +28,11 @@ from datetime import datetime
 from typing import Any
 
 TIPOS = {"manuseio": "Manuseio", "armazenagem": "Armazenagem",
-         "tempo_estoque": "Tempo de estoque", "coleta": "Coleta"}
+         "tempo_estoque": "Tempo de estoque", "coleta": "Coleta",
+         "copart": "Coparticipação de frete"}
+# a coparticipação medida (arquivo coparticipacao_a_pagar) entra no custo do Full
+# no lugar da estimativa que vinha da Planilha 2 · Vendas
+TIPOS_CUSTO = ("manuseio", "armazenagem", "tempo_estoque", "coleta")
 
 
 def _norm(s: Any) -> str:
@@ -82,6 +86,8 @@ def que_arquivo(caminho: str) -> str:
         cab, _ = _ler(caminho)
     except Exception:  # noqa: BLE001
         return ""
+    if "valor coparticipacao" in cab and "sku" in cab:
+        return "copart"
     if "agenda" in cab and "espaco" in cab:
         return "coleta"
     if "data entrada" in cab and "aniversario" in cab:
@@ -117,6 +123,20 @@ def ler(caminho: str) -> tuple[str, list[dict], dict]:
             out.append({"tipo": qual, "cd": "", "sku": "", "produto": "", "data": str(d) if d else "",
                         "agenda": _pega(cab, l, "agenda").strip(), "espaco": _num(_pega(cab, l, "espaco")),
                         "qtd": 1.0, "unit": v, "valor": round(v, 2), "chave": f"coleta|{_pega(cab, l, 'agenda').strip()}|{d}"})
+            continue
+        if qual == "copart":
+            # 1 linha por pedido × SKU, com o valor que NÓS pagamos do frete
+            d = _data(_pega(cab, l, "data do pedido"))
+            v = _num(_pega(cab, l, "valor coparticipacao"))
+            sku = _pega(cab, l, "sku").strip()
+            ped = _pega(cab, l, "pedido").strip()
+            out.append({"tipo": qual, "cd": "", "sku": sku, "produto": "",
+                        "data": str(d) if d else "", "agenda": "", "espaco": 0.0,
+                        "pedido": ped, "servico": _pega(cab, l, "servico").strip(),
+                        "peso_cubado": _num(_pega(cab, l, "peso cubado(kg/m3)")),
+                        "peso": _num(_pega(cab, l, "peso(kg)")),
+                        "qtd": 1.0, "unit": v, "valor": round(v, 2),
+                        "chave": f"copart|{ped}|{sku}|{n}"})
             continue
         if qual == "tempo_estoque":
             bruto = _pega(cab, l, "produto/sku")
@@ -158,7 +178,14 @@ def resumo(cobrancas: list[dict], copart_por_sku: dict | None = None, nomes: dic
     cb = [c for c in cobrancas if (not de or not c["data"] or de <= c["data"] <= ate)]
     por_tipo = {k: round(sum(c["valor"] for c in cb if c["tipo"] == k), 2) for k in TIPOS}
     coleta = por_tipo["coleta"]
-    com_sku = [c for c in cb if c["sku"]]
+    # coparticipação MEDIDA (arquivo do canal) manda na estimada (Planilha 2)
+    medida: dict[str, float] = {}
+    for c in cb:
+        if c["tipo"] == "copart" and c["sku"]:
+            medida[c["sku"]] = round(medida.get(c["sku"], 0.0) + c["valor"], 2)
+    if medida:
+        copart_por_sku = medida
+    com_sku = [c for c in cb if c["sku"] and c["tipo"] in TIPOS_CUSTO]
     por_sku: dict[str, dict] = {}
     for c in com_sku:
         s = por_sku.setdefault(c["sku"], {"sku": c["sku"], "produto": c["produto"], "qtd": 0.0,
@@ -221,7 +248,7 @@ def resumo(cobrancas: list[dict], copart_por_sku: dict | None = None, nomes: dic
         s["copart_un"] = round(s["copart"] / u, 2) if u else 0.0
         s["por_unidade"] = round(s["custo_total"] / u, 2) if u else 0.0
     copart = round(sum(copart_por_sku.values()), 2)
-    total = round(sum(por_tipo.values()) + copart, 2)
+    total = round(sum(por_tipo[k] for k in TIPOS_CUSTO) + copart, 2)
     sem_un = [s["sku"] for s in por_sku.values() if not s["unidades"] and s["custo_total"]]
     return {
         "linhas": len(cb), "skus": len(por_sku),
@@ -229,7 +256,8 @@ def resumo(cobrancas: list[dict], copart_por_sku: dict | None = None, nomes: dic
         "tempo_estoque": por_tipo["tempo_estoque"], "coleta": coleta, "copart": copart,
         "total": total,
         "cobrancas": round(sum(por_tipo.values()), 2),
-        "custo_full": round(sum(por_tipo.values()), 2),
+        "custo_full": round(sum(por_tipo[k] for k in TIPOS_CUSTO), 2),
+        "copart_medida": bool(medida),
         "m3_agendas": m3_agendas, "tarifa_m3": tarifa_m3,
         "volume": round(base_vol, 2),
         "sem_cubagem": [s["sku"] for s in por_sku.values() if not s["cubagem"]],
