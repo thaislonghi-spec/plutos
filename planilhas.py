@@ -636,3 +636,69 @@ def shopee_gabi_xlsx(linhas: list[dict], comp: str, pct: float, quando) -> io.By
     ws4["A1"].font = Font(bold=True, size=13)
     bio = io.BytesIO(); wb.save(bio); bio.seek(0)
     return bio
+
+
+def amazon_faltantes_xlsx(f: dict, sem_erp: list[dict], comp: str) -> io.BytesIO:
+    """Pedidos do ERP que não apareceram em nenhum relatório de transações da
+    Amazon — a lista de procura da Gabi. Aba 1: os que estão dentro da janela já
+    coberta (buraco de verdade). Aba 2: fora da janela (falta subir arquivo).
+    Aba 3: o contrário — pedido da Amazon sem par no ERP."""
+    wb = Workbook()
+    wb.remove(wb.active)
+
+    cab = ["ID do pedido (Amazon)", "Pedido ERP", "Data do pedido", "NF", "Data da NF", "Status ERP",
+           "Cliente", "Cidade", "UF", "Valor produtos (R$)", "IPI (R$)", "Frete (R$)",
+           "TOTAL do pedido / NF (R$)", "% no ERP", "Comissão prevista (R$)", "Tem ID da Amazon?"]
+    larg = [26, 14, 14, 10, 13, 12, 14, 22, 6, 18, 12, 12, 22, 10, 20, 18]
+
+    def _ls(itens):
+        return [[m["oc"], m["pedido_erp"], m["data"], m["nf"], m["data_nf"], m["status"],
+                 m["cliente"], m["cidade"], m["uf"], m["valor_prod"], m["ipi"], m["frete"],
+                 m["total"], (m["pct_erp"] or 0) * 100, m["comissao_prevista"],
+                 "sim" if m["tem_id"] else "NÃO — conferir a Ordem de compra no ERP"] for m in itens]
+
+    dentro = [m for m in f["itens"] if m["onde"] == "dentro"] or \
+             [m for m in f.get("itens", []) if f.get("onde") != "fora"]
+    _aba(wb, "Procurar_dentro_da_janela", cab, _ls([m for m in f["itens"] if m["onde"] == "dentro"]),
+         larg, moeda=(10, 11, 12, 13, 15))
+    _aba(wb, "Aguardando_repasse", cab, _ls([m for m in f["itens"] if m["onde"] == "aguardando"]),
+         larg, moeda=(10, 11, 12, 13, 15))
+    _aba(wb, "Fora_da_janela", cab, _ls([m for m in f["itens"] if m["onde"] == "fora"]),
+         larg, moeda=(10, 11, 12, 13, 15))
+
+    cab3 = ["ID do pedido (Amazon)", "Data", "Produto", "Produto (R$)", "Desconto (R$)", "Frete (R$)",
+            "Base da comissão (R$)", "Tarifas da Amazon (R$)", "% cobrado", "Faixa da categoria"]
+    ls3 = [[l["pedido_mkt"], l["data"], l.get("produto") or "", l["valor_prod"], l["desconto"], l["frete"],
+            l["sis_base"], l["tarifa"], (l["pct_comissao"] or 0) * 100, l["tipo"]] for l in sem_erp]
+    _aba(wb, "Amazon_sem_par_no_ERP", cab3, ls3, [26, 13, 48, 15, 14, 12, 20, 22, 12, 18],
+         moeda=(4, 5, 6, 7, 8))
+
+    ws = wb.create_sheet("Como_ler", 0)
+    for l in [
+        [f"PLUTOS · Amazon · pedidos faltantes · {comp}"],
+        [],
+        ["Janela já coberta pelos relatórios subidos:", f"{f['de']} a {f['ate']}"],
+        ["Pedidos da Amazon no ERP neste mês:", f["erp_total"]],
+        ["Já conferidos (achados no relatório):", f["conferidos"]],
+        ["FALTANDO dentro da janela (procurar):", f["contagem"]["dentro"], f["rs"]["dentro"]],
+        ["Aguardando repasse (pedido recente):", f["contagem"]["aguardando"], f["rs"]["aguardando"]],
+        ["Faltando fora da janela (falta subir o arquivo):", f["contagem"]["fora"], f["rs"]["fora"]],
+        [],
+        ["Dentro da janela", "o relatório de transações daquele período JÁ foi subido e mesmo assim o pedido não apareceu."],
+        ["", "Causas prováveis: pedido ainda não pago pela Amazon (fica para o próximo repasse), cancelado no canal,"],
+        ["", "ou Ordem de compra digitada diferente no ERP. É esta aba que precisa de procura."],
+        ["Aguardando repasse", f"pedido dos ultimos {f['folga']} dias da janela: a Amazon paga de 2 a 17 dias depois do pedido, entao ainda pode entrar no proximo relatorio."],
+        ["Fora da janela", "o pedido é de um período que ainda não foi subido. Não é erro: falta o arquivo daquele pedaço."],
+        ["Comissão prevista", f"{f['pct'] * 100:.2f}% (cadastro) x TOTAL do pedido (NF). É o que deixa de ser conferido enquanto o pedido não aparece."],
+        ["Amazon sem par no ERP", "o contrário: veio no relatório da Amazon e não achamos a Ordem de compra no ERP."],
+    ]:
+        ws.append(l)
+    ws.column_dimensions["A"].width = 46
+    ws.column_dimensions["B"].width = 96
+    ws.column_dimensions["C"].width = 18
+    ws["A1"].font = Font(bold=True, size=13)
+
+    bio = io.BytesIO()
+    wb.save(bio)
+    bio.seek(0)
+    return bio

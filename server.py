@@ -13,7 +13,7 @@ import os
 import re
 import secrets
 import shutil
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from functools import wraps
 from typing import Any
 
@@ -23,10 +23,10 @@ from flask import (Flask, abort, flash, jsonify, redirect, render_template, requ
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
-from motor import meli, erp, magalu, magalu_vendas, magalu_full, shopee, madeira, webcont, colombo
+from motor import meli, erp, magalu, magalu_vendas, magalu_full, shopee, madeira, webcont, colombo, amazon
 import planilhas
 
-VERSAO = "2026-09-18c"
+VERSAO = "2026-09-18e"
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(RAIZ), "dados")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -55,7 +55,9 @@ CANAIS = [
      "arquivo": "RELATÓRIO DE PEDIDOS (portal Colombo)", "arquivo_sub": "Colombo_Pedidos_DDMMateDDMMAA.csv · csv ; · 1 linha por item · dia 01 a 31",
      "extra": None},
     {"chave": "cbahia",   "nome": "Casas Bahia",     "ativo": False},
-    {"chave": "amazon",   "nome": "Amazon",          "ativo": False},
+    {"chave": "amazon",   "nome": "Amazon",          "ativo": True,
+     "arquivo": "TRANSAÇÕES (Seller Central → Pagamentos)", "arquivo_sub": "Amazon_Transações referentes ao período de DD_MM_AAAA a DD_MM_AAAA.csv · 1 linha por transação · acumula por ID do pedido",
+     "extra": None},
     {"chave": "webcont",  "nome": "Webcontinental",  "ativo": True,
      "arquivo": "RELATÓRIO DE PEDIDOS (portal Webcontinental)", "arquivo_sub": "relatorio_pedidos_webcontinental_DDMMateDDMMAA.xlsx · aba Pedidos · 1 linha por pedido · dia 01 a 31",
      "extra": None},
@@ -254,6 +256,8 @@ def parametros() -> dict:
 CORRECOES_COMISSAO = {
     # chave da correção: (pedaço do nome do canal, valor errado, valor certo, porquê)
     "colombo_7": ("COLOMBO", "9", "7", "o portal e o ERP trabalham com 7% (conferido em 100% dos pedidos)"),
+    "amazon_105": ("AMAZON", "9", "10,5", "9% de comissão + 1,5% de taxa por pedido — a taxa da Amazon é em %, "
+                                          "não em R$ (medido ao centavo em 575 pedidos)", "0"),
 }
 
 
@@ -263,7 +267,9 @@ def _corrigir_comissoes(p: dict) -> dict:
     if not linhas:
         return p
     mudou = False
-    for chave, (nome, errado, certo, _por) in CORRECOES_COMISSAO.items():
+    for chave, correcao in CORRECOES_COMISSAO.items():
+        nome, errado, certo = correcao[0], correcao[1], correcao[2]
+        taxa_certa = correcao[4] if len(correcao) > 4 else None
         if chave in feitas:
             continue
         for lin in linhas:
@@ -271,6 +277,11 @@ def _corrigir_comissoes(p: dict) -> dict:
                 atual = str(lin.get("comissao", "")).replace("%", "").replace(",", ".").strip()
                 if atual in (errado, errado + ".0", errado + ".00"):
                     lin["comissao"] = certo
+                    mudou = True
+                if taxa_certa is not None and str(lin.get("taxa", "")).strip() not in (taxa_certa, ""):
+                    # taxa que na verdade é percentual (Amazon 1,5%) não pode ficar
+                    # no campo R$ — ela já está dentro do % cheio
+                    lin["taxa"] = taxa_certa
                     mudou = True
         feitas.append(chave)
     if mudou or feitas != list(p.get("correcoes") or []):
@@ -1271,6 +1282,119 @@ def processar_colombo(destino: str, nome: str, quem: str) -> str:
     return (f"Colombo lido — {_txt_upsert(res)}. {txt}. Fora (Cancelado/Incluído): {diag['cancelados']} · "
             f"{diag['itens']} itens → {diag['linhas']} pedidos ({diag['multi_item']} com mais de 1 item).{dup}{extra}{alerta}")
 
+
+# --------------------------------------------------------------------------
+# AMAZON — o relatório é de TRANSAÇÕES, não de pedidos. A base acumula
+# transação a transação (chave própria) e o PEDIDO é montado a partir delas,
+# para que o mesmo ID do pedido entre UMA VEZ SÓ, venha em quantos arquivos vier.
+# --------------------------------------------------------------------------
+def amazon_tx_todas():
+    """Todas as transações da Amazon, de todas as competências, num df só."""
+    import pandas as pd
+    partes = []
+    for cp in competencias():
+        d = base_df("amazon", cp)
+        if d is not None and len(d):
+            partes.append(d)
+    if not partes:
+        return None
+    df = pd.concat(partes, ignore_index=True)
+    return df.drop_duplicates(subset=["chave"], keep="last")
+
+
+def amazon_extra() -> dict:
+    """Publicidade, serviços e reembolsos somados de TODAS as transações da base
+    (não só do último arquivo) — por competência."""
+    tx = amazon_tx_todas()
+    out: dict[str, dict] = {}
+    if tx is None:
+        return out
+    for cp, sub in tx.groupby("competencia"):
+        serv = sub[sub["t"] == amazon.T_SERV]
+        reem = sub[sub["t"] == amazon.T_REEMB]
+        pub = serv[serv["produto"].astype(str).str.lower().str.contains("public")]
+        out[str(cp)] = {
+            "servicos": round(-float(serv["repasse"].sum()), 2),
+            "publicidade": round(-float(pub["repasse"].sum()), 2),
+            "servicos_dias": int(serv["data"].nunique()),
+            "reembolsos": int(len(reem)),
+            "reembolso_rs": round(-float(reem["repasse"].sum()), 2),
+        }
+    return out
+
+
+def recalcular_amazon(comp: str):
+    r = rodada_cab("amazon", comp)
+    if not r:
+        return None
+    r = dict(r)
+    r.pop("linhas_n", None)
+    tx = amazon_tx_todas()
+    if tx is None:
+        tx, _d = amazon.ler(r["arquivo"]["caminho"])
+    ped = amazon.pedidos(tx)
+    if ped is None or not len(ped):
+        return None
+    ped = ped[ped["competencia"] == comp]
+    if not len(ped):
+        return None
+    pct, taxa_rs = comissao_cadastrada(("AMAZON",), (0.105, 0.0))
+    if taxa_rs:   # taxa em R$ na Amazon é erro de cadastro: o 1,5% já está no %
+        pct = pct
+    linhas = amazon.calcular(ped, pct, amazon.TAXA_PADRAO, erp_por_base("amazon"),
+                             parametros()["tolerancia_comissao"])
+    extra = dict(amazon_extra().get(comp) or {})
+    extra["devolvidos"] = int(ped["devolvido"].sum())
+    r["linhas"] = linhas
+    r["resumo"] = amazon.resumo(linhas, extra)
+    sem_faixa = r["resumo"]["sem_faixa"]
+    r["sistema"] = {"nome": (f"Faixa da categoria medida no próprio relatório (negociada + {amazon.TAXA_PADRAO * 100:.1f}% de taxa)"
+                             + (f" · {sem_faixa} pedido(s) fora de faixa usam o cadastro {pct * 100:.2f}%" if sem_faixa else "")),
+                    "quando": agora().isoformat(),
+                    "diag": {"linhas": len(linhas), "modo": "faixa por categoria × (produto − desconto + frete)",
+                             "cadastro_pct": round(pct * 100, 2), "taxa_rs_cadastrada": taxa_rs,
+                             "sem_faixa": sem_faixa}}
+    r["sistema_diag"] = r["sistema"]["diag"]
+    r["recalculado"] = agora().isoformat()
+    rodada_gravar("amazon", comp, r)
+    return r
+
+
+def processar_amazon(destino: str, nome: str, quem: str) -> str:
+    tx, diag = amazon.ler(destino)
+    res = base_upsert("amazon", tx, "chave", nome, destino, quem)
+    # o pedido pode ter transações em meses diferentes (pagamento em um,
+    # reembolso no outro): recalcula toda competência que a base conhece
+    comps = sorted(set(res) | {c for c in competencias() if rodada_cab("amazon", c)})
+    feitos = []
+    for comp in comps:
+        r = dict(rodada_cab("amazon", comp) or {"canal": "amazon", "competencia": comp}); r.pop("linhas_n", None)
+        r.update({"quando": agora().isoformat(), "quem": quem,
+                  "arquivo": {"nome": nome, "caminho": destino, "diag": {k: v for k, v in diag.items() if k != "competencias"}},
+                  "linhas": [], "resumo": {}})
+        rodada_gravar("amazon", comp, r)
+        r = recalcular_amazon(comp)
+        if not _resumo_pronto(r):
+            continue
+        s = r["resumo"]
+        feitos.append((comp, s["pedidos"], s["rebate_total"], s["desvio_cadastro"]))
+    txt = " · ".join(f"{f_mesano(c)}: {n} pedidos, rebate R$ {f_brl(t)}" for c, n, t, _ in feitos)
+    desv = sum(d for *_x, d in feitos)
+    pct, taxa_rs = comissao_cadastrada(("AMAZON",), (0.105, 0.0))
+    alerta = ""
+    if taxa_rs:
+        alerta = (f" ATENÇÃO: o cadastro está com R$ {f_brl(taxa_rs)} de taxa extra para a Amazon. Lá a taxa é de "
+                  f"1,5% (percentual), e ela já está dentro do % cheio — zere a taxa em R$ em Parâmetros.")
+    if abs(pct - 0.105) > 0.0005:
+        alerta += (f" ATENÇÃO: Parâmetros está com {pct * 100:.2f}% para a Amazon; o negociado é 9% + 1,5% de taxa = 10,5%.")
+    dev = f" {diag['reembolsos']} reembolso(s) (R$ {f_brl(diag['reembolso_rs'])}) — pedidos devolvidos saem do rebate." if diag["reembolsos"] else ""
+    pub = f" Publicidade no período do arquivo: R$ {f_brl(diag['publicidade'])} em {diag['servicos_dias']} dia(s) — é custo de mídia, não entra no rebate." if diag["publicidade"] else ""
+    dsv = f" Desvio de cadastro (não é rebate): R$ {f_brl(desv)}." if abs(desv) > 0.5 else ""
+    return (f"Amazon lida — {diag['linhas']} transações ({diag['pagamentos']} pagamentos de "
+            f"{diag['pedidos_no_arquivo']} pedidos) de {f_dia(diag['de'])} a {f_dia(diag['ate'])}. "
+            f"{_txt_upsert(res)}. {txt}.{dsv}{dev}{pub}{alerta}")
+
+
 def recalcular_canais(comp: str) -> list[str]:
     """Recalcula um canal de cada vez e SOLTA a memória entre eles (o Render tem
     512 MB: dois canais grandes juntos na memória derrubavam o app)."""
@@ -1303,6 +1427,11 @@ def recalcular_canais(comp: str) -> list[str]:
     r = recalcular_colombo(comp)
     if r:
         feitos.append(f"Colombo {f_mesano(comp)}: R$ {f_brl(r['resumo']['rebate_total'])}")
+    r = None
+    gc.collect()
+    r = recalcular_amazon(comp)
+    if r:
+        feitos.append(f"Amazon {f_mesano(comp)}: R$ {f_brl(r['resumo']['rebate_total'])}")
     r = None
     gc.collect()
     return feitos
@@ -1467,6 +1596,8 @@ def canal(chave):
         return render_template("canal_webcont.html", c=c, r=r)
     if chave == "colombo":
         return render_template("canal_colombo.html", c=c, r=r)
+    if chave == "amazon":
+        return render_template("canal_amazon.html", c=c, r=r)
     return render_template("canal.html", c=c, r=r)
 
 
@@ -1536,6 +1667,21 @@ LINHA_COLS = {
         ("Rebate R$", "rebate_rs", "n"), ("Rebate comissão", "rebate_comissao", "n"), ("Rebate frete", "rebate_frete", "n"),
         ("REBATE TOTAL", "rebate_total", "n"),
         ],
+    "amazon": [
+        ("Data", "data", "d"), ("ID do pedido / OC", "pedido_mkt", "t"), ("Pedido Any", "pedido_any", "t"),
+        ("Produto", "produto", "t"), ("Status", "status", "t"), ("Pagamento", "pagamento", "t"),
+        ("Transações", "itens", "n"),
+        ("Produto R$", "valor_prod", "n"), ("Desconto promocional", "desconto", "n"), ("Frete / outros", "frete", "n"),
+        ("BASE da comissão", "sis_base", "n"), ("Repasse", "repasse", "n"),
+        ("Comissão cobrada R$", "tarifa", "n"), ("% cobrado", "pct_comissao", "p"),
+        ("Faixa da categoria", "tipo", "t"), ("% negociado (sem a taxa)", "negociada", "p"),
+        ("Comissão pela faixa R$", "faixa_rs", "n"),
+        ("Comissão cadastro R$", "sis_rs", "n"), ("% cadastro", "sis_pct", "p"), ("% no ERP", "erp_pct", "p"),
+        ("Desvio de cadastro", "desvio_cadastro", "n"),
+        ("Diferença = rebate comissão", "diferenca", "n"), ("Reembolso", "reembolso", "n"),
+        ("Rebate R$", "rebate_rs", "n"), ("Rebate comissão", "rebate_comissao", "n"), ("Rebate frete", "rebate_frete", "n"),
+        ("REBATE TOTAL", "rebate_total", "n"),
+    ],
     "colombo": [
         ("Data", "data", "d"), ("OC / Entrega", "pedido_mkt", "t"), ("Pedido Colombo", "pedido_canal", "t"), ("Pedido Any", "pedido_any", "t"),
         ("Status", "status", "t"), ("Pagamento", "pagamento", "t"), ("Parcelas", "parcelas", "n"), ("UF", "uf", "t"), ("Cidade", "cidade", "t"),
@@ -1968,6 +2114,8 @@ def pend_processar(chave: str | None = None) -> list[str]:
                 m = processar_webcont(x["caminho"], x["nome"], x["quem"])
             elif x["chave"] == "colombo":
                 m = processar_colombo(x["caminho"], x["nome"], x["quem"])
+            elif x["chave"] == "amazon":
+                m = processar_amazon(x["caminho"], x["nome"], x["quem"])
             else:
                 m = f"{x['nome']}: o box {x['chave']} ainda não tem motor."
         except Exception as e:  # noqa: BLE001
@@ -2550,6 +2698,114 @@ def _custo_full(comp: str, q: str = "", cd: str = "todos") -> list[dict]:
         m["_tarifa_m3"] = s_.get("tarifa_m3", 0.0)
         m["_m3_agendas"] = s_.get("m3_agendas", 0.0)
     return itens
+
+
+def _amazon_faltantes(comp: str, q: str = "", filtro: str = "dentro") -> dict:
+    """Pedidos do ERP (canal Amazon) do mês que NÃO apareceram em NENHUM
+    relatório de transações subido — é a lista que a Gabi vai procurar.
+
+    O pedido só entra no relatório de transações quando a Amazon PAGA. Por isso
+    o faltante é separado em dois: o que está DENTRO da janela já coberta pelos
+    relatórios (aí é buraco de verdade) e o que está FORA dela (só falta subir
+    o arquivo daquele pedaço do mês)."""
+    tx = amazon_tx_todas()
+    vistos = set()
+    de = ate = ""
+    if tx is not None and len(tx):
+        vistos = {str(p).strip() for p in tx["pedido"] if str(p).strip()}
+        de, ate = str(tx["data"].min()), str(tx["data"].max())
+    pct, _taxa = comissao_cadastrada(("AMAZON",), (0.105, 0.0))
+
+    linhas, dentro, aguardando_l, fora, sem_id = [], [], [], [], 0
+    for l in erp_linhas("amazon", comp):
+        oc = (l.get("oc") or "").strip()
+        if oc in vistos:
+            continue
+        tem_id = oc.startswith(("701-", "702-", "703-"))
+        if not tem_id:
+            sem_id += 1
+        d = str(l.get("data") or "")
+        # A transação de pagamento chega DEPOIS do pedido (medido: 2 a 17 dias).
+        # Só é buraco de verdade quando a janela coberta vai além dessa folga.
+        limite = ""
+        if d:
+            try:
+                limite = str(date.fromisoformat(d) + timedelta(days=amazon.FOLGA_REPASSE))
+            except ValueError:
+                limite = d
+        na_janela = bool(de and ate and de <= d <= ate and limite and limite <= ate)
+        aguardando = bool(de and ate and de <= d <= ate and not na_janela)
+        total = float(l.get("valor_total") or 0.0)
+        m = {
+            "oc": oc, "pedido_erp": l.get("pedido_erp", ""), "data": d,
+            "nf": l.get("nf", ""), "data_nf": l.get("data_nf", ""), "status": l.get("status", ""),
+            "cidade": l.get("cidade", ""), "uf": l.get("uf", ""), "cliente": l.get("cliente", ""),
+            "valor_prod": float(l.get("valor_prod") or 0.0), "ipi": float(l.get("ipi") or 0.0),
+            "frete": float(l.get("valor_frete") or 0.0), "total": total,
+            "pct_erp": float(l.get("pct_comissao") or 0.0),
+            "comissao_prevista": round(total * pct, 2),
+            "tem_id": tem_id, "onde": "", "dias": ((agora().date() - date.fromisoformat(d)).days if d else 0),
+        }
+        m["onde"] = "dentro" if na_janela else ("aguardando" if aguardando else "fora")
+        linhas.append(m)
+        (dentro if na_janela else (aguardando_l if aguardando else fora)).append(m)
+
+    sel = {"dentro": dentro, "aguardando": aguardando_l, "fora": fora, "todos": linhas}.get(filtro, dentro)
+    if q:
+        qs = [t for t in unidecode_lower(q).split() if t]
+        sel = [m for m in sel
+               if all(t in unidecode_lower(f"{m['oc']} {m['pedido_erp']} {m['nf']} {m['cidade']} {m['uf']} {m['cliente']}")
+                      for t in qs)]
+    sel.sort(key=lambda m: -m["total"])
+    soma = lambda ls, k: round(sum(x[k] for x in ls), 2)  # noqa: E731
+    return {
+        "itens": sel, "de": de, "ate": ate, "pct": pct, "sem_id": sem_id,
+        "folga": amazon.FOLGA_REPASSE,
+        "contagem": {"dentro": len(dentro), "aguardando": len(aguardando_l), "fora": len(fora), "todos": len(linhas)},
+        "erp_total": len(erp_linhas("amazon", comp)), "conferidos": len(erp_linhas("amazon", comp)) - len(linhas),
+        "rs": {"dentro": soma(dentro, "total"), "aguardando": soma(aguardando_l, "total"),
+               "fora": soma(fora, "total"), "todos": soma(linhas, "total")},
+        "com": {"dentro": soma(dentro, "comissao_prevista"), "aguardando": soma(aguardando_l, "comissao_prevista"),
+                "fora": soma(fora, "comissao_prevista"), "todos": soma(linhas, "comissao_prevista")},
+    }
+
+
+def _amazon_sem_erp(comp: str) -> list[dict]:
+    """O contrário: pedido que veio no relatório da Amazon e não tem par no ERP."""
+    r = rodada("amazon", comp)
+    if not r:
+        return []
+    out = [dict(l) for l in r["linhas"] if not l.get("erp_ok")]
+    out.sort(key=lambda l: -(l.get("sis_base") or 0))
+    return out
+
+
+@app.route("/canal/amazon/faltantes")
+@logado
+def amazon_faltantes():
+    """PEDIDOS FALTANTES · Amazon — o que está no ERP e não apareceu em nenhum
+    relatório de transações que a Gabi subiu."""
+    comp = comp_atual()
+    q = (request.args.get("q") or "").strip()
+    filtro = (request.args.get("onde") or "dentro").strip()
+    f = _amazon_faltantes(comp, q, filtro)
+    sem_erp = _amazon_sem_erp(comp)
+    return render_template("amazon_faltantes.html", c=canal_por_chave()["amazon"], comp=comp,
+                           f=f, q=q, onde=filtro, sem_erp=sem_erp,
+                           sem_erp_rs=round(sum((l.get("sis_base") or 0) for l in sem_erp), 2))
+
+
+@app.route("/baixar/amazon-faltantes")
+@logado
+@exige("exportar")
+def baixar_amazon_faltantes():
+    q = (request.args.get("q") or "").strip()
+    filtro = (request.args.get("onde") or "dentro").strip()
+    comp = comp_atual()
+    bio = planilhas.amazon_faltantes_xlsx(_amazon_faltantes(comp, q, filtro), _amazon_sem_erp(comp), comp)
+    return send_file(bio, as_attachment=True,
+                     download_name=f"PLUTOS_Amazon_Faltantes_{comp}_{agora().strftime('%d%m%Y_%H%M')}.xlsx",
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
 @app.route("/canal/magalu/custo-full")

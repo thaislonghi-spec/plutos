@@ -340,3 +340,10 @@ th.ord.desc::after{content:' ▼';font-size:9px;color:#c9a227}
 .ca-lista.aberta .ca-oculto{display:block}
 .ca-mais{display:block;width:100%;margin-top:6px;padding:6px 8px;background:transparent;border:1px dashed var(--linha2);border-radius:2px;color:var(--tinta3);font:600 11px Archivo,sans-serif;cursor:pointer;letter-spacing:.04em}
 .ca-mais:hover{border-color:var(--ouro);color:#8A6508}
+
+/* seis KPIs numa linha só (Amazon · pedidos faltantes) */
+.kpis.seis{grid-template-columns:repeat(6,minmax(0,1fr));align-items:stretch}
+.kpis.seis .kpi{display:flex;flex-direction:column;justify-content:flex-start;min-width:0;padding:12px 13px}
+.kpis.seis .kpi .v{font-size:clamp(15px,1.15vw,20px)}
+.kpis.seis .kpi .o{margin-top:auto;padding-top:3px;font-size:10.5px}
+@media (max-width:1400px){.kpis.seis{grid-template-columns:repeat(3,minmax(0,1fr))}}
