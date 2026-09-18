@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<form class="filtros" method="get">
+  <input type="hidden" name="mes" value="{{ comp }}">
+  <input type="search" name="q" value="{{ q }}" placeholder="OC, pedido, SKU ou anúncio">
+  <select name="canal"><option value="">Todos os canais</option>{% for cn in CANAIS if cn.ativo %}<option value="{{ cn.chave }}" {{ 'selected' if canal_f == cn.chave }}>{{ cn.nome }}</option>{% endfor %}</select>
+  <select name="so">
+    <option value="" {{ 'selected' if so == '' }}>Todos os pedidos</option>
+    <option value="com" {{ 'selected' if so == 'com' }}>Só com rebate</option>
+    <option value="dif" {{ 'selected' if so == 'dif' }}>Só com rebate de comissão</option>
+    <option value="tz" {{ 'selected' if so == 'tz' }}>Só tarifa zero</option>
+  </select>
+  <button class="bt sec" type="submit">Filtrar</button>
+  <span class="nota" style="margin:0">{{ total|brl(0) }} pedido(s)</span>
+</form>
+<div class="bloco">
+<div class="rol" style="max-height:72vh"><table class="cols-16">
+  <thead><tr><th>Canal</th><th>OC / Pedido mkt</th><th>Data</th><th>SKU</th><th>Anúncio</th><th>Conta</th>
+    <th class="n">Produto</th><th class="n">Tarifa</th><th class="n">% cobrada</th><th class="n">% sistema</th><th class="n">Comissão sist.</th>
+    <th class="n">Rebate R$</th><th class="n">Rebate comissão</th><th class="n">Rebate frete</th><th class="n">TOTAL</th><th>Sinal</th></tr></thead>
+  <tbody>
+  {% for l in linhas %}
+  <tr class="{{ 'pend' if l.faltante_status == 'pendente' }}">
+    <td><span class="pill-canal">{{ l.canal }}</span></td>
+    <td class="n" data-tip="Pedido canal: {{ l.pedido_canal }} · Pedido Any: {{ l.pedido_any }}">{{ l.pedido_mkt }}</td>
+    <td>{{ l.data|dia }}</td><td class="n">{{ l.sku }}</td><td class="n">{{ l.anuncio }}</td><td>{{ l.conta }}</td>
+    <td class="n">{{ l.valor_prod|brl }}</td><td class="n">{{ l.tarifa|brl }}</td><td class="n">{{ l.pct_comissao|pct(1) }}</td>
+    <td class="n">{% if l.sis_pct is not none %}{{ l.sis_pct|pct(1) if l.sis_pct < 1 else (l.sis_pct|brl(1) ~ '%') }}{% else %}—{% endif %}</td>
+    <td class="n">{% if l.sis_rs is not none %}{{ l.sis_rs|brl }}{% else %}—{% endif %}</td>
+    <td class="n">{{ l.rebate_rs|brl }}</td><td class="n">{{ l.rebate_comissao|brl }}</td><td class="n">{{ l.rebate_frete|brl }}</td>
+    <td class="n"><b>{{ l.rebate_total|brl }}</b></td>
+    <td>{% if l.tarifa_zero %}<span class="tag {{ 'pend' if l.faltante_status == 'pendente' else 'ok2' }}">tarifa zero · {{ l.faltante_status }}</span>{% endif %}
+        {% if l.sem_sistema and l.sis_rs is none and not l.tarifa_zero %}<span class="tag mk-cinza">sem sistema</span>{% endif %}
+        {% if l.duplicado %}<span class="tag mk-aten">duplicado</span>{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody></table></div>
+{% if paginas > 1 %}
+<div class="pag">{% for p in range(1, paginas + 1) %}{% if p == pag %}<span class="atual">{{ p }}</span>{% else %}<a href="{{ url_for('pedidos', mes=comp, q=q, so=so, canal=canal_f, p=p) }}">{{ p }}</a>{% endif %}{% endfor %}</div>
+{% endif %}
+</div>
+{% endblock %}
