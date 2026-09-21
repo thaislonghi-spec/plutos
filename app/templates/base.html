@@ -112,8 +112,11 @@
   <div class="pe-lateral">
     {% if PODE.exportar %}
     <div class="export-box">
-      <a class="export-rebates" href="{{ url_for('export_rebates') }}" data-tip="O apanhado de TUDO que o PLUTOS gerou — OC, data, canal, rebate R$, comissão e frete — para importar nos outros apps">EXPORT<br>REBATES</a>
-      <a class="export-rebates entregas" href="{{ url_for('baixar_entregas') }}" data-tip="O custo de ENTREGA por SKU e por canal, num arquivo só — é este que sobe no ORION">EXPORT<br>ENTREGAS</a>
+      <span class="export-tit">Exportar</span>
+      <div class="export-par">
+        <a class="export-rebates" href="{{ url_for('export_rebates') }}" data-tip="O apanhado de TUDO que o PLUTOS gerou — OC, data, canal, rebate R$, comissão e frete — para importar nos outros apps">REBATES</a>
+        <a class="export-rebates entregas" href="{{ url_for('baixar_entregas') }}" data-tip="O custo de ENTREGA por SKU e por canal, num arquivo só — é este que sobe no ORION">ENTREGAS</a>
+      </div>
     </div>
     {% endif %}
     {% if IRMAOS %}

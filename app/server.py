@@ -26,7 +26,7 @@ from werkzeug.utils import secure_filename
 from motor import meli, erp, magalu, magalu_vendas, magalu_full, magalu_real, shopee, madeira, webcont, colombo, amazon
 import planilhas
 
-VERSAO = "2026-09-21i"
+VERSAO = "2026-09-21k"
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(RAIZ), "dados")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -3123,7 +3123,8 @@ def baixar_entregas():
     comp = comp_atual()
     bio = planilhas.entregas_xlsx(entregas_por_sku(comp), comp, magalu_real.NOMES)
     return send_file(bio, as_attachment=True,
-                     download_name=f"PLUTOS_ENTREGAS_{comp}_{agora().strftime('%d%m%Y_%H%M')}.xlsx",
+                     # o par do EXPORT REBATES: PLUTOS_EXPORT_ENTREGAS_DDMMAAAA_HHMM
+                     download_name=f"PLUTOS_EXPORT_ENTREGAS_{agora().strftime('%d%m%Y_%H%M')}.xlsx",
                      mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 

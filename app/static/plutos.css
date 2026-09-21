@@ -12,7 +12,16 @@
 .bt.pri:hover{background:var(--ouro2)}
 .marca-lateral{min-height:120px;padding:0 16px;justify-content:center}
 .marca-lateral .logo-plutos{height:78px;width:auto;max-width:100%}
-.topo-tela{min-height:120px}
+/* A FAIXA PRETA DO TOPO É FIXA (regra da casa, 21/09/2026): ela é a mesma peça
+   da coluna preta da esquerda, que já é sticky. Se ela sobe junto com o rolar,
+   a tela perde o título, o mês e os botões de exportar no meio da tabela.
+   z-index 30 fica acima do conteúdo e abaixo da dica (#dica, 99) e da foto (200);
+   o thead sticky das tabelas não tem z-index, então passa por baixo. */
+.topo-tela{min-height:120px;position:sticky;top:0;z-index:30;
+  box-shadow:0 10px 18px -12px rgba(0,0,0,.55)}
+/* os menus suspensos que nascem no topo têm de abrir SOBRE o conteúdo */
+.topo-tela .janelas,.topo-tela .acoes-topo{position:relative;z-index:31}
+@media (max-width:900px){.topo-tela{position:static}}
 /* a coluna preta vai até o fim da página, mesmo quando o conteúdo é mais alto
    que a tela: o menu fica fixo (sticky) e o fundo continua por baixo */
 .app{background:linear-gradient(to right,#0A0A0B 255px,var(--fundo) 255px)}
@@ -157,9 +166,17 @@ table.cols-12 td input.obs{width:100%;box-sizing:border-box} table.cols-12 td in
 .tag.lal{background:rgba(37,99,235,.12);color:#1D4ED8}
 
 /* EXPORT REBATES — o botão que alimenta os outros apps, acima dos irmãos */
+/* OS DOIS EXPORTS FICAM LADO A LADO (21/09/2026): empilhados comiam a altura
+   do rodape do menu e ficavam apertados. Uma etiqueta "Exportar" em cima, e
+   cada botao so com o NOME do arquivo — o verbo nao precisa aparecer duas vezes. */
 .export-box{padding:0 10px 12px}
-.export-rebates{display:block;text-align:center;text-decoration:none;font:800 13px Archivo,sans-serif;letter-spacing:.12em;
-  color:var(--ouro2);background:#141416;border:2px solid var(--ouro);border-radius:2px;padding:10px 8px;line-height:1.3}
+.export-tit{display:block;font:700 8.5px Archivo,sans-serif;letter-spacing:.2em;
+  text-transform:uppercase;color:#7A7D80;padding:0 2px 5px}
+.export-par{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.export-rebates{display:flex;align-items:center;justify-content:center;text-align:center;
+  text-decoration:none;font:800 10.5px Archivo,sans-serif;letter-spacing:.08em;min-height:38px;
+  color:var(--ouro2);background:#141416;border:2px solid var(--ouro);border-radius:2px;
+  padding:8px 4px;line-height:1.2;word-break:normal;overflow-wrap:anywhere}
 .export-rebates:hover{background:var(--ouro);color:#0B0B0C}
 
 /* Faltante: barra de busca + ações em massa; coluna de seleção */
@@ -422,5 +439,96 @@ th.ord.desc::after{content:' ▼';font-size:9px;color:#c9a227}
 .arq-top{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
 
 /* EXPORT ENTREGAS: irmão do EXPORT REBATES, na cor da logística */
-.export-rebates.entregas{margin-top:8px;border-color:#2B6CB0;color:#2B6CB0}
-.export-rebates.entregas:hover{background:#2B6CB0;color:#fff}
+/* ENTREGAS e o export secundario: mesma caixa, em osso, para o OURO continuar
+   sendo o botao principal. Azul nao existe na casa do PLUTOS. */
+.export-rebates.entregas{margin-top:0;border-color:#4A4D50;color:#E2E4E6}
+.export-rebates.entregas:hover{background:#F2F2F0;border-color:#F2F2F0;color:#0B0B0C}
+
+/* ------------------------------------------------------------------
+   KPI QUE ABRE UM BLOCO DA PRÓPRIA TELA (21/09/2026)
+   O número em cima só serve se levar ao detalhe. O box vira link, sem
+   perder o desenho: mesma caixa, mesmo tipo, só ganha a mão e o realce.
+   O scroll-margin desconta a faixa preta fixa do topo — sem ele o
+   título do bloco de destino fica escondido atrás dela.
+   ------------------------------------------------------------------ */
+.kpi.clica{text-decoration:none;color:inherit;cursor:pointer;
+  transition:border-color .12s,box-shadow .12s,transform .12s}
+.kpi.clica:hover{border-color:var(--ouro);box-shadow:0 3px 12px rgba(19,19,21,.12);transform:translateY(-1px)}
+.kpi.clica:hover .o b{color:var(--ouro3)}
+.kpi.clica .o b{color:var(--ouro3);white-space:nowrap}
+:target,#comparativo{scroll-margin-top:136px}
+.bloco:target{box-shadow:0 0 0 2px var(--ouro)}
+
+/* ------------------------------------------------------------------
+   ENTREGAS · CUSTO POR SKU — colunas travadas (21/09/2026)
+   Antes o corpo tinha 12 células e o cabeçalho 11: a coluna da
+   confiança não tinha título e TODO o resto andava um lugar para o
+   lado (o peso aparecia embaixo de "Cubagem"). Agora cada coluna tem
+   nome, largura própria e a unidade no cabeçalho — o número na célula
+   fica limpo, só o valor.
+   ------------------------------------------------------------------ */
+table.tb-entregas{table-layout:fixed;min-width:1238px}
+table.tb-entregas th,table.tb-entregas td{padding:7px 7px;font-size:12.5px}
+/* CABECALHO MENOR E EM DUAS LINHAS (21/09/2026): titulo de duas palavras quebra
+   sozinho, a coluna fica estreita e o numero cola no titulo — sem o vao que
+   havia entre Modalidade e Custo entrega. */
+.rol table.tb-entregas thead th,.rol table.tb-entregas thead th.n{height:auto;
+  padding:7px 7px 6px;vertical-align:bottom;white-space:normal;line-height:1.15;
+  font-size:8.5px;letter-spacing:.08em}
+.rol table.tb-entregas thead th.ord,.rol table.tb-comp thead th.ord{padding-right:16px}
+.rol table.tb-entregas thead th i{display:block;font-style:normal;font-size:7.5px;
+  letter-spacing:.08em;color:var(--tinta3);font-weight:500;margin-top:2px}
+table.tb-entregas th:nth-child(1),table.tb-entregas td:nth-child(1){width:132px}
+table.tb-entregas th:nth-child(2),table.tb-entregas td:nth-child(2){width:240px}
+table.tb-entregas th:nth-child(3),table.tb-entregas td:nth-child(3){width:100px}
+table.tb-entregas th:nth-child(4),table.tb-entregas td:nth-child(4){width:88px}
+table.tb-entregas th:nth-child(5),table.tb-entregas td:nth-child(5){width:104px}
+table.tb-entregas th:nth-child(6),table.tb-entregas td:nth-child(6){width:88px}
+table.tb-entregas th:nth-child(7),table.tb-entregas td:nth-child(7){width:84px}
+table.tb-entregas th:nth-child(8),table.tb-entregas td:nth-child(8){width:96px}
+table.tb-entregas th:nth-child(9),table.tb-entregas td:nth-child(9){width:72px}
+table.tb-entregas th:nth-child(10),table.tb-entregas td:nth-child(10){width:92px}
+table.tb-entregas th:nth-child(11),table.tb-entregas td:nth-child(11){width:68px}
+table.tb-entregas th:nth-child(12),table.tb-entregas td:nth-child(12){width:74px}
+table.tb-entregas td.sku{text-align:left;font-weight:600;white-space:normal;
+  overflow-wrap:anywhere;line-height:1.25}
+table.tb-entregas td.desc{white-space:normal;line-height:1.3}
+table.tb-entregas td.fonte{white-space:normal;line-height:1.3;font-size:11.5px;color:var(--tinta2)}
+table.tb-entregas td.forte{font-weight:700;color:var(--tinta)}
+/* a etiqueta NUNCA quebra letra a letra: ou cabe inteira, ou a coluna cresce */
+table.tb-entregas td.base{text-align:center;overflow:visible}
+table.tb-entregas td.base .tag{white-space:nowrap;display:inline-block;font-size:9.5px}
+
+/* COMPARATIVO · a mesma peça em mais de um canal — o valor e as unidades de
+   CADA canal ficam lado a lado (antes todos os valores vinham primeiro e as
+   unidades depois: era preciso contar coluna para saber de quem era o número).
+   O par de cada canal é separado por um filete. */
+table.tb-comp{table-layout:fixed}
+table.tb-comp th,table.tb-comp td{padding:7px 7px;font-size:12.5px}
+.rol table.tb-comp thead th,.rol table.tb-comp thead th.n{height:auto;padding:7px 7px 6px;
+  vertical-align:bottom;white-space:normal;line-height:1.15;font-size:8.5px;letter-spacing:.08em}
+/* Mais barato / Diferenca / Base, no fim da linha */
+table.tb-comp th:nth-last-child(4),table.tb-comp td:nth-last-child(4){width:112px}
+table.tb-comp th:nth-last-child(3),table.tb-comp td:nth-last-child(3){width:100px}
+table.tb-comp th:nth-last-child(2),table.tb-comp td:nth-last-child(2){width:84px}
+table.tb-comp th:nth-last-child(1),table.tb-comp td:nth-last-child(1){width:96px}
+table.tb-comp thead th i{display:block;font-style:normal;font-size:7.5px;letter-spacing:.08em;
+  color:var(--tinta3);font-weight:500;margin-top:2px;white-space:normal;line-height:1.25}
+table.tb-comp th:nth-child(1),table.tb-comp td:nth-child(1){width:158px}
+table.tb-comp th:nth-child(2),table.tb-comp td:nth-child(2){width:230px}
+table.tb-comp th.par-ini,table.tb-comp td.par-ini{width:148px;border-left:1px solid var(--linha)}
+table.tb-comp th.par-fim,table.tb-comp td.par-fim{width:82px}
+table.tb-comp td.sku{text-align:left;font-weight:600;white-space:normal;
+  overflow-wrap:anywhere;line-height:1.25}
+table.tb-comp td.desc{white-space:normal;line-height:1.3}
+table.tb-comp td.un{color:var(--tinta3)}
+table.tb-comp td.barato{white-space:normal;line-height:1.3;font-size:11.5px}
+table.tb-comp td.forte{font-weight:700}
+table.tb-comp td.base{text-align:center;overflow:visible}
+table.tb-comp td.base .tag{white-space:nowrap;display:inline-block;font-size:9.5px}
+
+/* Cabecalho de tabela que rola COM A PAGINA (.rol.fit nao tem rolagem propria):
+   ele tem de parar EMBAIXO da faixa preta fixa, senao some atras dela. Dentro
+   de um .rol com rolagem propria o top:0 continua certo. */
+.rol.fit thead th{top:120px}
+@media (max-width:900px){.rol.fit thead th{top:0}}
