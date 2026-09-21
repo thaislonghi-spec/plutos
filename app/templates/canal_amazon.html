@@ -21,8 +21,16 @@
 {% if s.desvio_cadastro|abs > 100 %}
 <div class="nota" style="margin:0 0 12px"><b>Abertura do rebate de R$ {{ s.rebate_comissao|brl }}:</b> R$ {{ s.desvio_cadastro|brl }} vêm de pedidos de <b>categoria com comissão negociada menor</b> que os 10,5% (9% + 1,5%) do cadastro, e R$ {{ s.erro_amazon|brl }} de cobrança fora da faixa da própria categoria. Os dois são rebate de comissão; a abertura serve para o <b>ORION</b> saber onde o custo previsto está acima do real e para a negociação com o canal saber o que é tabela e o que é erro.</div>
 {% endif %}
-{% if s.sem_erp_base %}
-<div class="nota" style="margin:0 0 12px"><a href="{{ url_for('amazon_faltantes', mes=comp) }}" style="float:right">abrir Pedidos faltantes →</a><b>{{ s.sem_erp_base }} de {{ s.pedidos }} pedidos ainda sem par no ERP</b> — neles a comissão do sistema foi calculada sobre a base do próprio relatório da Amazon (produto − desconto + frete), não sobre o total da NF. Suba o ERP · Pedidos Marketplace que cubra {{ comp|mesano }} para fechar a conta.</div>
+{% if s.fora_fechamento %}
+<div class="aviso" style="margin:0 0 12px"><a href="{{ url_for('amazon_faltantes', mes=comp) }}" style="float:right">abrir Pedidos faltantes →</a>
+<b>{{ s.fora_fechamento }} de {{ s.pedidos }} pedidos ficaram FORA do fechamento</b> (R$ {{ s.fora_rs|brl(0) }} de comissão cobrada que não virou rebate).
+{% if s.fora_sem_erp %}<b>{{ s.fora_sem_erp }}</b> sem par no ERP — sem a NF não existe base nem data de pedido, então o PLUTOS <b>não inventa rebate</b>.{% endif %}
+{% if s.fora_real_zero %} <b>{{ s.fora_real_zero }}</b> com comissão real zerada — o canal não informou o que cobrou, e comissão inteira não é rebate.{% endif %}
+Suba o <b>ERP · Pedidos Marketplace do mês inteiro</b> para fechar a conta.</div>
+{% endif %}
+{% if r.sistema_diag and (r.sistema_diag.movidos or r.sistema_diag.trazidos) %}
+<div class="nota" style="margin:0 0 12px"><b>Competência = data do pedido no ERP, não a data do repasse.</b>
+O extrato da Amazon é por pagamento: {{ r.sistema_diag.movidos }} pedido(s) pagos em {{ comp|mesano }} são de outro mês e saíram daqui, e {{ r.sistema_diag.trazidos }} pedido(s) de {{ comp|mesano }} pagos em outro mês entraram. É a mesma régua dos outros canais.</div>
 {% endif %}
 {% if s.sem_faixa %}
 <div class="nota" style="margin:0 0 12px"><b>{{ s.sem_faixa }} pedido(s)</b> com percentual entre duas faixas (R$ {{ s.sem_faixa_rs|brl }} de comissão) — quase sempre <b>pedido misto</b>, com itens de categorias diferentes, em que o % efetivo fica no meio. Nesses o PLUTOS <b>não presume erro</b>: o alvo é a própria cobrança, e a linha fica marcada para conferência no <a href="{{ url_for('linha', chave='amazon', mes=comp) }}">linha a linha</a>.</div>

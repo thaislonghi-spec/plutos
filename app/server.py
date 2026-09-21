@@ -26,7 +26,7 @@ from werkzeug.utils import secure_filename
 from motor import meli, erp, magalu, magalu_vendas, magalu_full, magalu_real, shopee, madeira, webcont, colombo, amazon
 import planilhas
 
-VERSAO = "2026-09-21h"
+VERSAO = "2026-09-21i"
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(RAIZ), "dados")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -677,11 +677,16 @@ def erp_por_base(box: str) -> dict:
     Um pedido do canal pode virar VÁRIAS OCs no ERP. Guardo a primeira (para os
     campos de texto) e SOMO produto, IPI e total de todas — é essa soma que vira
     a base da comissão do Promob (produto + IPI no Fulfillment, total na NF fora)."""
+    # AMAZON NÃO TEM SUFIXO (21/09/2026): o ID do pedido da Amazon já é
+    # '702-8643527-4627448' — cortar o '-4627448' como se fosse item/volume
+    # deixava TODO pedido da Amazon sem par no ERP, e o rebate nascia da base
+    # do próprio relatório em vez do total da NF. Só o Magalu tem o sufixo.
+    corta = magalu.base_oc if box != "amazon" else (lambda oc: str(oc or "").strip())
     out: dict[str, dict] = {}
     for oc, l in erp_ler()["ocs"].items():
         if l.get("box") != box:
             continue
-        b = magalu.base_oc(oc)
+        b = corta(oc)
         if b not in out:
             out[b] = dict(l, ocs_erp=0, prod_erp=0.0, ipi_erp=0.0, total_erp=0.0)
         a = out[b]
@@ -1413,13 +1418,29 @@ def recalcular_amazon(comp: str):
     ped = amazon.pedidos(tx)
     if ped is None or not len(ped):
         return None
+    # COMPETÊNCIA = DATA DO PEDIDO (ERP), NÃO A DATA DO PAGAMENTO (21/09/2026).
+    # O relatório de transações da Amazon é por REPASSE: um pedido de agosto
+    # aparece no extrato de setembro. Fechar por essa data jogava pedido de
+    # outro mês dentro do mês (1.149 pedidos / R$ 15.956 em set/26). A régua
+    # da casa é a mesma dos outros canais: vale a data do pedido no ERP.
+    # Sem par no ERP o pedido continua visível no mês do pagamento, mas com
+    # rebate zerado (trava no motor) — ele sai na subaba de pedidos faltantes.
+    erp_idx = erp_por_base("amazon")
+    c_pag = list(ped["competencia"])
+    c_erp = [((erp_idx.get(p) or {}).get("competencia") or "") for p in ped["pedido"]]
+    ped = ped.assign(comp_pagamento=c_pag, comp_erp=c_erp,
+                     competencia=[ce or cp for ce, cp in zip(c_erp, c_pag)])
+    mov = {"movidos": sum(1 for cp, ce in zip(c_pag, c_erp) if ce and cp == comp and ce != comp),
+           "trazidos": sum(1 for cp, ce in zip(c_pag, c_erp) if ce == comp and cp != comp),
+           "sem_erp_no_mes": sum(1 for cp, ce in zip(c_pag, c_erp) if not ce and cp == comp),
+           "erp_no_mes": sum(1 for l in erp_idx.values() if l.get("competencia") == comp)}
     ped = ped[ped["competencia"] == comp]
     if not len(ped):
         return None
     pct, taxa_rs = comissao_cadastrada(("AMAZON",), (0.105, 0.0))
     if taxa_rs:   # taxa em R$ na Amazon é erro de cadastro: o 1,5% já está no %
         pct = pct
-    linhas = amazon.calcular(ped, pct, amazon.TAXA_PADRAO, erp_por_base("amazon"),
+    linhas = amazon.calcular(ped, pct, amazon.TAXA_PADRAO, erp_idx,
                              parametros()["tolerancia_comissao"])
     extra = dict(amazon_extra().get(comp) or {})
     extra["devolvidos"] = int(ped["devolvido"].sum())
@@ -1429,9 +1450,9 @@ def recalcular_amazon(comp: str):
     r["sistema"] = {"nome": (f"Faixa da categoria medida no próprio relatório (negociada + {amazon.TAXA_PADRAO * 100:.1f}% de taxa)"
                              + (f" · {sem_faixa} pedido(s) fora de faixa usam o cadastro {pct * 100:.2f}%" if sem_faixa else "")),
                     "quando": agora().isoformat(),
-                    "diag": {"linhas": len(linhas), "modo": "faixa por categoria × (produto − desconto + frete)",
-                             "cadastro_pct": round(pct * 100, 2), "taxa_rs_cadastrada": taxa_rs,
-                             "sem_faixa": sem_faixa}}
+                    "diag": dict({"linhas": len(linhas), "modo": "competência = data do pedido no ERP · 10,5% sobre o total da NF",
+                                  "cadastro_pct": round(pct * 100, 2), "taxa_rs_cadastrada": taxa_rs,
+                                  "sem_faixa": sem_faixa}, **mov)}
     r["sistema_diag"] = r["sistema"]["diag"]
     r["recalculado"] = agora().isoformat()
     rodada_gravar("amazon", comp, r)

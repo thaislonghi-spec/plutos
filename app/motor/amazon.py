@@ -40,6 +40,13 @@ A REGRA DA COMISSÃO (medida em 575 pedidos de 12–18/09/2026, ao centavo):
     · parte que vem de COBRANÇA FORA DA FAIXA da própria categoria → é conversa
       com o canal.
 
+COMPETÊNCIA = DATA DO PEDIDO (regra da casa, corrigida em 21/09/2026). O
+relatório de transações é por DATA DE PAGAMENTO, e a Amazon paga de 2 a 17 dias
+depois: usar a data da transação jogava pedido de agosto dentro de setembro.
+Quem manda é a data de emissão no ERP. Pedido do relatório SEM par no ERP não
+tem competência confirmada e FICA FORA do fechamento — aparece só para
+conferência, com rebate zero.
+
 Chave do pedido = "ID do pedido" (701-/702-…), que é a própria Ordem de compra
 do ERP — o casamento é direto, sem de-para.
 """
@@ -282,6 +289,13 @@ def calcular(ped: pd.DataFrame, pct: float, taxa_pct: float = TAXA_PADRAO,
         base_erp = round(float(e.get("total_erp") or 0.0), 2)
         base_sis = base_erp if base_erp else base      # sem par no ERP: base do próprio relatório
         sis_rs = round(base_sis * pct_cad, 2)                   # o que o sistema deveria ter previsto
+        # DUAS TRAVAS (21/09/2026), para o rebate nunca nascer de um número que
+        # não conhecemos:
+        #  1) sem par no ERP  → não há NF nem data do pedido: fica de fora
+        #  2) comissão real 0 → o canal não cobrou (ou não informou): não é
+        #     rebate de comissão inteira, é dado que falta
+        sem_erp_ = not bool(e)
+        real_zero = real <= 0.005
         faixa = float(r.faixa) if (r.faixa is not None and r.faixa == r.faixa) else None
         faixa_rs = round(base * faixa, 2) if faixa else None
         # Sem faixa identificada quase sempre é PEDIDO MISTO (itens de categorias
@@ -293,6 +307,8 @@ def calcular(ped: pd.DataFrame, pct: float, taxa_pct: float = TAXA_PADRAO,
         # É a régua da casa, a mesma dos outros canais.
         dif = round(sis_rs - real, 2)
         reb_com = dif if abs(dif) > tolerancia else 0.0
+        if sem_erp_ or real_zero:
+            reb_com = 0.0
         # DESVIO DE CADASTRO = o pedaço da diferença que a faixa da categoria
         # explica (categoria paga menos que o cadastro) — não é erro da Amazon.
         desvio = round(sis_rs - alvo, 2)
@@ -313,6 +329,9 @@ def calcular(ped: pd.DataFrame, pct: float, taxa_pct: float = TAXA_PADRAO,
             "tarifa": real, "pct_comissao": round(float(r.pct_real), 4),
             "faixa": faixa, "faixa_rs": faixa_rs, "sem_faixa": faixa is None,
             "sis_pct": round(pct_cad, 6), "sis_rs": sis_rs, "erp_ok": bool(e),
+            "fora_fechamento": bool(sem_erp_ or real_zero),
+            "motivo_fora": ("sem par no ERP" if sem_erp_ else ("comissão real zerada" if real_zero else "")),
+            "comp_erp": (e.get("competencia") or ""), "data_erp": (e.get("data") or ""),
             "sis_base_erp": base_erp, "base_erp_nome": "total do pedido no ERP (NF)",
             "erp_pct": (round(pct_erp, 6) if pct_erp else None),
             "erp_difere": corrigido, "pct_corrigido": corrigido,
@@ -386,6 +405,10 @@ def resumo(linhas: list[dict], extra: dict | None = None) -> dict:
         "dif_neg_rs": round(sum(l["diferenca"] for l in linhas if l["diferenca"] < -0.5), 2),
         "sem_sistema": sum(1 for l in linhas if l["sem_sistema"]),
         "erp_ok": sum(1 for l in linhas if l.get("erp_ok")),
+        "fora_fechamento": sum(1 for l in linhas if l.get("fora_fechamento")),
+        "fora_sem_erp": sum(1 for l in linhas if l.get("motivo_fora") == "sem par no ERP"),
+        "fora_real_zero": sum(1 for l in linhas if l.get("motivo_fora") == "comissão real zerada"),
+        "fora_rs": round(sum(l["sis_rs"] for l in linhas if l.get("fora_fechamento")), 2),
         "sem_faixa": sum(1 for l in linhas if l["sem_faixa"]),
         "erp_difere": sum(1 for l in linhas if l.get("erp_difere")),
         "corrigidos": sum(1 for l in linhas if l.get("pct_corrigido")),
