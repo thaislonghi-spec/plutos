@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block acoes_ult %}
+{% if PODE.exportar and tem %}<a class="bt-excel" href="{{ url_for('baixar_copart_tabela', tab=vigente) }}" data-tip="A tabela por SKU para a formação de preço, nas três colunas do canal">↓ EXCEL</a>{% endif %}
+{% endblock %}
+{% block conteudo %}
+{% if tem %}
+<div class="nota" style="margin:0 0 12px"><b>Esta tela é para PRECIFICAR, não para apurar o mês.</b>
+O custo do mês continua saindo do <a href="{{ url_for('custo_full', mes=comp) }}">Custo do Full por item · Cobrado</a> — o que o canal cobrou de fato.
+Aqui está a <b>tabela por SKU</b> que o canal pratica: é este valor que o <b>ORION</b> soma na formação do preço, porque é ele que vai ser cobrado na próxima venda.</div>
+{% endif %}
+{% if not tem %}
+<div class="aviso" style="margin-bottom:14px"><b>A tabela de coparticipação por SKU ainda não subiu.</b>
+Suba o arquivo <b>Coparticipação Full_DDMMAAAA.xlsx</b> em <a href="{{ url_for('arquivos', mes=comp) }}">Arquivos</a> — box Magazine Luiza, cartão <b>Coparticipação Full (tabela por SKU)</b>.</div>
+<div class="bloco">
+  <h2>Para que serve cada tela</h2>
+  <ul class="lista">
+    <li><b>Custo do Full por item · Cobrado</b> — o que o canal COBROU no mês: manuseio, armazenagem, tempo de estoque, coleta e a coparticipação do extrato. É daqui que sai a <b>soma do custo</b> e o fechamento.</li>
+    <li><b>Coparticipação · Tabela</b> (esta) — o preço por SKU que o canal pratica. Serve para <b>formar preço</b>: é o que vai ser cobrado na próxima venda, e por isso é ele que o ORION soma, não o realizado do mês passado.</li>
+  </ul>
+</div>
+{% else %}
+<div class="kpis cinco">
+  <div class="kpi ouro"><span class="l">Coparticipação · {{ NOMES[vigente] }}</span><span class="v">R$ {{ s.total|brl(0) }}</span><span class="o">{{ s.unidades|brl(0) }} unidades vendidas no Full · {{ s.skus }} SKUs</span></div>
+  <div class="kpi crit"><span class="l">Por unidade</span><span class="v">R$ {{ s.por_unidade|brl(2) }}</span><span class="o">média ponderada pelas unidades do mês</span></div>
+  <div class="kpi {{ 'crit' if s.delta_40 > 0 else 'bom' }}"><span class="l">Tabela nova −40% vs antiga</span><span class="v">{{ '+' if s.alta_40 > 0 }}{{ s.alta_40|brl(0) }}%</span><span class="o">R$ {{ s.por_tabela.antiga|brl(0) }} → R$ {{ s.por_tabela.nova_40|brl(0) }} · {{ '+' if s.delta_40 > 0 }}R$ {{ s.delta_40|brl(0) }} no mês</span></div>
+  <div class="kpi crit"><span class="l">Tabela nova cheia vs antiga</span><span class="v">{{ '+' if s.alta_nova > 0 }}{{ s.alta_nova|brl(0) }}%</span><span class="o">R$ {{ s.por_tabela.antiga|brl(0) }} → R$ {{ s.por_tabela.nova|brl(0) }} · {{ '+' if s.delta_nova > 0 }}R$ {{ s.delta_nova|brl(0) }} no mês</span></div>
+  <div class="kpi {{ 'crit' if s.unidades_sem else 'bom' }}"><span class="l">Fora da tabela</span><span class="v">{{ s.unidades_sem|brl(0) }}</span><span class="o">unidades vendidas de SKU que o canal não tabelou · {{ s.sem_tabela|length }} SKUs</span></div>
+</div>
+
+<div class="bloco">
+  <div class="cab-acoes"><h2 style="margin:0">Qual tabela vale hoje</h2></div>
+  <form method="post" action="{{ url_for('parametros_tela') }}" class="filtros" style="gap:10px;align-items:center">
+    <input type="hidden" name="acao" value="copart_vigente">
+    {% for t in TABELAS %}
+    <label class="chip {{ 'on' if vigente == t }}" style="cursor:pointer;padding:7px 13px">
+      <input type="radio" name="tabela" value="{{ t }}" {{ 'checked' if vigente == t }} style="margin-right:6px">
+      {{ NOMES[t] }} · R$ {{ s.un_media[t]|brl(2) }}/un
+    </label>
+    {% endfor %}
+    {% if pode_gravar %}<button class="bt pri" type="submit">Gravar tabela vigente</button>{% endif %}
+  </form>
+  <div class="nota">A escolha fica em Parâmetros e vale para o sistema inteiro. O PLUTOS guarda as três colunas do arquivo justamente para você <b>simular</b> o efeito de uma virar a outra antes de valer.</div>
+</div>
+
+<div class="bloco">
+  <h2>Coparticipação por SKU <span class="qtd">{{ s.skus }} SKUs vendidos no Full · {{ comp|mesano }}</span></h2>
+  <div class="rol" style="max-height:60vh"><table class="cols-cf">
+    <thead><tr>
+      <th>SKU</th><th>Descrição</th><th class="n">Unidades</th>
+      <th class="n">VIGENTE / un</th><th class="n">VIGENTE no mês</th>
+      <th class="n">Antiga / un</th><th class="n">Nova −40% / un</th><th class="n">Nova / un</th>
+      <th class="n">Sobe vs antiga</th><th class="n">Antiga no mês</th><th class="n">Nova no mês</th><th>SKU no canal</th>
+    </tr></thead>
+    <tbody>
+    {% for m in s.linhas %}
+    <tr class="{{ 'linha-alerta' if m.sobe_vs_antiga > 20 }}">
+      <td class="n" style="text-align:left">{{ m.sku }}</td><td>{{ m.descricao or '—' }}</td>
+      <td class="n">{{ m.unidades|brl(0) }}</td>
+      <td class="n"><b>{{ m.vigente_un|brl(2) }}</b></td><td class="n"><b>{{ m.vigente_mes|brl }}</b></td>
+      <td class="n">{{ m.antiga|brl(2) }}</td><td class="n">{{ m.nova_40|brl(2) }}</td><td class="n">{{ m.nova|brl(2) }}</td>
+      <td class="n">{{ '+' if m.sobe_vs_antiga > 0 }}{{ m.sobe_vs_antiga|brl(2) }}</td>
+      <td class="n" style="opacity:.7">{{ m.antiga_mes|brl }}</td><td class="n" style="opacity:.7">{{ m.nova_mes|brl }}</td>
+      <td class="n" style="text-align:left;opacity:.7">{{ m.sku_canal }}</td></tr>
+    {% endfor %}
+    <tr class="linha-total"><td><b>Total</b></td><td></td><td class="n"><b>{{ s.unidades|brl(0) }}</b></td>
+      <td class="n"><b>{{ s.por_unidade|brl(2) }}</b></td><td class="n"><b>{{ s.total|brl }}</b></td>
+      <td class="n"><b>{{ s.un_media.antiga|brl(2) }}</b></td><td class="n"><b>{{ s.un_media.nova_40|brl(2) }}</b></td><td class="n"><b>{{ s.un_media.nova|brl(2) }}</b></td>
+      <td></td><td class="n"><b>{{ s.por_tabela.antiga|brl }}</b></td><td class="n"><b>{{ s.por_tabela.nova|brl }}</b></td><td></td></tr>
+    </tbody>
+  </table></div>
+  <div class="nota">O valor por SKU vem da tabela do canal; as <b>unidades</b> são as vendidas no Full em {{ comp|mesano }}. Linha destacada = o item sobe mais de R$ 20,00 por unidade da tabela antiga para a vigente.{% if ult %} Tabela lida de <b>{{ ult.nome }}</b> em {{ ult.quando[:10]|dia }}.{% endif %}</div>
+</div>
+
+<div class="dois-blocos">
+<div class="bloco">
+  <h2>Tabela × cobrado no mês</h2>
+  <div class="rol fit"><table data-sem-ordenar>
+    <tbody>
+      <tr><td>Se as vendas do mês fossem cobradas pela <b>tabela</b> ({{ NOMES[vigente] }})</td><td class="n"><b>R$ {{ s.total|brl }}</b></td></tr>
+      <tr><td>Coparticipação que o canal <b>cobrou</b> no mês (extrato)</td><td class="n">R$ {{ est_copart|brl }}</td></tr>
+      <tr class="linha-total"><td><b>Diferença</b></td><td class="n"><b>R$ {{ (s.total - est_copart)|brl }}</b></td></tr>
+      <tr><td>Custo total do Full cobrado no mês (com manuseio e coleta)</td><td class="n">R$ {{ est_total|brl }}</td></tr>
+    </tbody></table></div>
+  <div class="nota">Os dois números NÃO são a mesma coisa e nenhum corrige o outro: a tabela multiplica o preço do SKU pelas <b>unidades vendidas</b> (é projeção, serve para precificar); o cobrado vem do extrato do canal no <b>ciclo de 20 a 20</b> e inclui movimentações que não são venda (é apuração, serve para fechar o mês). A comparação aqui é só para ver <b>o quanto a conta vai mudar</b> quando a tabela nova valer para tudo.</div>
+</div>
+<div class="bloco">
+  <h2>SKUs vendidos que o canal não tabelou <span class="qtd">{{ s.sem_tabela|length }}</span></h2>
+  {% if s.sem_tabela %}
+  <div class="rol" style="max-height:34vh"><table class="cols-3">
+    <thead><tr><th>SKU</th><th>Descrição</th><th class="n">Unidades</th></tr></thead>
+    <tbody>{% for m in s.sem_tabela %}<tr><td class="n" style="text-align:left">{{ m.sku }}</td><td>{{ m.descricao or '—' }}</td><td class="n">{{ m.unidades|brl(0) }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+  <div class="nota">Esses itens venderam no Full mas não estão na tabela de coparticipação. Ou o canal ainda não os precificou, ou o SKU está diferente dos dois lados — vale conferir antes de fechar o mês.</div>
+  {% else %}
+  <div class="nota">Todos os SKUs vendidos no Full estão na tabela do canal.</div>
+  {% endif %}
+</div>
+</div>
+{% endif %}
+{% endblock %}

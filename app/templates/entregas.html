@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block acoes_ult %}
+{% if PODE.exportar %}<a class="bt-excel" href="{{ url_for('baixar_entregas') }}" data-tip="O arquivo único de entregas para o ORION: uma linha por SKU × canal, já com o custo por unidade">↓ EXCEL</a>{% endif %}
+{% endblock %}
+{% block conteudo %}
+<div class="kpis cinco">
+  <div class="kpi ouro"><span class="l">SKUs com custo de entrega</span><span class="v">{{ e.skus }}</span><span class="o">em {{ e.canais }} canal(is) · {{ e.linhas|length }} linhas SKU × canal</span></div>
+  <div class="kpi crit"><span class="l">Custo médio por unidade</span><span class="v">R$ {{ e.media|brl(2) }}</span><span class="o">só linhas com 5+ unidades · com todas seria R$ {{ e.media_todas|brl(2) }}</span></div>
+  <div class="kpi preto"><span class="l">Coparticipação em uso</span><span class="v txt">{{ NOMES[e.vigente] }}</span><span class="o">a tabela escolhida em <a href="{{ url_for('custo_full_real', mes=comp) }}">Coparticipação · Tabela</a> manda neste arquivo</span></div>
+  <div class="kpi preto"><span class="l">Mesma peça em 2 canais</span><span class="v">{{ e.comparativo_n }}</span><span class="o">SKUs comparáveis · R$ {{ e.comparativo_rs|brl(0) }} de diferença somada por unidade</span></div>
+  <div class="kpi {{ 'crit' if e.pouca_base else 'bom' }}"><span class="l">Pouca base</span><span class="v">{{ e.pouca_base }}</span><span class="o">linhas com menos de 5 unidades — custo/un inflado por item parado, não precifique por ele</span></div>
+</div>
+
+<div class="nota" style="margin:0 0 12px"><b>Este é o arquivo de ENTREGAS para o ORION.</b>
+Uma linha por <b>SKU × canal</b>, com o custo de entrega por unidade já somado e a origem de cada pedaço.
+Rebate não entra aqui — isso sai no <b>EXPORT REBATES</b>. Exportou, subiu no ORION: nada de juntar planilha.</div>
+
+<div class="bloco">
+  <form method="get" class="barra-massa" id="ffiltro">
+    <input type="search" name="q" id="fq" value="{{ q }}" placeholder="Buscar SKU, descrição ou canal…" autocomplete="off">
+    <span class="nota" style="margin:0">{{ e.linhas|length }} linhas</span>
+  </form>
+  <div class="rol" style="max-height:56vh"><table class="cols-cf">
+    <thead><tr>
+      <th>SKU</th><th>Descrição</th><th>Canal</th><th>Modalidade</th>
+      <th class="n">CUSTO ENTREGA / un</th><th class="n">Logística / un</th><th class="n">Frete / un</th>
+      <th>Fonte do frete</th><th class="n">Unidades</th><th class="n">Peso</th><th class="n">Cubagem</th>
+    </tr></thead>
+    <tbody>
+    {% for l in e.linhas %}
+    <tr><td class="n" style="text-align:left">{{ l.sku }}</td><td>{{ l.descricao or '—' }}</td>
+      <td>{{ l.canal }}</td><td>{{ l.modalidade }}</td>
+      <td class="n"><b>{{ l.custo_un|brl(2) }}</b></td>
+      <td class="n">{{ l.logistica_un|brl(2) }}</td><td class="n">{{ l.frete_un|brl(2) }}</td>
+      <td>{{ l.fonte_frete }}</td>
+      <td class="n">{{ l.unidades|brl(0) if l.unidades else '—' }}</td>
+      <td>{% if l.pouca_base %}<span class="tag pend">{{ l.confianca }}</span>{% else %}<span class="tag ok2">ok</span>{% endif %}</td>
+      <td class="n">{{ (l.peso|brl(1) ~ ' kg') if l.peso else '—' }}</td>
+      <td class="n">{{ (l.cubagem|brl(3) ~ ' m³') if l.cubagem else '—' }}</td></tr>
+    {% else %}
+    <tr><td colspan="12" class="vazio">Sem custo de entrega em {{ comp|mesano }} — rode o Magalu (Full) e o Mercado Livre (Coletas).</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  <div class="nota"><b>Logística</b> = manuseio, armazenagem, tempo de estoque e coleta (o que o canal cobra para guardar e movimentar). <b>Frete</b> = o pedaço do frete que é nosso: coparticipação no Magalu, custo do Coletas no Meli. A <b>fonte do frete</b> diz se o valor veio da tabela do canal (é o que vai ser cobrado) ou do que já foi medido.</div>
+</div>
+
+{% if e.comparativo %}
+<div class="bloco">
+  <h2>Comparativo · a mesma peça em mais de um canal <span class="qtd">{{ e.comparativo|length }} SKUs</span></h2>
+  <div class="rol" style="max-height:52vh"><table class="cols-cf">
+    <thead><tr><th>SKU</th><th>Descrição</th>
+      {% for c in e.colunas %}<th class="n">{{ c }}</th>{% endfor %}
+      {% for c in e.colunas %}<th class="n">un · {{ c.split(' · ')[0] }}</th>{% endfor %}
+      <th>Mais barato</th><th class="n">DIFERENÇA</th><th class="n">%</th><th>Conferir</th></tr></thead>
+    <tbody>
+    {% for p in e.comparativo %}
+    <tr class="{{ 'linha-alerta' if p.spread > 30 }}">
+      <td class="n" style="text-align:left">{{ p.sku }}</td><td>{{ p.descricao or '—' }}</td>
+      {% for c in e.colunas %}<td class="n">{{ p.canais[c]|brl(2) if p.canais.get(c) is not none else '—' }}</td>{% endfor %}
+      {% for c in e.colunas %}<td class="n" style="opacity:.7">{{ p.unidades[c]|brl(0) if p.unidades.get(c) else '—' }}</td>{% endfor %}
+      <td>{{ p.mais_barato }}</td>
+      <td class="n"><b>{{ p.spread|brl(2) }}</b></td>
+      <td class="n">{{ p.spread_pct|brl(0) }}%</td>
+      <td>{% if p.confianca.values()|select('ne','ok')|list %}<span class="tag pend">pouca base</span>{% else %}<span class="tag ok2">ok</span>{% endif %}</td></tr>
+    {% endfor %}
+    <tr class="linha-total"><td><b>Total</b></td><td></td>
+      {% for c in e.colunas %}<td></td>{% endfor %}{% for c in e.colunas %}<td></td>{% endfor %}
+      <td></td><td class="n"><b>{{ e.comparativo_rs|brl(2) }}</b></td><td></td><td></td></tr>
+    </tbody>
+  </table></div>
+  <div class="nota">A <b>mesma peça</b> custa diferente para entregar em cada canal — e isso tem de aparecer no preço <b>daquele</b> canal, não numa média. Linha destacada = mais de R$ 30,00 de diferença por unidade. Onde aparece <b>pouca base</b>, um dos canais teve menos de 5 unidades no período: confira antes de mexer no preço. As unidades ao lado mostram <b>onde está o volume</b> — diferença grande num canal que quase não vende importa menos.</div>
+</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+(function(){var f=document.getElementById('ffiltro'),q=document.getElementById('fq'),t;
+ q.addEventListener('input',function(){clearTimeout(t);t=setTimeout(function(){f.submit();},450);});
+ q.focus(); q.setSelectionRange(q.value.length,q.value.length);})();
+</script>
+{% endblock %}

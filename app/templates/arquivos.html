@@ -1,0 +1,282 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<div class="box-principal">
+  <div class="bp-topo">
+    <div><span class="bp-eyebrow">Arquivo principal</span><h2 class="bp-tit">ERP · Pedidos Marketplace</h2><div class="bp-sub">um arquivo do mês com as vendas de TODOS os canais — é dele que nasce a base de cada box</div></div>
+    <div class="bp-dir">
+      {% if erp_idx.uploads %}<div class="bp-num"><b>{{ erp_idx.ocs|length|brl(0) }}</b><span>OCs no índice · sem duplicar</span></div>{% endif %}
+      {% if PODE.arquivos %}<form method="post" action="{{ url_for('rodar_tudo') }}" style="margin:0"><button class="bt pri rodar-tudo {{ 'pulsa' if pend }}" type="submit" data-tip="Roda TODOS os arquivos que estão aguardando (ERP primeiro, depois os canais) e recalcula tudo — suba todas as planilhas e clique aqui uma vez só">▶ Rodar o PLUTOS{% if pend %} · {{ pend|length }} aguardando{% endif %}</button></form>{% endif %}
+    </div>
+  </div>
+  <div class="bp-corpo bp-duas">
+    <div class="card-arq">
+      <div class="ca-topo"><div><b class="ca-tit">Pedidos Marketplace</b><div class="ca-sub">export de vendas do ERP</div></div>
+        {% if erp_idx.uploads %}<span class="tag ca-st ok">Recebido</span>{% else %}<span class="tag ca-st pend">Pendente</span>{% endif %}</div>
+      <div class="ca-lista" id="ca-erp">
+        {% for x in pend_por.get('erp', [])|reverse %}
+        <div class="ca-item espera">
+          <div class="ca-nome">{{ x.nome }}</div>
+          <div class="ca-meta">{{ x.quando|quando }} · {{ x.quem }}</div>
+          <div class="ca-rot">aguardando ▶ rodar</div>
+        </div>
+        {% endfor %}
+        {% for u in erp_idx.uploads|reverse %}
+        <div class="ca-item {{ 'vale' if loop.first }}{{ ' ca-oculto' if loop.index > 2 }}">
+          <div class="ca-nome">{{ u.nome }}</div>
+          <div class="ca-meta">{{ ((u.bytes or 0) / 1048576)|brl(1) }} MB · {{ u.quando|quando }} · {{ u.linhas }} pedidos · {{ u.novas }} novas</div>
+          <div class="ca-rot">{% if loop.first %}mais recente · no índice{% else %}anterior · no índice{% endif %}</div>
+          <div class="ca-acoes">
+            <a class="mini" href="{{ url_for('erp_baixar', quando=u.quando) }}" data-tip="Baixar este arquivo">⇩</a>
+            {% if PODE.arquivos %}<form method="post" action="{{ url_for('erp_remover', quando=u.quando) }}"><button class="mini" type="submit" data-tip="Tirar da lista (as OCs já lidas ficam)">✕</button></form>{% endif %}
+          </div>
+        </div>
+        {% else %}
+        <div class="ca-vazio">Nenhum export ainda. Inclua o arquivo e clique OK.</div>
+        {% endfor %}
+        {% if erp_idx.uploads|length > 2 %}
+        <button type="button" class="ca-mais" data-alvo="ca-erp">▾ ver os outros {{ erp_idx.uploads|length - 2 }} arquivos</button>
+        {% endif %}
+      </div>
+      {% if PODE.arquivos %}
+      <form method="post" action="{{ url_for('subir_erp') }}" enctype="multipart/form-data" class="ca-pe" id="ferp">
+        {% if erp_idx.uploads %}<a href="#" class="ca-excluir" id="erp-limpar">excluir todos</a>{% else %}<span></span>{% endif %}
+        <input type="hidden" name="rodar" value="1"><input type="file" name="arquivo" accept=".xlsx,.xls,.csv,.txt,.zip" id="erp-arq" hidden required>
+        <button type="button" class="bt sec ca-incluir" id="erp-incluir">Incluir arquivo</button>
+        <button type="submit" class="bt pri ca-ok" id="erp-ok" disabled>OK</button>
+      </form>
+      {% if pend_por.get('erp') %}<form method="post" action="{{ url_for('rodar_box', chave='erp') }}" class="ca-rodar"><button class="bt sec" type="submit" data-tip="Roda só o ERP agora, sem esperar o ▶ Rodar o PLUTOS">▶ Rodar ERP ({{ pend_por['erp']|length }})</button></form>{% endif %}
+      <form method="post" action="{{ url_for('erp_limpar') }}" id="ferp-limpar" hidden></form>
+      <div class="ca-escolhido" id="erp-escolhido"></div>
+      {% endif %}
+      <div class="ok-canto">{% if erp_idx.uploads %}<span class="pill-ok">ok · {{ erp_idx.uploads[-1].quando|quando }}</span>{% else %}<span class="pill-nao">sem arquivo</span>{% endif %}</div>
+    </div>
+    <div>
+      <div class="arq-sub">Export "Pedidos_Marketplace_DDMMateDDMMAAAA_HHMM" em <b>.csv</b> ou <b>.xlsx</b> — tanto faz, o app lê os dois igual. A OC é texto e é a chave de tudo; a coluna T diz o canal (sem o "MP - "); a coluna AB é o % de comissão do ERP. <b>Nunca soma duas vezes:</b> pode subir o mês inteiro de novo — OC que já existe é ignorada (ou atualizada se mudou), só as novas entram.</div>
+      {% if erp_idx.uploads %}{% set u = erp_idx.uploads[-1] %}<span class="arq-n">último: {{ u.nome }} · {{ u.quando|quando }} por {{ u.quem }} · {{ u.linhas }} pedidos de {{ u.de|dia }} a {{ u.ate|dia }} · <b>{{ u.novas }} novas</b> · {{ u.atualizadas or 0 }} atualizadas · {{ u.iguais or 0 }} iguais (ignoradas){% if u.sem_box %} · <span class="tag mk-aten">sem box: {% for k, v in u.sem_box.items() %}{{ k }} ({{ v }}){% if not loop.last %}, {% endif %}{% endfor %}</span>{% endif %}</span>{% endif %}
+    </div>
+  </div>
+  <div class="bp-corpo" style="padding-top:0">
+    <div>
+      {% if erp_res %}
+      <div class="rol fit" style="margin-top:10px"><table data-sem-ordenar>
+        <thead><tr><th>Box</th><th>Canal no ERP</th><th class="n">Pedidos</th><th class="n">Venda (produtos)</th><th class="n">Frete</th><th class="n">Comissão ERP R$</th></tr></thead>
+        <tbody>{% for cn in CANAIS %}{% set e = erp_res.get(cn.chave) %}{% if e %}
+          <tr><td><b>{{ cn.nome }}</b><span class="pils">{% if cn.ativo %}<span class="tag ok2">box ok</span>{% else %}<span class="tag obra">box em construção</span>{% endif %}<span class="tag lal">linha a linha ok</span></span></td><td>{{ e.nomes|join(', ') }}</td><td class="n">{{ e.pedidos }}</td><td class="n">{{ e.venda|brl }}</td><td class="n">{{ e.frete|brl }}</td><td class="n">{{ e.comissao_erp|brl }}</td></tr>
+        {% endif %}{% endfor %}
+        {% if erp_res.outros %}<tr><td><span class="tag mk-aten">sem box</span></td><td>{{ erp_res.outros.nomes|join(', ') }}</td><td class="n">{{ erp_res.outros.pedidos }}</td><td class="n">{{ erp_res.outros.venda|brl }}</td><td class="n">{{ erp_res.outros.frete|brl }}</td><td class="n">{{ erp_res.outros.comissao_erp|brl }}</td></tr>{% endif %}
+        </tbody></table></div>
+      <div class="nota">Competência {{ comp|mesano }}. Cada canal ganha a sua base "Linha a linha" com estes pedidos; nos canais com motor (Mercado Livre) o % do ERP vira a comissão do sistema e gera o rebate de comissão.</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="bloco">
+  <h2>Um box por canal</h2>
+  <div class="arqs">
+  {% for cn in CANAIS %}
+    {% if cn.ativo %}
+    <div class="arq arq-largo">
+      <div class="arq-top"><b>{{ loop.index }} · {{ cn.nome|upper }}</b><span class="arq-top-dir">{% if cn.chave == 'shopee' and rods.get(cn.chave) and PODE.exportar %}<a class="bt-excel" href="{{ url_for('baixar_shopee_gabi', mes=comp) }}" data-tip="A planilha da Shopee no formato da Gabi (aba novo + Planilha1 com as fórmulas dela), já preenchida com o que o PLUTOS gerou no mês">↓ EXCEL · planilha da Gabi</a>{% endif %}{% if pend_por.get(cn.chave) and PODE.arquivos %}<form method="post" action="{{ url_for('rodar_box', chave=cn.chave) }}" style="margin:0"><button class="bt pri" type="submit" style="padding:5px 11px" data-tip="Roda só este box agora">▶ Rodar {{ cn.nome }} ({{ pend_por[cn.chave]|length }})</button></form>{% endif %}{% if rods.get(cn.chave) %}<span class="ok">rodado {{ comp|mesano }}</span>{% endif %}</span></div>
+      {% if cn.chave == 'meli' %}
+      <div class="dois-upl">
+        <div class="upl-box">
+          <div class="upl-eyebrow">Planilha 1 · Completo</div>
+          <div class="arq-tit">{{ cn.arquivo }}</div>
+          <div class="arq-sub">{{ cn.arquivo_sub }}</div>
+          {% if r_meli %}<span class="arq-n">{{ r_meli.arquivo.nome }} · {{ r_meli.quando|quando }} · {{ r_meli.resumo.pedidos }} pedidos</span>
+          <span class="arq-n">comissão do sistema: {% if r_meli.sistema %}<span class="ok">ERP</span> {{ r_meli.sistema_diag.linhas }} OCs{% else %}<span class="tag pend">suba o ERP (arquivo principal)</span>{% endif %}</span>{% else %}<span class="arq-n">ainda não subiu nesta competência</span>{% endif %}
+          {% if PODE.arquivos %}
+          <form method="post" action="{{ url_for('subir', chave=cn.chave) }}" enctype="multipart/form-data" class="upl">
+            <input type="hidden" name="tipo" value="base"><input type="hidden" name="rodar" value="1"><input type="file" name="arquivo" accept=".xlsx,.xls,.csv,.zip" required>
+            <button class="bt pri" type="submit" style="padding:7px 14px">Subir e rodar</button>
+          </form>
+          {% for x in pend_por.get(cn.chave, []) if x.tipo == 'base' %}<span class="arq-n espera-n">⏳ {{ x.nome }} · aguardando ▶ rodar</span>{% endfor %}
+          <div class="ok-canto">{% if r_meli %}<span class="pill-ok">ok · {{ r_meli.quando|quando }}</span>{% else %}<span class="pill-nao">sem arquivo · {{ comp|mesano }}</span>{% endif %}</div>
+          {% endif %}
+        </div>
+        <div class="upl-box">
+          <div class="upl-eyebrow">Planilha 2 · Resumo</div>
+          <div class="arq-tit">RESUMO DE REBATES</div>
+          <div class="arq-sub">export do Power BI · Relatorios_PedidosxRebates · MLB × tipo de anúncio</div>
+          {% if mlbs_ult %}<span class="arq-n">{{ mlbs_ult.nome }} · {{ mlbs_ult.quando|quando }} · {{ mlbs_ult.diag.linhas }} pedidos · {{ mlbs_ult.diag.mlbs }} MLB's</span>
+          <span class="arq-n">Lista de MLB's: <b>{{ mlbs_total }}</b> anúncios — <a href="{{ url_for('mlbs') }}">abrir</a></span>{% else %}<span class="arq-n">ainda não subiu — a Lista de MLB's nasce daqui</span>{% endif %}
+          {% if PODE.arquivos %}
+          <form method="post" action="{{ url_for('subir', chave=cn.chave) }}" enctype="multipart/form-data" class="upl">
+            <input type="hidden" name="tipo" value="rebates"><input type="hidden" name="rodar" value="1"><input type="file" name="arquivo" accept=".xlsx,.xls,.zip" required>
+            <button class="bt pri" type="submit" style="padding:7px 14px">Subir e rodar</button>
+          </form>
+          {% for x in pend_por.get(cn.chave, []) if x.tipo == 'rebates' %}<span class="arq-n espera-n">⏳ {{ x.nome }} · aguardando ▶ rodar</span>{% endfor %}
+          <div class="ok-canto">{% if mlbs_ult %}<span class="pill-ok">ok · {{ mlbs_ult.quando|quando }}</span>{% else %}<span class="pill-nao">sem arquivo</span>{% endif %}</div>
+          {% endif %}
+        </div>
+      </div>
+      {% else %}
+      {% set rc = rods.get(cn.chave) %}
+      {% if cn.chave == 'magalu' %}<div class="cinco-upl">{% endif %}
+      <div class="upl-box" {% if cn.chave != 'magalu' %}style="margin-top:8px"{% endif %}>
+        {% if cn.chave == 'magalu' %}<div class="upl-eyebrow">Principal · Financeiro por período</div>{% endif %}
+        <div class="arq-tit">{{ cn.arquivo }}</div>
+        <div class="arq-sub">{{ cn.arquivo_sub }}</div>
+        {% if rc %}<span class="arq-n">{{ rc.arquivo.nome }} · {{ rc.quando|quando }} · {{ rc.resumo.pedidos }} pedidos válidos · {{ rc.resumo.cancelados or 0 }} cancelados fora</span>
+        <span class="arq-n">comissão do sistema: <span class="ok">{{ rc.sistema.nome }}</span></span>{% else %}<span class="arq-n">ainda não subiu nesta competência</span>{% endif %}
+        {% if PODE.arquivos %}
+        <form method="post" action="{{ url_for('subir', chave=cn.chave) }}" enctype="multipart/form-data" class="upl">
+          <input type="hidden" name="tipo" value="base"><input type="hidden" name="rodar" value="1"><input type="file" name="arquivo" {% if cn.chave != 'madeira' %}accept=".xlsx,.xls,.csv,.zip"{% endif %} required>
+          <button class="bt pri" type="submit" style="padding:7px 14px">Subir e rodar</button>
+        </form>
+        {% for x in pend_por.get(cn.chave, []) if x.tipo not in ('vendas', 'full', 'coleta') %}<span class="arq-n espera-n">⏳ {{ x.nome }} · aguardando ▶ rodar</span>{% endfor %}
+        <div class="ok-canto">{% if rc %}<span class="pill-ok">ok · {{ rc.quando|quando }}</span>{% else %}<span class="pill-nao">sem arquivo · {{ comp|mesano }}</span>{% endif %}</div>
+        {% endif %}
+      </div>
+      {% if cn.chave == 'magalu' %}
+      <div class="upl-box">
+        <div class="upl-eyebrow">Planilha 2 · Vendas no período</div>
+        <div class="arq-tit">MAGAZINELUIZA_VENDAS (zip)</div>
+        <div class="arq-sub">os dois custos de logística: frete dos pedidos Full e a coparticipação de frete que nós pagamos</div>
+        {% if mg_vendas %}<span class="arq-n">{{ mg_vendas.nome }} · {{ mg_vendas.quando|quando }} · {{ mg_vendas.diag.linhas }} linhas ({{ mg_vendas.qual }})</span>
+        <span class="arq-n"><a href="{{ url_for('frete_full', mes=comp) }}">Custo Frete Full</a> · <a href="{{ url_for('coparticipacao', mes=comp) }}">Coparticipação de Frete</a></span>{% else %}<span class="arq-n">ainda não subiu — as telas de frete Full e coparticipação nascem daqui</span>{% endif %}
+        {% if PODE.arquivos %}
+        <form method="post" action="{{ url_for('subir', chave=cn.chave) }}" enctype="multipart/form-data" class="upl">
+          <input type="hidden" name="tipo" value="vendas"><input type="hidden" name="rodar" value="1"><input type="file" name="arquivo" accept=".zip,.csv" required>
+          <button class="bt pri" type="submit" style="padding:7px 14px">Subir e rodar</button>
+        </form>
+        {% for x in pend_por.get(cn.chave, []) if x.tipo == 'vendas' %}<span class="arq-n espera-n">⏳ {{ x.nome }} · aguardando ▶ rodar</span>{% endfor %}
+        <div class="ok-canto">{% if mg_vendas %}<span class="pill-ok">ok · {{ mg_vendas.quando|quando }}</span>{% else %}<span class="pill-nao">sem Planilha 2</span>{% endif %}</div>
+        {% endif %}
+      </div>
+      <div class="upl-box">
+        <div class="upl-eyebrow">Cobranças do Fulfillment</div>
+        <div class="arq-tit">CSV-156171 · COBRANÇASFULLFILMENT (zip)</div>
+        <div class="arq-sub">manuseio · armazenagem · tempo de estoque — ciclo do dia 20 ao dia 20</div>
+        {% if mg_full %}<span class="arq-n">{{ mg_full.nome }} · {{ mg_full.quando|quando }} · {{ mg_full.diag.linhas }} cobranças</span>
+        <span class="arq-n">custo por item: <a href="{{ url_for('custo_full', mes=comp) }}">abrir Custo do Full</a></span>{% else %}<span class="arq-n">ainda não subiu — manuseio, armazenagem e tempo de estoque nascem daqui</span>{% endif %}
+        {% if PODE.arquivos %}
+        <form method="post" action="{{ url_for('subir', chave=cn.chave) }}" enctype="multipart/form-data" class="upl">
+          <input type="hidden" name="tipo" value="full"><input type="hidden" name="rodar" value="1"><input type="file" name="arquivo" accept=".zip,.csv" required>
+          <button class="bt pri" type="submit" style="padding:7px 14px">Subir e rodar</button>
+        </form>
+        {% for x in pend_por.get(cn.chave, []) if x.tipo == 'full' %}<span class="arq-n espera-n">⏳ {{ x.nome }} · aguardando ▶ rodar</span>{% endfor %}
+        <div class="ok-canto">{% if mg_full %}<span class="pill-ok">ok · {{ mg_full.quando|quando }}</span>{% else %}<span class="pill-nao">sem cobranças</span>{% endif %}</div>
+        {% endif %}
+      </div>
+      <div class="upl-box">
+        <div class="upl-eyebrow">Coleta do Fulfillment</div>
+        <div class="arq-tit">CSV-160172 · COLETAFULLFILMENT (zip)</div>
+        <div class="arq-sub">o que o Magalu cobra para buscar a mercadoria — por agenda e m³, sem SKU</div>
+        {% if mg_coleta %}<span class="arq-n">{{ mg_coleta.nome }} · {{ mg_coleta.quando|quando }} · {{ mg_coleta.diag.linhas }} coletas · R$ {{ mg_coleta.diag.valor|brl }}</span>
+        <span class="arq-n">entra rateada no <a href="{{ url_for('custo_full', mes=comp) }}">Custo do Full por item</a></span>{% else %}<span class="arq-n">ainda não subiu — a coleta é o 2º maior custo do Full</span>{% endif %}
+        {% if PODE.arquivos %}
+        <form method="post" action="{{ url_for('subir', chave=cn.chave) }}" enctype="multipart/form-data" class="upl">
+          <input type="hidden" name="tipo" value="coleta"><input type="hidden" name="rodar" value="1"><input type="file" name="arquivo" accept=".zip,.csv" required>
+          <button class="bt pri" type="submit" style="padding:7px 14px">Subir e rodar</button>
+        </form>
+        {% for x in pend_por.get(cn.chave, []) if x.tipo == 'coleta' %}<span class="arq-n espera-n">⏳ {{ x.nome }} · aguardando ▶ rodar</span>{% endfor %}
+        <div class="ok-canto">{% if mg_coleta %}<span class="pill-ok">ok · {{ mg_coleta.quando|quando }}</span>{% else %}<span class="pill-nao">sem coleta</span>{% endif %}</div>
+        {% endif %}
+      </div>
+      <div class="upl-box">
+        <div class="upl-eyebrow">Tabela de coparticipação</div>
+        <div class="arq-tit">COPARTICIPAÇÃO FULL (tabela por SKU)</div>
+        <div class="arq-sub">a tabela do canal que entra na FORMAÇÃO DE PREÇO — a apuração do mês continua vindo do cobrado</div>
+        {% if mg_real %}<span class="arq-n">{{ mg_real.nome }} · {{ mg_real.quando|quando }} · {{ mg_real.diag.linhas }} linhas</span>
+        <span class="arq-n">para precificar: <a href="{{ url_for('custo_full_real', mes=comp) }}">abrir Coparticipação · Tabela</a></span>{% else %}<span class="arq-n">ainda não subiu — é a tabela que o ORION soma no preço</span>{% endif %}
+        {% if PODE.arquivos %}
+        <form method="post" action="{{ url_for('subir', chave=cn.chave) }}" enctype="multipart/form-data" class="upl">
+          <input type="hidden" name="tipo" value="full_real"><input type="hidden" name="rodar" value="1"><input type="file" name="arquivo" accept=".zip,.csv,.xlsx,.xls" required>
+          <button class="bt pri" type="submit" style="padding:7px 14px">Subir e rodar</button>
+        </form>
+        {% for x in pend_por.get(cn.chave, []) if x.tipo == 'full_real' %}<span class="arq-n espera-n">⏳ {{ x.nome }} · aguardando ▶ rodar</span>{% endfor %}
+        <div class="ok-canto">{% if mg_real %}<span class="pill-ok">ok · {{ mg_real.quando|quando }}</span>{% else %}<span class="pill-nao">sem tabela</span>{% endif %}</div>
+        {% endif %}
+      </div>
+      </div>
+      {% endif %}
+      {% endif %}
+      <details class="ajuda2"><summary>O que o PLUTOS faz com isso</summary>
+        {% if cn.chave == 'colombo' %}
+        <p>Do RELATÓRIO DE PEDIDOS do portal (csv ";", <b>1 linha por item</b>): junta em <b>1 linha por pedido</b> — o cabeçalho (Valor Mercadorias, Valor Frete, Valor Total) <b>repete</b> em cada item e não pode ser somado duas vezes; só as colunas de item (Valor Total Produto, Valor Comissão) somam. Fora: <b>Cancelado</b> e <b>Incluído</b>. Comissão do sistema = <b>7% × Valor Total do pedido</b> (tabela de Parâmetros); comissão real = soma de "Valor Comissão" — o % do item varia (5, 6 ou 7) conforme a negociação; a diferença é o rebate de comissão. Rebate em R$ e em frete = 0. Chave: Pedido (acumula) · <b>OC do ERP = coluna "Entrega"</b>.</p>
+        {% elif cn.chave == 'amazon' %}
+        <p>Do relatório de <b>TRANSAÇÕES</b> (Seller Central → Pagamentos → Todas as transações): vem <b>1 linha por transação</b> — pagamento do pedido, reembolso e tarifas de serviço. O PLUTOS acumula <b>transação a transação</b> e monta o pedido a partir delas, então pode subir arquivos que se sobrepõem: cada <b>ID do pedido entra uma vez só</b>.</p>
+        <p>Base da comissão = <b>produto − desconto promocional + frete</b>. A Amazon cobra <b>% negociado da categoria + 1,5% de taxa</b> (5,5% a 10,5%), e o PLUTOS <b>mede</b> essa faixa pedido a pedido. <b>Rebate</b> = faixa × base − comissão cobrada (erro de cobrança dela). <b>Desvio de cadastro</b> = cadastro × base − faixa × base: não é rebate, é preço/margem errados. Fora do rebate: pedidos com <b>reembolso</b> e as <b>tarifas de serviço</b> (publicidade).</p>
+        {% elif cn.chave == 'webcont' %}
+        <p>Do RELATÓRIO DE PEDIDOS do portal (aba Pedidos, 1 linha por pedido, valores "527,99"): tira <b>Cancelado</b>, <b>Cancelado isento</b> e <b>Não Autorizado</b>; comissão do sistema = <b>19% × Total do Pedido</b> (GMV com frete, tabela de Parâmetros); comissão real = Valor de Comissão Retido; a diferença é o rebate de comissão. Rebate em R$ e em frete = 0. Chave: Pedido Parceiro (acumula); Pedido ERP = OC do ERP.</p>
+        {% elif cn.chave == 'madeira' %}
+        <p>Do RELATÓRIO DE PEDIDOS do portal (csv ";", 1 linha por item, pode vir sem extensão): tira os <b>cancelados</b> (no Madeira a comissão não zera no cancelado), junta em 1 por pedido (Valor Pedido e Comissão repetem por item; Valor do item soma); comissão do sistema = <b>17% × Valor Pedido</b> (GMV com frete, tabela de Parâmetros); comissão real = coluna Comissão; a diferença é o rebate de comissão. Rebate em R$ e em frete = 0 (o relatório não traz incentivo, cupom nem subsídio). Chave: Pedido = OC do ERP.</p>
+        {% elif cn.chave == 'shopee' %}
+        <p>Do ORDER.ALL (1 linha por item): junta em 1 por pedido e tira da conta <b>Cancelado</b>, <b>Não pago</b> (entra quando for pago) e <b>Status da Devolução/Reembolso = Solicitação aprovada</b>; comissão do sistema = <b>% × subtotal + R$/item × quantidade</b> (Parâmetros: Shopee 12% + R$ 12); comissão real = comissão bruta + serviço bruta − ajuste por ação comercial; a diferença é o rebate de comissão.</p>
+        <p>Rebate em R$ = Incentivo Shopee para ação comercial + Incentivo de cupom. Rebate em frete = frete estimado − frete pago pelo comprador (Frete Grátis, teto R$ 40). Chave: ID do pedido = OC do ERP. Pode subir o mês de novo: o pedido é atualizado, nunca somado.</p>
+        {% elif cn.chave == 'magalu' %}
+        <p>Do FINANCEIRO POR PERÍODO: tira os <b>cancelados</b> e a linha de total; comissão do sistema = <b>% + R$/pedido da tabela de Parâmetros</b> (Magalu 11% + R$ 5) sobre o valor pago pelo cliente; comissão real = <b>Serviços do marketplace (1+2+3+4) + Tarifa fixa</b>; a diferença é o rebate de comissão.</p>
+        <p>Rebate em R$ = coparticipação de descontos <b>paga pelo Magalu</b> (desconto à vista + preço promocional) + subsídio de cupom pago pelo Magalu. Coparticipação de frete vai para a conta logística, não é rebate. OC do ERP casa tirando o sufixo "-1/-2".</p>
+        {% else %}
+        <p>Da TABELA GERAL: separa por mês da data do pedido, calcula o % de comissão cobrada, marca os pedidos de <b>tarifa zero</b> (vão para a tabela Faltante campanha) e soma o <b>Cupom Meli</b> como rebate em R$.</p>
+        <p>Do RESUMO DE REBATES (Planilha 2): monta a <b>Lista de MLB's</b> — cada anúncio com SKU e tipo (Premium 16,5% · Clássico 11,5%); sobe quantas vezes quiser, o MLB que já existe é atualizado, nunca duplicado.</p>
+        <p>Da comissão do sistema (box 0 · ERP): casa cada pedido pela OC = "Pedido Marketplace (Any)", aplica o % do ERP (coluna AB) sobre o valor de produtos do export e calcula a <b>diferença</b> comissão do sistema − tarifa cobrada = rebate de comissão.</p>
+        {% endif %}
+      </details>
+    </div>
+    {% else %}
+    <div class="arq" style="opacity:.55;min-height:120px">
+      <div class="arq-top"><b>{{ loop.index }} · {{ cn.nome|upper }}</b><span class="tag mk-cinza">em construção</span></div>
+      <div class="arq-sub">O box entra quando a regra do canal for desenhada.</div>
+    </div>
+    {% endif %}
+  {% endfor %}
+  </div>
+</div>
+
+{% if PODE.parametros %}
+<div class="bloco">
+  <h2>Criar um box</h2>
+  <form method="post" action="{{ url_for('box_criar') }}" class="filtros" style="align-items:flex-end;gap:12px">
+    <input type="hidden" name="acao" value="criar">
+    <label style="font-size:11px;color:var(--tinta3)">Nome do box<br><input name="nome" class="obs" placeholder="ex.: Leroy Merlin" required></label>
+    <label style="font-size:11px;color:var(--tinta3)">Canais do ERP que caem nele{% if sem_box %} <span class="tag mk-aten">{{ sem_box|length }} sem box</span>{% endif %}<br>
+      <select name="nomes_erp" multiple size="4" style="min-width:260px">{% for n in nomes_erp %}<option value="{{ n }}" {{ 'selected' if n in sem_box and loop.first }}>{{ n }}{% if n not in sem_box %} · já em {{ mapa_erp[n] }}{% endif %}</option>{% endfor %}</select></label>
+    <label style="font-size:11px;color:var(--tinta3)">ou digite o nome como sai no ERP<br><input name="nome_erp_livre" class="obs" placeholder="ex.: LEROY MERLIN"></label>
+    <button class="bt pri" type="submit">Criar box</button>
+  </form>
+  <div class="nota">O box nasce <b>em construção</b> (sem motor de rebate), mas já entra no menu, no GERAL e ganha o seu "Linha a linha" com os pedidos do ERP. O motor entra quando desenharmos a regra do canal. Segure Ctrl para marcar mais de um canal do ERP.</div>
+  {% set extras = PARAM.boxes_extra or [] %}
+  {% if extras %}
+  <div class="rol fit" style="margin-top:10px"><table data-sem-ordenar>
+    <thead><tr><th>Box</th><th>Recebe do ERP</th><th>Tirar</th></tr></thead>
+    <tbody>{% for e in extras %}<tr><td><b>{{ e.nome }}</b> <span class="tag mk-cinza">{{ e.chave }}</span></td><td>{{ e.nomes_erp|join(', ') or '—' }}</td>
+      <td><form method="post" action="{{ url_for('box_criar') }}" onsubmit="return confirm('Remover o box {{ e.nome }}?')"><input type="hidden" name="acao" value="excluir"><input type="hidden" name="chave" value="{{ e.chave }}"><button class="mini perigo">Remover</button></form></td></tr>{% endfor %}</tbody></table></div>
+  {% endif %}
+</div>
+{% endif %}
+
+<div class="bloco">
+  <h2>Histórico de rodadas</h2>
+  <div class="rol" style="max-height:40vh"><table class="cols-8">
+    <thead><tr><th>Quando</th><th>Canal</th><th>Competência</th><th>Arquivo</th><th>Quem</th><th class="n">Pedidos</th><th class="n">Rebate total</th><th>Comissão sist.</th></tr></thead>
+    <tbody>
+    {% for h in hist %}
+    <tr data-abrir="{{ url_for('canal', chave=h.canal, mes=h.comp) }}"><td>{{ h.quando|quando }}</td><td>{{ h.canal|upper }}</td><td>{{ h.comp|mesano }}</td><td class="n">{{ h.arquivo }}</td><td>{{ h.quem }}</td><td class="n">{{ h.pedidos }}</td><td class="n">R$ {{ h.total|brl }}</td><td>{{ 'sim' if h.sistema else '—' }}</td></tr>
+    {% endfor %}
+    {% if not hist %}<tr><td colspan="8">Nenhuma rodada ainda.</td></tr>{% endif %}
+    </tbody></table></div>
+</div>
+
+<div class="bloco">
+  <h2>Saídas</h2>
+  <div class="janelas">
+    {% if COMPS %}<a class="janela" href="{{ url_for('baixar', qual='rebates', mes=comp) }}">↓ PLUTOS_Rebates_{{ comp.replace('-','') }}.xlsx</a>
+    <a class="janela" href="{{ url_for('baixar', qual='faltante', mes=comp) }}">↓ Faltante campanha (Meli)</a>
+    <a class="janela" href="{{ url_for('api_rebates', comp=comp) }}" target="_blank">{ } JSON por OC para o Tropa / ORION</a>{% endif %}
+  </div>
+  <div class="nota">O JSON é o "Enviar para…" dos outros apps: <code>/api/rebates/{{ comp }}.json</code> — rebate por OC nas três formas. Protegido por token (variável PLUTOS_TOKEN no Render).</div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function(){
+  var inc=document.getElementById('erp-incluir'),arq=document.getElementById('erp-arq'),ok=document.getElementById('erp-ok'),esc=document.getElementById('erp-escolhido'),lim=document.getElementById('erp-limpar');
+  if(inc){inc.addEventListener('click',function(){arq.click();});
+    arq.addEventListener('change',function(){if(arq.files.length){ok.disabled=false;esc.textContent='Pronto para subir: '+arq.files[0].name+' — clique OK';}});}
+  if(lim){lim.addEventListener('click',function(ev){ev.preventDefault();if(window.confirm('Excluir TODOS os arquivos do ERP e zerar o índice de OCs? As bases Linha a linha ficam vazias até subir de novo.'))document.getElementById('ferp-limpar').submit();});}
+})();
+</script>
+{% endblock %}

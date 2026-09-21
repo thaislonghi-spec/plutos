@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PLUTOS · Rebates e Entregas · {{ PARAM.empresa }}</title>
+<link rel="icon" href="{{ url_for('static', filename='icone.ico') }}" sizes="any">
+<link rel="apple-touch-icon" href="{{ url_for('static', filename='icone-192.png') }}">
+<meta name="theme-color" content="#0B0B0C">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}?v={{ VERSAO }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='plutos.css') }}?v={{ VERSAO }}">
+<style>
+  .pag{display:flex;gap:6px;align-items:center;margin-top:12px;font-size:12.5px;color:var(--tinta3)}
+  .pag a{color:var(--tinta);text-decoration:none;border:1px solid var(--linha2);padding:5px 11px;border-radius:2px}
+  .entrar{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0B0B0C;padding:24px}
+  .cartao{width:100%;max-width:420px;background:#131316;border:1px solid #2C2C2E;border-top:3px solid var(--marca);border-radius:2px;padding:34px 40px 26px;box-shadow:0 6px 30px rgba(0,0,0,.5);text-align:center}
+  .cartao .marca-entrar{height:64px;display:block;margin:4px auto 0}
+  .cartao .sub-marca{margin-top:14px;font:600 10px Archivo,sans-serif;letter-spacing:.22em;text-transform:uppercase;color:#8B8E91}
+  .cartao form{margin-top:28px;text-align:left}
+  .cartao label{display:block;font:700 9.5px Archivo,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:#8B8E91;margin:0 0 6px}
+  .cartao input{width:100%;background:#0B0B0C;border:1px solid #2C2C2E;color:#F2F2F0;padding:12px 14px;font:500 14.5px Archivo,sans-serif;border-radius:2px;margin-bottom:17px;outline:none}
+  .cartao button{width:100%;border:1px solid;padding:14px;font:700 15px Archivo,sans-serif;cursor:pointer;border-radius:2px;margin-top:2px}
+  .cartao .obs{color:#7A7D80;font-size:11.5px;margin-top:15px}
+  .cartao .flash{margin-top:20px;text-align:left;background:#2A1614;border:1px solid #5A2420;border-left:3px solid var(--crit);color:#E8938C}
+  /* o Chrome pinta de AMARELO o campo preenchido pelo gerenciador de senhas e
+     o texto fica ilegível no fundo preto. background-clip:text + a sombra interna
+     devolvem o fundo escuro; a transition longa segura a cor durante o preview. */
+  .cartao input:-webkit-autofill,
+  .cartao input:-webkit-autofill:hover,
+  .cartao input:-webkit-autofill:focus,
+  .cartao input:-webkit-autofill:active{
+    -webkit-text-fill-color:#F2F2F0!important;
+    -webkit-background-clip:text!important;background-clip:text!important;
+    -webkit-box-shadow:0 0 0 40px #0B0B0C inset!important;box-shadow:0 0 0 40px #0B0B0C inset!important;
+    transition:background-color 100000s ease-in-out 0s!important;
+    caret-color:#F2F2F0;border-color:#2C2C2E;font:500 14.5px Archivo,sans-serif}
+  .cartao input:-webkit-autofill:focus{border-color:var(--ouro)}
+  a.bt{text-decoration:none;display:inline-block}
+</style>
+</head>
+<body>
+{% block corpo %}
+{% set paginas = {
+  'painel':   ['GERAL', 'Todos os rebates, canal a canal, na competência'],
+  'canal':    ['Canal', 'O box do canal'],
+  'pedidos':  ['Por pedido', 'Cada OC com o rebate aberto nas três formas'],
+  'faltante': ['Faltante campanha', 'Método manual · Mercado Livre — tarifa zero, valor pesquisado no portal'],
+  'arquivos': ['Arquivos', 'Um box por canal: o que subir e o histórico de rodadas'],
+  'parametros_tela': ['Parâmetros', 'O que é editável por empresa'],
+  'conta':    ['Conta', 'Sua senha e a equipe'],
+  'coletas':  ['Coletas · total', 'Mercado Livre · pedidos entregues pelo Coletas (frete coletas > 0): venda, frete, custo e rebates'],
+  'custo_coletas': ['Custo coletas', 'Mercado Livre · o custo do Coletas por MLB — último pedido válido, com peso do produto'],
+  'estoque_full': ['Estoque Full', 'Magazine Luiza · o que está guardado no CD do Magalu, quanto vale e o que está parado'],
+  'custo_full': ['Custo do Full por item · Cobrado', 'Magazine Luiza · o que o canal COBROU no mês, por SKU — é daqui que sai a soma do custo'],
+  'custo_full_real': ['Coparticipação · Tabela do canal', 'Magazine Luiza · a tabela por SKU que entra na FORMAÇÃO DE PREÇO — não é a apuração do mês'],
+  'frete_full': ['Custo Frete Full', 'Magazine Luiza · Planilha 2 — quanto o frete dos pedidos Fulfillment está custando'],
+  'coparticipacao': ['Coparticipação de Frete', 'Magazine Luiza · Planilha 2 — o pedaço do frete que nós pagamos'],
+  'fulfillment': ['Fulfillment · Magalu', 'Magazine Luiza · pedidos entregues pelo Fulfillment — no Promob a comissão é só sobre produto + IPI'],
+  'amazon_faltantes': ['Pedidos faltantes · Amazon', 'Amazon · pedidos que estão no ERP e não apareceram nos relatórios de transações — a lista de procura'],
+  'entregas': ['Entregas · custo por SKU', 'O custo de entrega por SKU e por canal, num arquivo só — é este que o ORION usa'],
+  'mlbs':     ["Lista de MLB's", 'Mercado Livre · cada anúncio com SKU, descrição e tipo (Premium 16,5% · Clássico 11,5%)'],
+} %}
+{% set atual = request.endpoint %}
+{% set pagina = paginas.get(atual, ['PLUTOS', 'Rebates e Entregas']) %}
+{% if atual == 'canal' and c is defined %}{% set pagina = [c.nome, 'Box do canal · como o rebate nasce aqui'] %}{% endif %}
+{% if atual == 'linha' and c is defined %}{% set pagina = ['Linha a linha ' ~ c.nome, 'A base do canal, OC por OC, com tudo que os relatórios trouxeram'] %}{% endif %}
+
+<div class="app">
+<aside class="lateral">
+  <a class="marca-lateral" href="{{ url_for('painel') }}">
+    <img class="logo-plutos" src="{{ url_for('static', filename='marca_plutos.png') }}" alt="PLUTOS">
+  </a>
+  <nav class="menu">
+    <a class="item {{ 'on' if atual == 'painel' }}" href="{{ url_for('painel') }}">GERAL</a>
+    <a class="item {{ 'on' if atual == 'pedidos' }}" href="{{ url_for('pedidos', mes=comp) }}">Por pedido</a>
+    <a class="item {{ 'on' if atual == 'entregas' }}" href="{{ url_for('entregas', mes=comp) }}">Entregas · custo por SKU</a>
+    <div class="grupo">Canais</div>
+    {% for cn in CANAIS %}
+      {% set aberto = (c is defined and c.chave == cn.chave) or (atual in ('faltante', 'mlbs', 'coletas', 'custo_coletas') and cn.chave == 'meli') or (atual in ('fulfillment', 'custo_full', 'custo_full_real', 'estoque_full', 'frete_full', 'coparticipacao') and cn.chave == 'magalu') or (atual == 'amazon_faltantes' and cn.chave == 'amazon') %}
+      <div class="grupo-canal {{ 'aberto' if aberto }}" data-canal="{{ cn.chave }}">
+        {% if cn.ativo %}
+        <a class="item canal {{ 'on' if atual == 'canal' and c is defined and c.chave == cn.chave }}" href="{{ url_for('canal', chave=cn.chave, mes=comp) }}">{{ cn.nome }}<i class="seta" data-toggle="{{ cn.chave }}" title="abrir / fechar">›</i></a>
+        {% else %}
+        <span class="item canal em-obra" data-toggle="{{ cn.chave }}" data-tip="Box em construção — clique para abrir os sub-botões">{{ cn.nome }}<i class="seta">›</i></span>
+        {% endif %}
+        <div class="subs">
+          <a class="item sub {{ 'on' if atual == 'linha' and c is defined and c.chave == cn.chave }}" href="{{ url_for('linha', chave=cn.chave, mes=comp) }}">Linha a linha {{ cn.nome }}</a>
+          {% if cn.chave == 'magalu' %}
+          <a class="item sub {{ 'on' if atual == 'fulfillment' }}" href="{{ url_for('fulfillment', mes=comp) }}">Fulfillment</a>
+          <a class="item sub {{ 'on' if atual == 'estoque_full' }}" href="{{ url_for('estoque_full', mes=comp) }}">Estoque Full</a>
+          <a class="item sub {{ 'on' if atual == 'custo_full' }}" href="{{ url_for('custo_full', mes=comp) }}">Custo do Full · Cobrado</a>
+          <a class="item sub {{ 'on' if atual == 'custo_full_real' }}" href="{{ url_for('custo_full_real', mes=comp) }}">Coparticipação · Tabela</a>
+          <a class="item sub {{ 'on' if atual == 'frete_full' }}" href="{{ url_for('frete_full', mes=comp) }}">Custo Frete Full</a>
+          <a class="item sub {{ 'on' if atual == 'coparticipacao' }}" href="{{ url_for('coparticipacao', mes=comp) }}">Coparticipação de Frete</a>
+          {% endif %}
+          {% if cn.chave == 'amazon' %}
+          <a class="item sub {{ 'on' if atual == 'amazon_faltantes' }}" href="{{ url_for('amazon_faltantes', mes=comp) }}">Pedidos faltantes</a>
+          {% endif %}
+          {% if cn.chave == 'meli' %}
+          <a class="item sub {{ 'on' if atual == 'faltante' }}" href="{{ url_for('faltante', mes=comp) }}">Faltante campanha</a>
+          <a class="item sub {{ 'on' if atual == 'mlbs' }}" href="{{ url_for('mlbs') }}">Lista de MLB's</a>
+          <a class="item sub {{ 'on' if atual == 'coletas' }}" href="{{ url_for('coletas', mes=comp) }}">Coletas · total</a>
+          <a class="item sub {{ 'on' if atual == 'custo_coletas' }}" href="{{ url_for('custo_coletas') }}">Custo coletas</a>
+          {% endif %}
+        </div>
+      </div>
+    {% endfor %}
+  </nav>
+  <div class="pe-lateral">
+    {% if PODE.exportar %}
+    <div class="export-box">
+      <a class="export-rebates" href="{{ url_for('export_rebates') }}" data-tip="O apanhado de TUDO que o PLUTOS gerou — OC, data, canal, rebate R$, comissão e frete — para importar nos outros apps">EXPORT<br>REBATES</a>
+      <a class="export-rebates entregas" href="{{ url_for('baixar_entregas') }}" data-tip="O custo de ENTREGA por SKU e por canal, num arquivo só — é este que sobe no ORION">EXPORT<br>ENTREGAS</a>
+    </div>
+    {% endif %}
+    {% if IRMAOS %}
+    <div class="irmaos">
+      {% for m in IRMAOS if m.arquivo %}
+      <a href="{{ m.url }}" target="_blank" rel="noopener" data-tip="Abrir o {{ m.rotulo }} numa aba nova"><img src="{{ url_for('static', filename=m.arquivo) }}" alt="{{ m.rotulo }}"></a>
+      {% endfor %}
+    </div>
+    {% endif %}
+    <div class="menu rodape-menu">
+      <div class="par">
+        <a class="item item-acao {{ 'on' if atual == 'arquivos' }}" href="{{ url_for('arquivos', mes=comp) }}">Arquivos</a>
+        <a class="item {{ 'on' if atual == 'parametros_tela' }}" href="{{ url_for('parametros_tela') }}">Parâmetros</a>
+      </div>
+      <div class="par">
+        <a class="item {{ 'on' if atual == 'conta' }}" href="{{ url_for('conta') }}">Conta</a>
+        <a class="item saindo" href="{{ url_for('sair') }}">Sair</a>
+      </div>
+      <div class="versao" data-tip="Versão que está no ar. Se esta letra não mudar depois do deploy, o deploy não pegou.">{{ usuario }} · {{ VERSAO }}</div>
+    </div>
+  </div>
+</aside>
+
+<main class="conteudo">
+<div class="topo-tela">
+  <div>
+    <h1>{{ pagina[0] }}</h1>
+    <div class="sub">{{ pagina[1] }}</div>
+  </div>
+  <div class="acoes-topo">
+    {% set ano = comp[:4] %}
+    {% set anos = [] %}{% for cp in COMPS + [HOJE_COMP] %}{% if cp[:4] not in anos %}{% set _ = anos.append(cp[:4]) %}{% endif %}{% endfor %}{% set anos = anos|sort %}
+    {% set pag_mes = atual if atual in ('painel','pedidos','faltante','arquivos','canal','linha','coletas','fulfillment','custo_full','custo_full_real','estoque_full','frete_full','coparticipacao','amazon_faltantes','entregas') else 'painel' %}
+    {% set extra = dict(chave=c.chave) if atual in ('canal','linha') and c is defined else {} %}
+    <div class="meses">
+      {% if anos|length > 1 %}<div class="anos">{% for a in anos %}<a class="ano {{ 'on' if a == ano }}" href="{{ url_for(pag_mes, mes=a ~ '-' ~ (HOJE_COMP[5:] if a == HOJE_COMP[:4] else '01'), **extra) }}">{{ a }}</a>{% endfor %}</div>{% endif %}
+      <div class="janelas jan-fech">
+      {% for i in range(1, 13) %}
+        {% set cp = ano ~ '-' ~ '%02d'|format(i) %}
+        {% set nome = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][i-1] %}
+        {% if cp == comp %}<a class="janela on" href="{{ url_for(pag_mes, mes=cp, **extra) }}" data-tip="{{ cp|mesano }} — mês selecionado">{{ nome }}</a>
+        {% elif cp in COMPS or cp == HOJE_COMP %}<a class="janela tem" href="{{ url_for(pag_mes, mes=cp, **extra) }}" data-tip="{{ cp|mesano }}{% if cp == HOJE_COMP %} — mês atual{% endif %}">{{ nome }}</a>
+        {% else %}<span class="janela off" data-tip="{{ cp|mesano }} — sem dados">{{ nome }}</span>{% endif %}
+      {% endfor %}
+      </div>
+    </div>
+    {% block acoes_topo %}{% endblock %}
+    {% if ATUALIZADO %}<span class="pill-cinza" data-tip="Última vez que algo entrou no PLUTOS (arquivo, rodada, cadastro ou parâmetro)">atualizado {{ ATUALIZADO|quando }}</span>{% endif %}
+    {% if PODE.exportar and COMPS %}
+    <div class="janelas baixar-topo">
+      <a class="janela baixar" href="{{ url_for('baixar', qual='rebates', mes=comp) }}" data-tip="Rebate por OC, nas três formas — é o que o Tropa de Elite e o ORION consomem">↓ Rebates por pedido</a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+<div class="wrap">
+  <div class="linha-ult">
+    {% if ULT %}<div class="ult-base" data-tip="A última rodada que entrou no PLUTOS">Última rodada: {{ ULT.canal|upper }} {{ ULT.comp|mesano }} em {{ ULT.quando|quando }} por {{ ULT.quem }}</div>{% else %}<span></span>{% endif %}
+    {% block acoes_ult %}{% endblock %}
+  </div>
+  {% with msgs = get_flashed_messages() %}{% for m in msgs %}<div class="flash">{{ m }}</div>{% endfor %}{% endwith %}
+  {% block conteudo %}{% endblock %}
+  {% if OK_QUANDO is not none %}<div class="ok-rodape">{% if OK_QUANDO %}<span class="pill-ok">ok · {{ OK_QUANDO|quando }}</span>{% else %}<span class="pill-nao">sem dados · nada subiu ainda</span>{% endif %}</div>{% endif %}
+</div>
+</main>
+</div>
+{% endblock %}
+<div id="dica"></div>
+<script>
+(function(){
+  var dica=document.getElementById('dica');
+  document.addEventListener('mouseover',function(ev){var alvo=ev.target.closest('[data-tip]');if(!alvo){dica.style.opacity=0;return;}dica.textContent=alvo.getAttribute('data-tip');dica.style.opacity=1;});
+  document.addEventListener('mousemove',function(ev){if(dica.style.opacity!=='1')return;var x=ev.clientX+14,y=ev.clientY+14;if(x+dica.offsetWidth>window.innerWidth-10)x=ev.clientX-dica.offsetWidth-14;dica.style.left=x+'px';dica.style.top=y+'px';});
+})();
+(function(){
+  function valor(td){if(!td)return"";var o=td.getAttribute("data-ord");if(o!==null){o=o.trim();if(/^-?\d+(\.\d+)?$/.test(o))return parseFloat(o);return o.toLowerCase();}var t=(td.textContent||"").trim();var n=t.replace(/[R$\s%×kg]/g,"").replace(/\./g,"").replace(",",".");if(n&&!isNaN(n)&&/[\d]/.test(n))return parseFloat(n);return t.toLowerCase();}
+  document.querySelectorAll(".ca-mais").forEach(function(b){
+    var rot=b.textContent;
+    b.addEventListener("click",function(){
+      var l=document.getElementById(b.getAttribute("data-alvo")); if(!l) return;
+      b.textContent = l.classList.toggle("aberta") ? "▴ mostrar só os 2 últimos" : rot;
+    });});
+  document.querySelectorAll("table").forEach(function(tab){if(tab.closest("[data-sem-ordenar]"))return;var thead=tab.tHead,corpo=tab.tBodies[0];if(!thead||!corpo||corpo.rows.length<2)return;
+    Array.prototype.forEach.call(thead.rows[0].cells,function(th,i){if(!th.textContent.trim())return;th.classList.add("ord");th.addEventListener("click",function(){var desc=!th.classList.contains("desc");Array.prototype.forEach.call(thead.rows[0].cells,function(o){o.classList.remove("asc","desc");});th.classList.add(desc?"desc":"asc");var todas=Array.prototype.slice.call(corpo.rows);var fixas=todas.filter(function(l){return l.classList.contains("linha-total");});var linhas=todas.filter(function(l){return !l.classList.contains("linha-total");});linhas.sort(function(a,b){var x=valor(a.cells[i]),y=valor(b.cells[i]);if(x===y)return 0;if(typeof x==="number"&&typeof y==="number")return desc?y-x:x-y;return desc?String(y).localeCompare(String(x),"pt-BR"):String(x).localeCompare(String(y),"pt-BR");});linhas.forEach(function(l){corpo.appendChild(l);});fixas.forEach(function(l){corpo.appendChild(l);});});});});
+})();
+</script>
+<script>
+// Menu por marketplace: fechado; abre o do canal da tela atual. A seta (ou o nome
+// de um canal em construção) abre/fecha sem sair da tela; só um grupo fica aberto.
+(function(){
+  document.addEventListener('click', function(ev){
+    var t = ev.target.closest('[data-toggle]'); if(!t) return;
+    ev.preventDefault(); ev.stopPropagation();
+    var g = t.closest('.grupo-canal'); var abrir = !g.classList.contains('aberto');
+    document.querySelectorAll('.grupo-canal.aberto').forEach(function(x){ x.classList.remove('aberto'); });
+    if(abrir) g.classList.add('aberto');
+  });
+})();
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>
