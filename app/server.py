@@ -26,7 +26,7 @@ from werkzeug.utils import secure_filename
 from motor import meli, erp, magalu, magalu_vendas, magalu_full, shopee, madeira, webcont, colombo, amazon
 import planilhas
 
-VERSAO = "2026-09-18h"
+VERSAO = "2026-09-21a"
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(RAIZ), "dados")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -3277,12 +3277,66 @@ code{{font:12px ui-monospace,monospace;color:#8A8A86;word-break:break-all}}</sty
 <p><code>{request.path if request else ""} · PLUTOS {VERSAO}</code></p></div>""", 500)
 
 
+def diag_disco() -> dict:
+    """O DATA_DIR está num DISCO PERSISTENTE ou no sistema de arquivos do
+    container? Essa é a diferença entre os dados sobreviverem ao deploy ou não.
+
+    O teste é o número do dispositivo (st_dev): se o DATA_DIR está num
+    dispositivo DIFERENTE da raiz do sistema, ele é um disco montado à parte —
+    e o Render mantém esse disco entre deploys. Se for o MESMO dispositivo da
+    raiz, os dados estão no container e somem no próximo deploy."""
+    import shutil
+    out: dict = {"data_dir": DATA_DIR}
+    try:
+        if not os.path.isdir(DATA_DIR):
+            out["existe"] = False
+            out["persistente"] = False
+            out["aviso"] = "A pasta de dados não existe — será criada vazia no primeiro uso."
+            return out
+        out["existe"] = True
+        dev_dados = os.stat(DATA_DIR).st_dev
+        dev_raiz = os.stat("/").st_dev
+        persistente = dev_dados != dev_raiz
+        out["persistente"] = persistente
+        out["aviso"] = ("Disco montado à parte: os dados sobrevivem aos deploys."
+                        if persistente else
+                        "ATENÇÃO: a pasta de dados está no sistema de arquivos do container, "
+                        "NÃO num disco. Tudo que for apurado SOME no próximo deploy. "
+                        "Crie um disco no Render e aponte o DATA_DIR para ele.")
+        n = tam = 0
+        antigo = novo_ = None
+        for raiz, _ds, fs in os.walk(DATA_DIR):
+            for f in fs:
+                try:
+                    st = os.stat(os.path.join(raiz, f))
+                except OSError:
+                    continue
+                n += 1
+                tam += st.st_size
+                if antigo is None or st.st_mtime < antigo:
+                    antigo = st.st_mtime
+                if novo_ is None or st.st_mtime > novo_:
+                    novo_ = st.st_mtime
+        out["arquivos"] = n
+        out["tamanho_mb"] = round(tam / 1048576, 1)
+        if antigo:
+            out["mais_antigo"] = datetime.fromtimestamp(antigo, BRT).strftime("%d/%m/%Y %H:%M")
+            out["mais_recente"] = datetime.fromtimestamp(novo_, BRT).strftime("%d/%m/%Y %H:%M")
+        u = shutil.disk_usage(DATA_DIR)
+        out["disco_total_gb"] = round(u.total / 1073741824, 2)
+        out["disco_livre_gb"] = round(u.free / 1073741824, 2)
+        out["disco_usado_pct"] = round(100 * u.used / u.total, 1) if u.total else 0
+    except Exception as e:  # noqa: BLE001
+        out["erro"] = str(e)
+    return out
+
+
 @app.route("/saude")
 def saude():
     cs = canais()
     return jsonify({"ok": True, "versao": VERSAO, "hora_brasilia": agora().strftime("%d/%m/%Y %H:%M:%S"),
                     "fuso": "America/Sao_Paulo (UTC-3), fixo no código — não depende do relógio do servidor",
-                    "data_dir": DATA_DIR,
+                    "data_dir": DATA_DIR, "armazenamento": diag_disco(),
                     "boxes_ativos": [c["nome"] for c in cs if c["ativo"]],
                     "boxes_em_construcao": [c["nome"] for c in cs if not c["ativo"]],
                     "motores": {m: (m in globals() and globals()[m] is not None)
