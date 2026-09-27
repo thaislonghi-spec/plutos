@@ -113,7 +113,7 @@
       </div>
       {% else %}
       {% set rc = rods.get(cn.chave) %}
-      {% if cn.chave == 'magalu' %}<div class="cinco-upl">{% endif %}
+      {% if cn.chave == 'magalu' %}<div class="seis-upl">{% endif %}
       <div class="upl-box" {% if cn.chave != 'magalu' %}style="margin-top:8px"{% endif %}>
         {% if cn.chave == 'magalu' %}<div class="upl-eyebrow">Principal · Financeiro por período</div>{% endif %}
         <div class="arq-tit">{{ cn.arquivo }}</div>
@@ -188,6 +188,22 @@
         </form>
         {% for x in pend_por.get(cn.chave, []) if x.tipo == 'full_real' %}<span class="arq-n espera-n">⏳ {{ x.nome }} · aguardando ▶ rodar</span>{% endfor %}
         <div class="ok-canto">{% if mg_real %}<span class="pill-ok">ok · {{ mg_real.quando|quando }}</span>{% else %}<span class="pill-nao">sem tabela</span>{% endif %}</div>
+        {% endif %}
+      </div>
+      <div class="upl-box">
+        <div class="upl-eyebrow">Coparticipação · o REAL por pedido</div>
+        <div class="arq-tit">SXC · COPARTICIPAÇÃO DE FRETES (zip)</div>
+        <div class="arq-sub">o frete que nós pagamos, pedido a pedido e por SKU — é o realizado, não a estimativa do financeiro</div>
+        {% if mg_copart %}<span class="arq-n">{{ mg_copart.nome }} · {{ mg_copart.quando|quando }} · {{ mg_copart.diag.linhas }} linhas · {{ mg_copart.diag.pedidos }} pedidos · R$ {{ mg_copart.diag.total|brl }}</span>
+        <span class="arq-n">conferir: <a href="{{ url_for('coparticipacao_real', mes=comp) }}">abrir Coparticipação · Real</a>{% if mg_copart.diag.acima_do_cheio %} · <b class="crit">{{ mg_copart.diag.acima_do_cheio }} cobrança(s) acima do cheio</b>{% endif %}</span>
+        {% else %}<span class="arq-n">ainda não subiu — o financeiro traz a coparticipação <b>estimada</b> e vem quase sempre zerada; o real está só aqui</span>{% endif %}
+        {% if PODE.arquivos %}
+        <form method="post" action="{{ url_for('subir', chave=cn.chave) }}" enctype="multipart/form-data" class="upl">
+          <input type="hidden" name="tipo" value="copart_real"><input type="hidden" name="rodar" value="1"><input type="file" name="arquivo" accept=".zip,.csv,.xlsx,.xls" required>
+          <button class="bt pri" type="submit" style="padding:7px 14px">Subir e rodar</button>
+        </form>
+        {% for x in pend_por.get(cn.chave, []) if x.tipo == 'copart_real' %}<span class="arq-n espera-n">⏳ {{ x.nome }} · aguardando ▶ rodar</span>{% endfor %}
+        <div class="ok-canto">{% if mg_copart %}<span class="pill-ok">ok · {{ mg_copart.quando|quando }}</span>{% else %}<span class="pill-nao">sem o real</span>{% endif %}</div>
         {% endif %}
       </div>
       </div>

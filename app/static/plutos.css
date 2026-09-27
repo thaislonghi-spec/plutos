@@ -472,12 +472,6 @@ table.tb-entregas th,table.tb-entregas td{padding:7px 7px;font-size:12.5px}
 /* CABECALHO MENOR E EM DUAS LINHAS (21/09/2026): titulo de duas palavras quebra
    sozinho, a coluna fica estreita e o numero cola no titulo — sem o vao que
    havia entre Modalidade e Custo entrega. */
-.rol table.tb-entregas thead th,.rol table.tb-entregas thead th.n{height:auto;
-  padding:7px 7px 6px;vertical-align:bottom;white-space:normal;line-height:1.15;
-  font-size:8.5px;letter-spacing:.08em}
-.rol table.tb-entregas thead th.ord,.rol table.tb-comp thead th.ord{padding-right:16px}
-.rol table.tb-entregas thead th i{display:block;font-style:normal;font-size:7.5px;
-  letter-spacing:.08em;color:var(--tinta3);font-weight:500;margin-top:2px}
 table.tb-entregas th:nth-child(1),table.tb-entregas td:nth-child(1){width:132px}
 table.tb-entregas th:nth-child(2),table.tb-entregas td:nth-child(2){width:240px}
 table.tb-entregas th:nth-child(3),table.tb-entregas td:nth-child(3){width:100px}
@@ -505,15 +499,11 @@ table.tb-entregas td.base .tag{white-space:nowrap;display:inline-block;font-size
    O par de cada canal é separado por um filete. */
 table.tb-comp{table-layout:fixed}
 table.tb-comp th,table.tb-comp td{padding:7px 7px;font-size:12.5px}
-.rol table.tb-comp thead th,.rol table.tb-comp thead th.n{height:auto;padding:7px 7px 6px;
-  vertical-align:bottom;white-space:normal;line-height:1.15;font-size:8.5px;letter-spacing:.08em}
 /* Mais barato / Diferenca / Base, no fim da linha */
 table.tb-comp th:nth-last-child(4),table.tb-comp td:nth-last-child(4){width:112px}
 table.tb-comp th:nth-last-child(3),table.tb-comp td:nth-last-child(3){width:100px}
 table.tb-comp th:nth-last-child(2),table.tb-comp td:nth-last-child(2){width:84px}
 table.tb-comp th:nth-last-child(1),table.tb-comp td:nth-last-child(1){width:96px}
-table.tb-comp thead th i{display:block;font-style:normal;font-size:7.5px;letter-spacing:.08em;
-  color:var(--tinta3);font-weight:500;margin-top:2px;white-space:normal;line-height:1.25}
 table.tb-comp th:nth-child(1),table.tb-comp td:nth-child(1){width:158px}
 table.tb-comp th:nth-child(2),table.tb-comp td:nth-child(2){width:230px}
 table.tb-comp th.par-ini,table.tb-comp td.par-ini{width:148px;border-left:1px solid var(--linha)}
@@ -530,5 +520,66 @@ table.tb-comp td.base .tag{white-space:nowrap;display:inline-block;font-size:9.5
 /* Cabecalho de tabela que rola COM A PAGINA (.rol.fit nao tem rolagem propria):
    ele tem de parar EMBAIXO da faixa preta fixa, senao some atras dela. Dentro
    de um .rol com rolagem propria o top:0 continua certo. */
-.rol.fit thead th{top:120px}
-@media (max-width:900px){.rol.fit thead th{top:0}}
+/* CORRIGIDO 27/09/2026: dar top:120px ao cabecalho de uma tabela que rola COM
+   a pagina fazia ele descolar e DESCER para dentro da tabela quando o bloco
+   comecava acima da barra. Tabela em .rol.fit e curta e nao tem rolagem
+   propria — nao precisa de cabecalho fixo. Dentro de um .rol com rolagem o
+   sticky continua, com top:0, preso ao proprio quadro. */
+.rol.fit thead th{position:static}
+
+/* ==================================================================
+   CABEÇALHO DE TABELA NUNCA MAIS CORTA (21/09/2026 — regra da casa)
+   O verificador achou ~30 títulos cortados com reticências em 12 telas
+   ("Faltante campanha (R$)" virava "Faltante campa…"). A causa era a
+   mesma de sempre: th com white-space:nowrap + table-layout fixo.
+   Aqui o título QUEBRA em duas linhas, numa fonte menor. Vale para
+   TODA tabela do PLUTOS — é assim que não precisa consertar uma a uma.
+   O ".n" precisa estar escrito porque ".rol th.n" pesa mais no cascata.
+   ================================================================== */
+.rol thead th,.rol thead th.n{white-space:normal;line-height:1.15;height:auto;
+  vertical-align:bottom;font-size:8.5px;letter-spacing:.08em;
+  padding-top:7px;padding-bottom:6px;overflow:visible;text-overflow:clip}
+.rol thead th.ord{padding-right:16px}
+/* a unidade do título (R$ / un, kg, m³) numa segunda linha, em cinza */
+.rol thead th i{display:block;font-style:normal;font-size:7.5px;letter-spacing:.08em;
+  color:var(--tinta3);font-weight:500;margin-top:2px;white-space:normal;line-height:1.2}
+
+/* SEIS CAIXAS DE ARQUIVO NO MAGALU (27/09/2026) — 3 em cima, 3 embaixo.
+   Cinco numa fileira já espremia; com a sexta (SXC · coparticipação real)
+   duas fileiras de três leem melhor e todas ficam do mesmo tamanho. */
+.seis-upl{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:8px;align-items:stretch}
+.seis-upl>.upl-box{margin-top:0;padding:11px 13px}
+.seis-upl .arq-tit{font-size:12.5px;line-height:1.25}
+.seis-upl .arq-sub{font-size:11.5px;line-height:1.35}
+.seis-upl .arq-n{font-size:11px}
+.seis-upl .upl input[type=file]{max-width:100%;font-size:11px}
+@media (max-width:1180px){.seis-upl{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:760px){.seis-upl{grid-template-columns:1fr}}
+.arq-n b.crit{color:var(--crit)}
+
+/* COPARTICIPAÇÃO · REAL — por SKU (12 colunas) e a lista a reclamar */
+table.tb-copart{table-layout:fixed;min-width:1238px}
+table.tb-copart th,table.tb-copart td{padding:7px 7px;font-size:12.5px}
+table.tb-copart th:nth-child(1),table.tb-copart td:nth-child(1){width:132px}
+table.tb-copart th:nth-child(2),table.tb-copart td:nth-child(2){width:250px}
+table.tb-copart th:nth-child(3),table.tb-copart td:nth-child(3){width:76px}
+table.tb-copart th:nth-child(4),table.tb-copart td:nth-child(4){width:104px}
+table.tb-copart th:nth-child(5),table.tb-copart td:nth-child(5){width:104px}
+table.tb-copart th:nth-child(6),table.tb-copart td:nth-child(6){width:88px}
+table.tb-copart th:nth-child(7),table.tb-copart td:nth-child(7){width:84px}
+table.tb-copart th:nth-child(8),table.tb-copart td:nth-child(8){width:84px}
+table.tb-copart th:nth-child(9),table.tb-copart td:nth-child(9){width:80px}
+table.tb-copart th:nth-child(10),table.tb-copart td:nth-child(10){width:96px}
+table.tb-copart th:nth-child(11),table.tb-copart td:nth-child(11){width:80px}
+table.tb-copart th:nth-child(12),table.tb-copart td:nth-child(12){width:70px}
+table.tb-reclamar{table-layout:fixed;min-width:1100px}
+table.tb-reclamar th,table.tb-reclamar td{padding:7px 7px;font-size:12.5px}
+table.tb-reclamar th:nth-child(1),table.tb-reclamar td:nth-child(1){width:160px}
+table.tb-reclamar th:nth-child(2),table.tb-reclamar td:nth-child(2){width:120px}
+table.tb-reclamar th:nth-child(3),table.tb-reclamar td:nth-child(3){width:260px}
+table.tb-reclamar th:nth-child(4),table.tb-reclamar td:nth-child(4){width:100px}
+table.tb-reclamar th:nth-child(5),table.tb-reclamar td:nth-child(5){width:170px}
+table.tb-copart td.sku,table.tb-reclamar td.sku{text-align:left;font-weight:600;
+  white-space:normal;overflow-wrap:anywhere;line-height:1.25}
+table.tb-copart td.desc,table.tb-reclamar td.desc{white-space:normal;line-height:1.3}
+table.tb-copart td.forte,table.tb-reclamar td.forte{font-weight:700}

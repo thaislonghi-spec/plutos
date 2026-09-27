@@ -852,3 +852,58 @@ def entregas_xlsx(e: dict, comp: str, nomes_tab: dict) -> io.BytesIO:
     wb.save(bio)
     bio.seek(0)
     return bio
+
+
+def copart_real_xlsx(df, s: dict, comp: str) -> io.BytesIO:
+    """COPARTICIPAÇÃO DE FRETE · REAL — o realizado por pedido × SKU do portal
+    Magalu (arquivo SXC), já com o valor CHEIO do SKU ao lado e o desconto que
+    a campanha deu. É a planilha que prova quanto de frete nós pagamos."""
+    wb = Workbook()
+    wb.remove(wb.active)
+
+    _aba(wb, "Como_ler", ["O que é", "Explicação"], [
+        ["De onde vem", "Portal Magalu · SXC Coparticipação de Fretes — 1 linha por pedido × SKU."],
+        ["O que é o valor", "O frete que NÓS pagamos naquele pedido. Não é estimativa nem tabela: é o cobrado."],
+        ["Datas", "O portal entrega as duas colunas de data TROCADAS. O PLUTOS destrocou: "
+                  "a competência é a DATA DO PEDIDO, a mesma régua dos outros canais."],
+        ["Cheio", "O valor de tabela do SKU — o mais repetido nas linhas de Política Fulfillment."],
+        ["Desconto", "1 − valor ÷ cheio. Campanha ML Entregas desconta; Política Fulfillment paga cheio."],
+        ["Acima do cheio", "Cobrança maior que a tabela do próprio canal: é a reclamar, não é custo."],
+        ["Para o preço", "Use a coluna R$/un do resumo por SKU — é o realizado, melhor que a tabela."],
+    ], [26, 118])
+
+    cab = ["Pedido", "SKU", "Descrição", "Data do pedido", "Data da cobrança", "Serviço",
+           "VALOR PAGO (R$)", "Cheio do SKU (R$)", "Economia (R$)", "Desconto (%)", "Faixa",
+           "Acima do cheio?", "Cubagem (m³)", "Peso (kg)", "Competência"]
+    linhas = []
+    if df is not None and len(df):
+        for r in df.sort_values("data").itertuples():
+            linhas.append([r.pedido, r.sku, "", str(r.data), str(getattr(r, "data_cobranca", "")),
+                           r.servico, round(float(r.valor), 2), round(float(r.cheio), 2),
+                           round(float(r.economia), 2), round(100 * float(r.desconto_pct), 1),
+                           r.faixa, "SIM" if r.acima_do_cheio else "", round(float(r.cubagem), 3),
+                           round(float(r.peso), 1), r.competencia])
+    _aba(wb, "Por_pedido", cab, linhas, [20, 16, 42, 15, 15, 22, 15, 15, 14, 12, 18, 14, 13, 11, 13], (7, 8, 9))
+
+    cab = ["SKU", "Descrição", "Pedidos", "TOTAL PAGO (R$)", "R$ POR UNIDADE (real)", "Cheio do SKU (R$)",
+           "Mínimo (R$)", "Máximo (R$)", "Pedidos no cheio", "% no cheio", "Economia de campanha (R$)",
+           "Cobranças acima do cheio", "Cubagem (m³)", "Peso (kg)"]
+    _aba(wb, "Por_SKU", cab, [[l["sku"], l["descricao"], l["linhas"], l["total"], l["un_media"], l["cheio"],
+                               l["min"], l["max"], l["n_cheio"], l["pct_cheio"], l["economia"], l["acima"],
+                               l["cubagem"], l["peso"]] for l in s["por_sku"]],
+         [16, 42, 10, 16, 18, 15, 12, 12, 14, 11, 20, 18, 13, 11], (4, 5, 6, 7, 8, 11))
+
+    _aba(wb, "Por_faixa", ["Faixa", "Linhas", "Total pago (R$)", "Seria cheio (R$)", "Economia (R$)", "Média (R$)"],
+         [[k, v["linhas"], v["total"], v["cheio"], v["economia"], v["media"]] for k, v in s["por_faixa"].items()],
+         [24, 10, 18, 18, 16, 14], (3, 4, 5, 6))
+
+    if s["acima"]:
+        _aba(wb, "A_reclamar", ["Pedido", "SKU", "Descrição", "Data", "Serviço", "Cobrado (R$)",
+                                "Cheio do SKU (R$)", "EXCESSO (R$)"],
+             [[a["pedido"], a["sku"], a["descricao"], a["data"], a["servico"], a["valor"], a["cheio"], a["excesso"]]
+              for a in s["acima"]], [20, 16, 42, 13, 22, 14, 16, 14], (6, 7, 8))
+
+    bio = io.BytesIO()
+    wb.save(bio)
+    bio.seek(0)
+    return bio

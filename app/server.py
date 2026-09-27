@@ -23,10 +23,11 @@ from flask import (Flask, abort, flash, jsonify, redirect, render_template, requ
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
-from motor import meli, erp, magalu, magalu_vendas, magalu_full, magalu_real, shopee, madeira, webcont, colombo, amazon
+from motor import (meli, erp, magalu, magalu_vendas, magalu_full, magalu_real, magalu_copart,
+                   shopee, madeira, webcont, colombo, amazon)
 import planilhas
-
-VERSAO = "2026-09-21k"
+VERSAO = "2026-09-27a"
+VERSAO = "2026-09-21m"
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(RAIZ), "dados")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -2085,7 +2086,8 @@ def arquivos():
                                          if u.get("qual") != "coleta"), None),
                            mg_coleta=next((u for u in reversed(full_magalu_ler()["uploads"])
                                            if u.get("qual") == "coleta"), None),
-                           mg_real=(full_real_ler()["uploads"] or [None])[-1])
+                           mg_real=(full_real_ler()["uploads"] or [None])[-1],
+                           mg_copart=copart_real_ult())
 
 
 def processar_meli(tipo: str, destino: str, nome: str, quem: str) -> str:
@@ -2220,6 +2222,7 @@ def pend_processar(chave: str | None = None) -> list[str]:
             elif x["chave"] == "magalu":
                 m = (processar_magalu_vendas(x["caminho"], x["nome"], x["quem"]) if x.get("tipo") == "vendas"
                      else processar_magalu_full_real(x["caminho"], x["nome"], x["quem"]) if x.get("tipo") == "full_real"
+                     else processar_magalu_copart(x["caminho"], x["nome"], x["quem"]) if x.get("tipo") == "copart_real"
                      else processar_magalu_full(x["caminho"], x["nome"], x["quem"]) if x.get("tipo") in ("full", "coleta")
                      else processar_magalu(x["caminho"], x["nome"], x["quem"]))
             elif x["chave"] == "shopee":
@@ -2952,6 +2955,98 @@ def processar_magalu_full_real(destino: str, nome: str, quem: str) -> str:
             f"nova R$ {f_brl(diag['media']['nova'])}.{alerta}")
 
 
+# =====================================================================
+# COPARTICIPAÇÃO DE FRETE · REAL POR PEDIDO (arquivo SXC do portal Magalu)
+# =====================================================================
+def processar_magalu_copart(destino: str, nome: str, quem: str) -> str:
+    """SXC · Coparticipação de Fretes — o REALIZADO por pedido × SKU.
+    É extrato, não tabela: acumula por chave, e o mesmo arquivo pode subir
+    de novo sem dobrar nada. A competência é a DATA DO PEDIDO (o motor
+    destroca as colunas de data que o portal inverte)."""
+    df, diag = magalu_copart.ler(destino)
+    res = base_upsert("magalu_copart", df, "chave", nome, destino, quem)
+    d = _json_ler(pasta("magalu", "copart_real.json"), {"uploads": []})
+    d["uploads"].append({"nome": nome, "caminho": destino, "quando": agora().isoformat(),
+                         "quem": quem, "diag": diag})
+    d["uploads"] = d["uploads"][-30:]
+    _json_gravar(pasta("magalu", "copart_real.json"), d)
+
+    avisos = ""
+    if diag["datas_trocadas"]:
+        avisos += (f" O portal entregou as DUAS COLUNAS DE DATA TROCADAS em {diag['n_invertidas']} linha(s) "
+                   f"— o PLUTOS destrocou: vale a data do pedido, como nos outros canais.")
+    if diag["acima_do_cheio"]:
+        avisos += (f" ATENÇÃO: {diag['acima_do_cheio']} cobrança(s) ACIMA da própria tabela cheia do canal, "
+                   f"R$ {f_brl(diag['acima_rs'])} a mais — é dinheiro a reclamar, não é custo.")
+    comps = " · ".join(f"{f_mesano(c)}" for c in diag["competencias"])
+    serv = " · ".join(f"{k}: {v}" for k, v in diag["servicos"].items())
+    return (f"Coparticipação REAL lida: {diag['linhas']} linhas em {diag['pedidos']} pedidos e "
+            f"{diag['skus']} SKUs, R$ {f_brl(diag['total'])} de {f_dia(diag['de'])} a {f_dia(diag['ate'])} "
+            f"({comps}). {serv}. {_txt_upsert(res)}.{avisos}")
+
+
+def copart_real_ult():
+    d = _json_ler(pasta("magalu", "copart_real.json"), {"uploads": []})
+    return (d["uploads"] or [None])[-1]
+
+
+def copart_real_df(comp: str):
+    """A base acumulada da coparticipação real, já como DataFrame."""
+    return base_df("magalu_copart", comp)
+
+
+def copart_real_por_sku(comp: str) -> dict:
+    """{sku: R$ REAL por unidade} — o que o ORION deve somar no preço, no
+    lugar do valor de tabela. Vazio quando o arquivo ainda não subiu."""
+    return magalu_copart.por_sku_medio(copart_real_df(comp))
+
+
+@app.route("/canal/magalu/coparticipacao-real")
+@logado
+def coparticipacao_real():
+    """COPARTICIPAÇÃO · REAL POR PEDIDO — o que pagamos de frete de fato."""
+    comp = comp_atual()
+    df = copart_real_df(comp)
+    desc = descricoes_ler()["skus"]
+    nomes = {k: (v.get("descricao") or v.get("descricao_curta") or "") for k, v in desc.items()}
+    nomes = {**nomes, **{sku_chave(k): v for k, v in nomes.items()}}
+    s = magalu_copart.resumo(df, nomes)
+    ult = copart_real_ult()
+    # o que a tabela de preço diria para as MESMAS unidades — é a prova de
+    # qual tabela o canal está realmente praticando
+    tab = full_real_ler()["itens"]
+    vig = (parametros().get("tabela_copart_vigente") or "nova_40")
+    por_tab = {k: 0.0 for k in magalu_real.TABELAS}
+    n_sem_tab = 0
+    idx = {sku_chave(i["sku"]): i for i in tab.values()}
+    for l in s["por_sku"]:
+        it = idx.get(sku_chave(l["sku"]))
+        if not it:
+            n_sem_tab += l["linhas"]
+            continue
+        for k in magalu_real.TABELAS:
+            por_tab[k] += it[k] * l["linhas"]
+    por_tab = {k: round(v, 2) for k, v in por_tab.items()}
+    return render_template("copart_real.html", c=canal_por_chave()["magalu"], comp=comp,
+                           s=s, ult=ult, tem=bool(df is not None and len(df)),
+                           por_tab=por_tab, n_sem_tab=n_sem_tab, vigente=vig, tem_tabela=bool(tab),
+                           NOMES=magalu_real.NOMES, TABELAS=magalu_real.TABELAS)
+
+
+@app.route("/baixar/coparticipacao-real")
+@logado
+@exige("exportar")
+def baixar_coparticipacao_real():
+    comp = comp_atual()
+    df = copart_real_df(comp)
+    desc = descricoes_ler()["skus"]
+    nomes = {k: (v.get("descricao") or v.get("descricao_curta") or "") for k, v in desc.items()}
+    bio = planilhas.copart_real_xlsx(df, magalu_copart.resumo(df, nomes), comp)
+    return send_file(bio, as_attachment=True,
+                     download_name=f"PLUTOS_COPARTICIPACAO_REAL_{agora().strftime('%d%m%Y_%H%M')}.xlsx",
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
 def full_real_ler() -> dict:
     """CUSTO DO FULL POR ITEM · REAL — o que o Magalu cobra de fato por SKU.
     Hoje a tela "Custo do Full por item · Estimado" chega ao custo por SKU
@@ -3022,19 +3117,30 @@ def entregas_por_sku(comp: str) -> dict:
     if vig not in magalu_real.TABELAS:
         vig = "nova_40"
     tab_idx = {sku_chave(k): v for k, v in tab.items()}
+    # O REALIZADO MANDA (27/09/2026). Ordem de preferência do frete do Magalu:
+    #   1) SXC · coparticipação REAL por pedido — o que pagamos de fato;
+    #   2) tabela por SKU — preço de tabela, enquanto o SXC não subiu;
+    #   3) rateio do extrato — último recurso.
+    # A tabela sozinha erra porque o canal só dá o desconto de campanha em
+    # parte do volume: o resto paga o cheio.
+    real_idx = {sku_chave(k): v for k, v in copart_real_por_sku(comp).items()}
     for m in _custo_full(comp, "", "todos"):
         if not m.get("unidades"):
             continue
         t = tab_idx.get(sku_chave(m["sku"]))
+        copart_real = real_idx.get(sku_chave(m["sku"]))
         copart_tab = float(t[vig]) if t else None
-        copart_un = copart_tab if copart_tab is not None else float(m.get("copart_un") or 0.0)
+        copart_un = (copart_real if copart_real is not None
+                     else copart_tab if copart_tab is not None
+                     else float(m.get("copart_un") or 0.0))
         full_un = float(m.get("full_un") or 0.0)
         linhas.append({
             "sku": m["sku"], "descricao": m.get("descricao") or nome_de(m["sku"]),
             "canal": "Magazine Luiza", "modalidade": "Full",
             "custo_un": round(full_un + copart_un, 2),
             "logistica_un": round(full_un, 2), "frete_un": round(copart_un, 2),
-            "fonte_frete": ("tabela do canal · " + magalu_real.NOMES[vig]) if t else "medido no extrato",
+            "fonte_frete": ("REAL · SXC por pedido" if copart_real is not None
+                            else ("tabela do canal · " + magalu_real.NOMES[vig]) if t else "medido no extrato"),
             "unidades": m.get("unidades"), "peso": m.get("peso"), "cubagem": m.get("cubagem"),
             "manuseio_un": round(float(m.get("unit_manuseio") or 0.0), 2),
             "coleta_un": round(float(m.get("coleta_tabela_un") or 0.0), 2),

@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block acoes_ult %}
+{% if PODE.exportar and tem %}<a class="bt-excel" href="{{ url_for('baixar_coparticipacao_real') }}" data-tip="O realizado por pedido × SKU, com o cheio do SKU ao lado e o que a campanha descontou">↓ EXCEL</a>{% endif %}
+{% endblock %}
+{% block conteudo %}
+{% if not tem %}
+<div class="aviso" style="margin-bottom:14px"><b>O arquivo SXC de coparticipação ainda não subiu em {{ comp|mesano }}.</b>
+Suba <b>MagazineLuiza_CSV-AAAAMM_CoparticipacaoDeFretes_*.zip</b> em <a href="{{ url_for('arquivos', mes=comp) }}">Arquivos</a> — box Magazine Luiza, cartão <b>SXC · Coparticipação de Fretes</b>.</div>
+<div class="bloco">
+  <h2>Por que esta tela existe</h2>
+  <ul class="lista">
+    <li><b>O financeiro não serve para isto.</b> A coluna dele chama-se "Coparticipação de fretes <b>estimada</b>" e vem quase sempre zerada — em set/26 trouxe R$ 3.082 em 165 pedidos, de 838 do Fulfillment.</li>
+    <li><b>A tabela por SKU também não.</b> Ela é preço de tabela: serve para <b>formar preço</b>, não para fechar o mês.</li>
+    <li><b>Este arquivo é o realizado.</b> Pedido, SKU e o que foi efetivamente cobrado de frete — é com ele que se fecha a conta e se confere o resto.</li>
+  </ul>
+</div>
+{% else %}
+<div class="kpis cinco">
+  <div class="kpi ouro"><span class="l">Coparticipação paga</span><span class="v">R$ {{ s.total|brl(0) }}</span><span class="o">{{ s.pedidos|brl(0) }} pedidos · {{ s.skus }} SKUs · R$ {{ s.un_media|brl(2) }} por pedido</span></div>
+  <div class="kpi bom"><span class="l">Economia de campanha</span><span class="v">R$ {{ s.economia|brl(0) }}</span><span class="o">{{ s.economia_pct|brl(1) }}% abaixo do cheio · pela tabela cheia seriam R$ {{ s.cheio_total|brl(0) }}</span></div>
+  <div class="kpi crit"><span class="l">Pagou o cheio</span><span class="v">{{ s.pct_cheio|brl(1) }}%</span><span class="o">dos pedidos sem nenhum desconto — precificar tudo com −40% erra nesta fatia</span></div>
+  <div class="kpi {{ 'crit' if s.acima else 'bom' }}"><span class="l">A reclamar do canal</span><span class="v">R$ {{ s.acima_rs|brl(0) }}</span><span class="o">{% if s.acima %}{{ s.acima|length }} cobrança(s) <b>acima da tabela cheia dele</b> — <a href="#reclamar">ver lista</a>{% else %}nenhuma cobrança acima do cheio{% endif %}</span></div>
+  <div class="kpi preto"><span class="l">Período</span><span class="v txt">{{ s.de|dia }} a {{ s.ate|dia }}</span><span class="o">pela <b>data do pedido</b> — o portal entrega as colunas de data trocadas e o PLUTOS destroca</span></div>
+</div>
+
+<div class="nota" style="margin:0 0 12px"><b>Este é o frete que nós pagamos, de verdade.</b>
+O financeiro traz a coparticipação <b>estimada</b> (quase sempre zerada) e a tabela por SKU é <b>preço de tabela</b>.
+Aqui está o realizado, pedido a pedido: é ele que fecha o mês e é dele que sai o R$/un que o <b>ORION</b> deve somar no preço.</div>
+
+<div class="dois-blocos">
+<div class="bloco">
+  <h2>Não existe "a tabela vigente" — existe cheio e desconto de campanha</h2>
+  <div class="rol fit"><table data-sem-ordenar>
+    <thead><tr><th>Faixa</th><th class="n">Pedidos</th><th class="n">Pago</th><th class="n">Seria cheio</th><th class="n">Economia</th><th class="n">Média / pedido</th></tr></thead>
+    <tbody>
+    {% for k, v in s.por_faixa.items() %}
+    <tr class="{{ 'linha-alerta' if k == 'acima do cheio' }}">
+      <td><b>{{ k }}</b></td><td class="n">{{ v.linhas }}</td><td class="n"><b>{{ v.total|brl }}</b></td>
+      <td class="n">{{ v.cheio|brl }}</td>
+      <td class="n {{ 'neg' if v.economia < 0 }}">{{ v.economia|brl }}</td><td class="n">{{ v.media|brl(2) }}</td></tr>
+    {% endfor %}
+    <tr class="linha-total"><td><b>Total</b></td><td class="n"><b>{{ s.linhas }}</b></td><td class="n"><b>{{ s.total|brl }}</b></td>
+      <td class="n"><b>{{ s.cheio_total|brl }}</b></td><td class="n"><b>{{ s.economia|brl }}</b></td><td class="n"><b>{{ s.un_media|brl(2) }}</b></td></tr>
+    </tbody></table></div>
+  <div class="nota">O canal cobra o <b>cheio do SKU</b> por padrão (serviço <b>Política Fulfillment</b>) e desconta quando o pedido entra em campanha (<b>Campanha ML Entregas</b>). O desconto cai em degraus — o mais comum é o <b>−40%</b>, o mesmo número da "tabela nova −40%". Ou seja: o −40% <b>não é uma tabela</b>, é um desconto de campanha, e mais da metade do volume não o recebe.</div>
+</div>
+<div class="bloco">
+  <h2>O real contra a tabela de preço</h2>
+  <div class="rol fit"><table data-sem-ordenar>
+    <tbody>
+      <tr><td><b>Pago de verdade</b> no período</td><td class="n"><b>R$ {{ s.total|brl }}</b></td></tr>
+      {% if tem_tabela %}
+      {% for t in TABELAS %}
+      <tr class="{{ 'linha-alerta' if t == vigente }}"><td>Pelas mesmas unidades, na <b>{{ NOMES[t] }}</b>{% if t == vigente %} <span class="tag ouro">vigente</span>{% endif %}</td>
+        <td class="n">R$ {{ por_tab[t]|brl }}</td></tr>
+      {% endfor %}
+      <tr class="linha-total"><td><b>Diferença para a tabela vigente</b></td>
+        <td class="n"><b>R$ {{ (s.total - por_tab[vigente])|brl }}</b></td></tr>
+      {% if n_sem_tab %}<tr><td>Pedidos de SKU que a tabela não cobre</td><td class="n">{{ n_sem_tab }}</td></tr>{% endif %}
+      {% else %}
+      <tr><td colspan="2" class="vazio">A tabela por SKU ainda não subiu nesta base — sem ela não há com o que comparar.
+        Suba <b>Coparticipação Full (tabela por SKU)</b> em <a href="{{ url_for('arquivos', mes=comp) }}">Arquivos</a>.</td></tr>
+      {% endif %}
+    </tbody></table></div>
+  <div class="nota">{% if tem_tabela %}Se o <b>pago de verdade</b> está acima da tabela escolhida em <a href="{{ url_for('custo_full_real', mes=comp) }}">Coparticipação · Tabela</a>, o preço está sendo formado com um frete <b>menor do que o real</b> — e a margem some no caminho. Esta é a comparação que decide qual tabela usar no ORION.{% else %}Com as duas no ar, esta é a comparação que decide qual tabela usar no ORION: se o pago de verdade for maior que a tabela escolhida, o preço está nascendo com um frete menor que o real.{% endif %}</div>
+</div>
+</div>
+
+<div class="bloco">
+  <h2>Por serviço <span class="qtd">como o canal classifica cada cobrança</span></h2>
+  <div class="rol fit"><table data-sem-ordenar>
+    <thead><tr><th>Serviço</th><th class="n">Pedidos</th><th class="n">Total pago</th><th class="n">Média / pedido</th><th class="n">% do total</th></tr></thead>
+    <tbody>
+    {% for k, v in s.por_servico.items() %}
+    <tr><td><b>{{ k }}</b></td><td class="n">{{ v.linhas }}</td><td class="n"><b>{{ v.total|brl }}</b></td>
+      <td class="n">{{ v.media|brl(2) }}</td><td class="n">{{ v.share|brl(1) }}%</td></tr>
+    {% endfor %}
+    </tbody></table></div>
+</div>
+
+{% if s.acima %}
+<div class="bloco" id="reclamar">
+  <h2>A reclamar · cobranças acima da tabela cheia do próprio canal <span class="qtd">{{ s.acima|length }} · R$ {{ s.acima_rs|brl }}</span></h2>
+  <div class="rol" style="max-height:44vh"><table class="tb-reclamar">
+    <thead><tr><th>Pedido</th><th>SKU</th><th>Descrição</th><th>Data</th><th>Serviço</th>
+      <th class="n">Cobrado<i>R$</i></th><th class="n">Cheio do SKU<i>R$</i></th><th class="n">Excesso<i>R$</i></th></tr></thead>
+    <tbody>
+    {% for a in s.acima %}
+    <tr class="linha-alerta"><td class="n sku">{{ a.pedido }}</td><td class="n sku">{{ a.sku }}</td>
+      <td class="desc">{{ a.descricao or '—' }}</td><td>{{ a.data|dia }}</td><td>{{ a.servico }}</td>
+      <td class="n">{{ a.valor|brl(2) }}</td><td class="n">{{ a.cheio|brl(2) }}</td>
+      <td class="n forte">{{ a.excesso|brl(2) }}</td></tr>
+    {% endfor %}
+    <tr class="linha-total"><td><b>Total</b></td><td></td><td></td><td></td><td></td><td></td><td></td>
+      <td class="n"><b>{{ s.acima_rs|brl(2) }}</b></td></tr>
+    </tbody></table></div>
+  <div class="nota">Nestes pedidos o canal cobrou <b>mais do que a própria tabela cheia</b> daquele SKU. Não é custo e não é rebate: é <b>cobrança indevida</b> para abrir chamado no portal. Leve esta lista (está no Excel, aba <b>A_reclamar</b>) com pedido, data e valor.</div>
+</div>
+{% endif %}
+
+<div class="bloco">
+  <h2>Por SKU <span class="qtd">{{ s.por_sku|length }} SKUs · {{ comp|mesano }}</span></h2>
+  <div class="rol" style="max-height:56vh"><table class="tb-copart">
+    <thead><tr><th>SKU</th><th>Descrição</th><th class="n">Pedidos</th>
+      <th class="n">Total pago<i>R$</i></th><th class="n">REAL por un<i>R$</i></th><th class="n">Cheio<i>R$</i></th>
+      <th class="n">Mínimo<i>R$</i></th><th class="n">Máximo<i>R$</i></th>
+      <th class="n">No cheio<i>%</i></th><th class="n">Economia<i>R$</i></th>
+      <th class="n">Cubagem<i>m³</i></th><th class="n">Peso<i>kg</i></th></tr></thead>
+    <tbody>
+    {% for l in s.por_sku %}
+    <tr class="{{ 'linha-alerta' if l.acima }}">
+      <td class="n sku">{{ l.sku }}</td><td class="desc">{{ l.descricao or '—' }}</td>
+      <td class="n">{{ l.linhas }}</td><td class="n">{{ l.total|brl }}</td>
+      <td class="n forte">{{ l.un_media|brl(2) }}</td><td class="n">{{ l.cheio|brl(2) }}</td>
+      <td class="n">{{ l.min|brl(2) }}</td><td class="n">{{ l.max|brl(2) }}</td>
+      <td class="n">{{ l.pct_cheio|brl(0) }}%</td><td class="n">{{ l.economia|brl }}</td>
+      <td class="n">{{ l.cubagem|brl(3) }}</td><td class="n">{{ l.peso|brl(1) }}</td></tr>
+    {% endfor %}
+    <tr class="linha-total"><td><b>Total</b></td><td></td><td class="n"><b>{{ s.linhas }}</b></td>
+      <td class="n"><b>{{ s.total|brl }}</b></td><td class="n"><b>{{ s.un_media|brl(2) }}</b></td>
+      <td></td><td></td><td></td><td class="n"><b>{{ s.pct_cheio|brl(0) }}%</b></td>
+      <td class="n"><b>{{ s.economia|brl }}</b></td><td></td><td></td></tr>
+    </tbody></table></div>
+  <div class="nota"><b>REAL por unidade</b> é a média do que foi cobrado naquele SKU, já misturando pedidos cheios e de campanha — é este número que representa o custo de frete verdadeiro do item e que deve entrar na formação de preço. Linha destacada = o SKU teve alguma cobrança acima do cheio.{% if ult %} Arquivo <b>{{ ult.nome }}</b> lido em {{ ult.quando[:10]|dia }}.{% endif %}</div>
+</div>
+{% endif %}
+{% endblock %}
