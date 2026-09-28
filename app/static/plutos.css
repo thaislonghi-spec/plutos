@@ -583,3 +583,10 @@ table.tb-copart td.sku,table.tb-reclamar td.sku{text-align:left;font-weight:600;
   white-space:normal;overflow-wrap:anywhere;line-height:1.25}
 table.tb-copart td.desc,table.tb-reclamar td.desc{white-space:normal;line-height:1.3}
 table.tb-copart td.forte,table.tb-reclamar td.forte{font-weight:700}
+
+/* O CÓDIGO DO RELATÓRIO NO PORTAL (CSV-156171, CSV-160172, SXC) saiu do título
+   — ele muda com o período e poluía a leitura. Fica na linha de descrição,
+   discreto, porque é por ele que se acha o relatório no portal do canal. */
+.arq-sub .cod-rel{display:inline-block;font:600 9.5px "IBM Plex Mono",monospace;
+  letter-spacing:.04em;color:var(--tinta3);background:var(--sup2);
+  border:1px solid var(--linha);border-radius:2px;padding:0 5px;white-space:nowrap}

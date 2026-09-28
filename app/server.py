@@ -26,7 +26,7 @@ from werkzeug.utils import secure_filename
 from motor import (meli, erp, magalu, magalu_vendas, magalu_full, magalu_real, magalu_copart,
                    shopee, madeira, webcont, colombo, amazon)
 import planilhas
-VERSAO = "2026-09-27a"
+VERSAO = "2026-09-28a"
 VERSAO = "2026-09-21m"
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(RAIZ), "dados")
