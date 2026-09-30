@@ -26,7 +26,7 @@ from werkzeug.utils import secure_filename
 from motor import (meli, erp, magalu, magalu_vendas, magalu_full, magalu_real, magalu_copart,
                    shopee, madeira, webcont, colombo, amazon)
 import planilhas
-VERSAO = "2026-09-30c"
+VERSAO = "2026-09-30d"
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(RAIZ), "dados")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -251,6 +251,7 @@ def parametros() -> dict:
     p = _json_ler(pasta("parametros.json"), {})
     p = _corrigir_comissoes(p)
     p = _migrar_comissoes(p)
+    p = _migrar_taxa_magalu(p)
     p = {**padrao, **p}
     # prazo antigo (um número só) → {manuseio, transferencia}, sem perder o valor
     def _pz(v, tra_padrao=0):
@@ -307,6 +308,30 @@ def _migrar_comissoes(p: dict) -> dict:
             lin["tx_fin"] = f_brl(txg.get("webcont", 1.0), 1)
         lin.pop(COMISSAO_LEGADO, None)
     p["correcoes"] = list(p.get("correcoes") or []) + ["tabela_canal_v2"]
+    _json_gravar(pasta("parametros.json"), p)
+    return p
+
+
+def _migrar_taxa_magalu(p: dict) -> dict:
+    """A TARIFA DO MAGALU É POR PRODUTO, NÃO POR PEDIDO (provado em 30/09/2026).
+
+    Cruzando a "Tarifa fixa" cobrada com a quantidade de itens do relatório de
+    vendas, em 2.673 pedidos: tarifa ÷ 5 = nº de produtos em 2.673 de 2.673.
+    Não é por pacote (o pedido de 10 unidades tinha 1 pacote e pagou R$ 50,00)
+    nem por SKU (3 SKUs e 7 unidades pagaram 7 × R$ 5,00). Parece "por pedido"
+    porque 97,4% dos pedidos têm uma unidade só.
+
+    Leva o valor que estava em "Taxa R$ por pedido" para "Taxa R$ por item",
+    UMA vez. Se ela editar depois, o valor dela vale."""
+    linhas = p.get("comissoes")
+    if not linhas or "magalu_taxa_por_produto" in (p.get("correcoes") or []):
+        return p
+    for lin in linhas:
+        nome = unidecode_lower(lin.get("canal", ""))
+        if "magazine luiza" in nome or "magalu" in nome:
+            if not str(lin.get("taxa_item", "") or "").strip():
+                lin["taxa_item"] = str(lin.get("taxa_pedido", "") or "5").strip()
+    p["correcoes"] = list(p.get("correcoes") or []) + ["magalu_taxa_por_produto"]
     _json_gravar(pasta("parametros.json"), p)
     return p
 
