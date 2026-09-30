@@ -162,8 +162,17 @@ def ler(caminho: str) -> tuple[pd.DataFrame, dict]:
 
 
 def base_oc(oc: str) -> str:
-    """OC do ERP para o Magalu vem com sufixo -1/-2 (item/volume): 'LU-…-1' → 'LU-…'."""
-    return re.sub(r"-\d+$", "", str(oc or "").strip())
+    """OC do ERP para o Magalu vem com sufixo -1/-2 (item/volume): 'LU-…-1' → 'LU-…'.
+
+    CUIDADO (30/09/2026): a regra antiga era r"-\d+$", que come QUALQUER final
+    numérico. Numa OC SEM sufixo — 'LU-1566370102667023' — ela devolvia só 'LU',
+    e aí TODOS os pedidos sem sufixo viravam a mesma chave e eram SOMADOS num
+    registro só no erp_por_base. Hoje 100% das OCs do Magalu vêm com sufixo, mas
+    uma sem sufixo estouraria a apuração inteira sem dar erro. Agora só corta
+    sufixo curto (1 a 3 dígitos) e só se sobrar OC de verdade."""
+    t = str(oc or "").strip()
+    b = re.sub(r"-\d{1,3}$", "", t)
+    return b if len(b) >= 8 else t
 
 
 def fulfillment(modalidade) -> bool:
@@ -174,14 +183,23 @@ def fulfillment(modalidade) -> bool:
 
 
 def calcular(df: pd.DataFrame, pct: float, taxa: float, erp_por_base: dict | None = None,
-             tipo: str = "GMV") -> list[dict]:
+             tipo: str = "GMV", taxa_item: float = 0.0, qtd_por_pedido: dict | None = None) -> list[dict]:
     """Uma linha por pedido válido (não cancelado) com o rebate nas 3 formas.
 
     COMISSÃO DO SISTEMA (Promob), regra validada com a planilha da Gabi (16/09/2026):
       · % = o percentual DO PEDIDO no ERP (coluna de comissão da OC), não um % fixo;
         sem par no ERP, cai para o % dos Parâmetros.
-      · + a taxa fixa por pedido dos Parâmetros (R$ 5,00): o % da OC é comissão
-        pura, não embute a taxa (conferido pedido a pedido em set/26).
+      · + a taxa fixa do canal: o % da OC é comissão pura, não embute a taxa
+        (conferido pedido a pedido em set/26).
+
+    A TAXA DO MAGALU É POR PRODUTO, NÃO POR PEDIDO (provado em 30/09/2026).
+    Cruzando a "Tarifa fixa" cobrada com a QUANTIDADE DE ITENS do relatório de
+    vendas, em 2.673 pedidos: tarifa ÷ 5 = nº de itens em 2.673 de 2.673 (100%).
+    Não é por pacote (o pedido de 10 itens tinha 1 pacote e pagou R$ 50,00) nem
+    por SKU (um pedido de 3 SKUs e 7 unidades pagou 7 × R$ 5,00). Parece "por
+    pedido" no dia a dia porque 97,4% dos pedidos têm uma unidade só.
+    Aqui: taxa_item × quantidade quando a quantidade é conhecida (Planilha 2 ·
+    Vendas); sem ela, cai para a taxa por pedido dos Parâmetros.
       · base = FULFILLMENT → produto + IPI (soma das OCs do ERP);
                demais → conforme o TIPO cadastrado (GMV = valor pago pelo cliente).
     A taxa fixa do canal (R$ ~5/pedido) NÃO entra na comissão do sistema — ela é
@@ -193,10 +211,12 @@ def calcular(df: pd.DataFrame, pct: float, taxa: float, erp_por_base: dict | Non
             continue
         e = erp_por_base.get(r.pedido)
         ff = fulfillment(r.modalidade)
-        # A taxa fixa por pedido (Parâmetros, R$ 5,00) SEMPRE entra: conferido em
-        # set/26 que o % gravado na OC é comissão pura — não embute a taxa
-        # (0 de 1.301 pedidos batem com "serviços + taxa"; 1.012 batem sem ela).
-        taxa_ped = taxa
+        # TAXA POR PRODUTO: quantidade do relatório de vendas × taxa_item.
+        # Sem a quantidade, usa a taxa por pedido dos Parâmetros (mesma coisa
+        # em 97,4% dos pedidos, que têm um item só).
+        qtd = (qtd_por_pedido or {}).get(r.pedido)
+        taxa_ped = round(taxa_item * qtd, 2) if (taxa_item and qtd) else taxa
+        taxa_medida = bool(taxa_item and qtd)
         if e:
             pct_ped = float(e.get("pct_comissao") or 0.0) or pct
             base_prod = float(e.get("prod_erp") or 0.0) + float(e.get("ipi_erp") or 0.0)
@@ -223,7 +243,8 @@ def calcular(df: pd.DataFrame, pct: float, taxa: float, erp_por_base: dict | Non
             "pct_comissao": (real / r.pago if r.pago else 0.0), "pct_mkt": r.pct_mkt / 100 if r.pct_mkt > 1 else r.pct_mkt,
             "servicos": r.servicos, "intermediacao": r.intermediacao, "tecnologia": r.tecnologia, "mdr": r.mdr,
             "tarifa_fixa": r.tarifa_fixa, "servicos_pgto2": r.servicos_pgto2,
-            "sis_pct": pct_ped, "sis_taxa": taxa_ped, "sis_rs": sis_rs, "diferenca": reb_com,
+            "sis_pct": pct_ped, "sis_taxa": taxa_ped, "sis_qtd": (qtd or 1),
+            "sis_taxa_medida": taxa_medida, "sis_rs": sis_rs, "diferenca": reb_com,
             "sis_base": round(base, 2), "sis_base_nome": base_nome, "fulfillment": ff,
             "desc_vista_magalu": r.desc_vista_magalu, "desc_vista_seller": r.desc_vista_seller,
             "promo_magalu": r.promo_magalu, "promo_seller": r.promo_seller,

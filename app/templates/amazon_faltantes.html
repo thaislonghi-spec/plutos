@@ -26,36 +26,58 @@
       <button type="button" class="chip {{ 'on' if onde == 'dentro' }}" data-tipo="dentro">Procurar · {{ f.contagem.dentro }}</button>
       <button type="button" class="chip {{ 'on' if onde == 'aguardando' }}" data-tipo="aguardando">Aguardando repasse · {{ f.contagem.aguardando }}</button>
       <button type="button" class="chip {{ 'on' if onde == 'fora' }}" data-tipo="fora">Fora da janela · {{ f.contagem.fora }}</button>
+      <button type="button" class="chip {{ 'on' if onde == 'baixados' }}" data-tipo="baixados">Baixados · {{ f.contagem.baixados }}</button>
       <button type="button" class="chip {{ 'on' if onde == 'todos' }}" data-tipo="todos">Todos · {{ f.contagem.todos }}</button>
     </div>
     <span class="nota" style="margin:0">{{ f.itens|length }} na tela</span>
   </form>
-  <div class="rol" style="max-height:60vh"><table class="cols-cf">
+  <div class="rol" style="max-height:60vh"><table class="tb-amz-falt">
     <thead><tr>
-      <th>ID do pedido (Amazon)</th><th>Pedido ERP</th><th>Data</th><th>NF</th><th>Status</th>
-      <th>Cidade</th><th>UF</th>
-      <th class="n">Produtos</th><th class="n">IPI</th><th class="n">Frete</th><th class="n">TOTAL (NF)</th>
-      <th class="n">% ERP</th><th class="n">Comissão prevista</th><th>Onde</th>
+      <th>Pedido ERP</th><th>Natureza</th><th>Situação</th><th>Ordem de compra<i>ID Amazon</i></th>
+      <th class="n">Volumes</th><th class="n">Peso<i>kg</i></th><th>Data<i>emissão</i></th>
+      <th>NF</th><th>Cidade</th><th>UF</th>
+      <th class="n">Produtos<i>R$</i></th><th class="n">IPI<i>R$</i></th><th class="n">Frete<i>R$</i></th>
+      <th class="n">Total NF<i>R$</i></th><th class="n">Comissão prevista<i>R$</i></th>
+      <th>Onde</th><th>O que você achou</th><th>Ação</th>
     </tr></thead>
     <tbody>
     {% for m in f.itens %}
-    <tr class="{{ 'linha-alerta' if not m.tem_id }}">
-      <td class="n" style="text-align:left">{{ m.oc }}{% if not m.tem_id %} <span class="tag pend">sem ID Amazon</span>{% endif %}</td>
-      <td class="n" style="text-align:left">{{ m.pedido_erp }}</td>
+    <tr class="{{ 'linha-baixada' if m.baixado else ('linha-alerta' if not m.tem_id) }}" data-oc="{{ m.oc }}">
+      <td class="n sku">{{ m.pedido_erp }}</td>
+      <td>{{ m.natureza or '—' }}</td>
+      <td>{{ m.status }}</td>
+      <td class="n sku">{{ m.oc }}{% if not m.tem_id %} <span class="tag pend">sem ID</span>{% endif %}</td>
+      <td class="n">{{ m.volumes|brl(0) if m.volumes else '—' }}</td>
+      <td class="n">{{ m.peso|brl(1) if m.peso else '—' }}</td>
       <td data-ord="{{ m.data }}">{{ m.data|dia }}</td>
-      <td class="n" style="text-align:left">{{ m.nf or '—' }}</td>
-      <td>{{ m.status }}</td><td>{{ m.cidade }}</td><td>{{ m.uf }}</td>
+      <td class="n sku">{{ m.nf or '—' }}</td>
+      <td class="desc">{{ m.cidade }}</td><td>{{ m.uf }}</td>
       <td class="n">{{ m.valor_prod|brl }}</td><td class="n">{{ m.ipi|brl }}</td><td class="n">{{ m.frete|brl }}</td>
-      <td class="n"><b>{{ m.total|brl }}</b></td>
-      <td class="n">{{ (100 * m.pct_erp)|brl(2) }}%</td>
+      <td class="n forte">{{ m.total|brl }}</td>
       <td class="n">{{ m.comissao_prevista|brl }}</td>
-      <td>{% if m.onde == 'dentro' %}<span class="tag pend">procurar</span>{% elif m.onde == 'aguardando' %}<span class="tag mk-aten">aguardando repasse · {{ m.dias }}d</span>{% else %}<span class="tag ok2">fora da janela</span>{% endif %}</td></tr>
+      <td class="st">{% if m.baixado %}<span class="tag mk-cinza" data-tip="{{ m.motivo_nome }} · {{ m.quem }} · {{ m.quando }}">baixado</span>
+        {% elif m.onde == 'dentro' %}<span class="tag pend">procurar</span>
+        {% elif m.onde == 'aguardando' %}<span class="tag mk-aten">aguardando · {{ m.dias }}d</span>
+        {% else %}<span class="tag ok2">fora da janela</span>{% endif %}</td>
+      <td class="achou">
+        {% if PODE.faltante %}<input class="obs" type="text" value="{{ m.obs }}" placeholder="onde achou, o que aconteceu…" autocomplete="off">
+        {% else %}{{ m.obs or '—' }}{% endif %}
+        {% if m.quem %}<span class="qq">{{ m.quem }} · {{ m.quando }}{% if m.motivo_nome %} · {{ m.motivo_nome }}{% endif %}</span>{% endif %}
+      </td>
+      <td class="acao">
+        {% if PODE.faltante %}
+          <button type="button" class="mini okum" data-tip="Grava a anotação sem tirar o pedido da lista">OK</button>
+          {% if m.baixado %}<button type="button" class="mini voltar" data-tip="Devolve o pedido para a lista de procura">voltar</button>
+          {% else %}<button type="button" class="mini excluir" data-tip="Tira o pedido da lista de procura — pede confirmação e o motivo">excluir</button>{% endif %}
+        {% endif %}
+      </td></tr>
     {% else %}
-    <tr><td colspan="14" class="vazio">{% if f.contagem.todos %}Nada com esse filtro.{% else %}Nenhum pedido faltante — todos os pedidos da Amazon no ERP apareceram no relatório de transações.{% endif %}</td></tr>
+    <tr><td colspan="18" class="vazio">{% if f.contagem.todos %}Nada com esse filtro.{% else %}Nenhum pedido faltante — todos os pedidos da Amazon no ERP apareceram no relatório de transações.{% endif %}</td></tr>
     {% endfor %}
     </tbody>
   </table></div>
   <div class="nota" style="margin-top:8px"><b>O que fazer com a lista "procurar":</b> o relatório já cobre {{ f.folga }} dias depois desse pedido e ele não apareceu. As causas prováveis, em ordem: <b>1)</b> a Amazon ainda não pagou o pedido (entra no próximo repasse); <b>2)</b> o pedido foi cancelado no canal; <b>3)</b> a Ordem de compra no ERP está digitada diferente do ID da Amazon. A comissão prevista é {{ (100 * f.pct)|brl(2) }}% × total do pedido (NF) — é o valor que fica sem conferência enquanto o pedido não aparece.</div>
+  <div class="nota"><b>Campo "O que você achou" e botão OK:</b> grava a anotação e o pedido <b>continua</b> na lista. <b>Botão excluir:</b> dá <b>baixa</b> — o pedido sai da procura, com motivo, quem e quando. Nada é apagado: ele fica no filtro <b>Baixados</b> e volta com um clique. Use a baixa para o que nunca vai aparecer no relatório: <b>pedido cancelado no canal</b>, OC digitada diferente do ID da Amazon, pedido não faturado.</div>
 </div>
 
 {% if sem_erp %}
@@ -73,6 +95,24 @@
   <div class="nota">Aqui a Amazon já cobrou comissão de um pedido que o PLUTOS não achou no ERP. Ou o ERP daquele período ainda não subiu, ou a Ordem de compra está diferente. Enquanto não casar, a comissão do sistema desse pedido é calculada sobre a base do próprio relatório, não sobre a NF.</div>
 </div>
 {% endif %}
+
+<div class="caixa-fundo" id="cxfundo">
+  <div class="caixa" role="dialog" aria-modal="true">
+    <h3>Tirar este pedido da lista?</h3>
+    <p class="cx-ped"><b id="cxoc">—</b><span id="cxinfo"></span></p>
+    <p>O pedido <b>não é apagado</b>: ele sai da procura e fica no filtro <b>Baixados</b>, com o seu nome e a data. Dá para trazer de volta quando quiser.</p>
+    <label class="cx-lab">Por que ele não vai aparecer no relatório?</label>
+    <select id="cxmotivo" class="cx-sel">
+      {% for k, v in f.motivos.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}
+    </select>
+    <label class="cx-lab">Observação (opcional)</label>
+    <input id="cxobs" class="cx-inp" type="text" placeholder="o que você conferiu…" autocomplete="off">
+    <div class="cx-bts">
+      <button type="button" class="bt sec" id="cxnao">Não, deixar na lista</button>
+      <button type="button" class="bt pri" id="cxsim">Sim, tirar da lista</button>
+    </div>
+  </div>
+</div>
 {% endblock %}
 {% block scripts %}
 <script>
@@ -81,6 +121,77 @@
   document.querySelectorAll('.chip').forEach(function(b){b.addEventListener('click',function(){ft.value=b.getAttribute('data-tipo');f.submit();});});
   q.addEventListener('input',function(){clearTimeout(t);t=setTimeout(function(){f.submit();},450);});
   q.focus(); q.setSelectionRange(q.value.length,q.value.length);
+})();
+
+// ANOTAR · BAIXAR · VOLTAR — tudo sem sair da tela, como no Faltante do Meli.
+(function(){
+  var URL_ANOTAR = "{{ url_for('amazon_faltante_anotar') }}";
+  var URL_BAIXAR = "{{ url_for('amazon_faltante_baixar') }}";
+  var URL_VOLTAR = "{{ url_for('amazon_faltante_voltar') }}";
+  var fundo = document.getElementById('cxfundo'), alvo = null;
+
+  function post(url, dados){
+    return fetch(url, {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(dados)}).then(function(r){ return r.json(); });
+  }
+  function piscar(bt, txt){
+    var antes = bt.textContent; bt.textContent = txt || 'ok'; bt.classList.add('feito');
+    setTimeout(function(){ bt.textContent = antes; bt.classList.remove('feito'); }, 1200);
+  }
+  function anotar(tr){
+    var bt = tr.querySelector('.okum'), inp = tr.querySelector('input.obs');
+    if(!bt || !inp) return;
+    bt.disabled = true; bt.textContent = '…';
+    post(URL_ANOTAR, {oc: tr.getAttribute('data-oc'), obs: inp.value})
+      .then(function(j){ bt.disabled = false; bt.textContent = 'OK';
+        if(!j.ok){ bt.textContent = 'erro'; return; }
+        var qq = tr.querySelector('.qq');
+        if(!qq && j.obs){ qq = document.createElement('span'); qq.className='qq'; tr.querySelector('td.achou').appendChild(qq); }
+        if(qq) qq.textContent = j.obs ? (j.quem + ' · ' + j.quando) : '';
+        piscar(bt);
+      }).catch(function(){ bt.disabled = false; bt.textContent = 'erro'; });
+  }
+  function abrirCaixa(tr){
+    alvo = tr;
+    document.getElementById('cxoc').textContent = tr.getAttribute('data-oc');
+    var tds = tr.querySelectorAll('td');
+    document.getElementById('cxinfo').textContent =
+      ' · ' + (tds[6] ? tds[6].textContent.trim() : '') + ' · R$ ' + (tds[13] ? tds[13].textContent.trim() : '');
+    document.getElementById('cxobs').value = (tr.querySelector('input.obs') || {}).value || '';
+    document.getElementById('cxmotivo').value = 'cancelado';
+    fundo.classList.add('on');
+    setTimeout(function(){ document.getElementById('cxmotivo').focus(); }, 30);
+  }
+  function fecharCaixa(){ fundo.classList.remove('on'); alvo = null; }
+
+  document.addEventListener('click', function(ev){
+    var bt = ev.target.closest('.okum, .excluir, .voltar'); if(!bt) return;
+    ev.preventDefault();
+    var tr = bt.closest('tr');
+    if(bt.classList.contains('okum')) return anotar(tr);
+    if(bt.classList.contains('excluir')) return abrirCaixa(tr);
+    bt.disabled = true; bt.textContent = '…';
+    post(URL_VOLTAR, {oc: tr.getAttribute('data-oc')}).then(function(){ location.reload(); });
+  });
+  document.addEventListener('keydown', function(ev){
+    if(ev.key === 'Enter'){
+      var inp = ev.target.closest('input.obs');
+      if(inp){ ev.preventDefault(); anotar(inp.closest('tr')); return; }
+      if(fundo.classList.contains('on') && ev.target.closest('.caixa')){ ev.preventDefault(); document.getElementById('cxsim').click(); }
+    }
+    if(ev.key === 'Escape' && fundo.classList.contains('on')) fecharCaixa();
+  });
+  document.getElementById('cxnao').addEventListener('click', fecharCaixa);
+  fundo.addEventListener('click', function(ev){ if(ev.target === fundo) fecharCaixa(); });
+  document.getElementById('cxsim').addEventListener('click', function(){
+    if(!alvo) return;
+    var bt = this; bt.disabled = true; bt.textContent = 'tirando…';
+    post(URL_BAIXAR, {oc: alvo.getAttribute('data-oc'),
+                      motivo: document.getElementById('cxmotivo').value,
+                      obs: document.getElementById('cxobs').value})
+      .then(function(){ location.reload(); })
+      .catch(function(){ bt.disabled = false; bt.textContent = 'Sim, tirar da lista'; });
+  });
 })();
 </script>
 {% endblock %}

@@ -26,8 +26,7 @@ from werkzeug.utils import secure_filename
 from motor import (meli, erp, magalu, magalu_vendas, magalu_full, magalu_real, magalu_copart,
                    shopee, madeira, webcont, colombo, amazon)
 import planilhas
-VERSAO = "2026-09-28a"
-VERSAO = "2026-09-21m"
+VERSAO = "2026-09-30c"
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(RAIZ), "dados")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -978,11 +977,20 @@ def recalcular_magalu(comp: str):
         df = df[df["competencia"] == comp]
     pct, taxa = comissao_cadastrada(("MAGAZINE", "MAGALU"), (0.11, 5.0))
     tipo = comissao_tipo(("MAGAZINE", "MAGALU"))
-    linhas = magalu.calcular(df, pct, taxa, erp_por_base("magalu"), tipo)
+    # A tarifa do Magalu é POR PRODUTO (provado em 30/09/2026): usa a taxa por
+    # item dos Parâmetros × a quantidade da Planilha 2 · Vendas. Sem a
+    # quantidade, cai para a taxa por pedido — igual em 97% dos pedidos.
+    par = parametros_canal(("MAGAZINE", "MAGALU"))
+    taxa_item = float(par.get("taxa_item") or 0.0) or taxa
+    qtd = magalu_qtd_itens()
+    linhas = magalu.calcular(df, pct, taxa, erp_por_base("magalu"), tipo, taxa_item, qtd)
     r["linhas"] = linhas
     r["resumo"] = magalu.resumo(linhas, int(df["cancelado"].sum()))
     sem_erp = sum(1 for l in linhas if not l.get("erp_ok"))
-    r["sistema"] = {"nome": (f"% do pedido no ERP + R$ {taxa:.2f}/pedido · {tipo} ({base_do_tipo(tipo)}) · Fulfillment sobre produto + IPI"
+    n_med = sum(1 for l in linhas if l.get("sis_taxa_medida"))
+    r["sistema"] = {"nome": (f"% do pedido no ERP + R$ {taxa_item:.2f} por PRODUTO · {tipo} ({base_do_tipo(tipo)}) · Fulfillment sobre produto + IPI"
+                             + (f" · {n_med} pedido(s) com a quantidade medida na Planilha 2" if n_med else
+                                " · sem a Planilha 2, a taxa entra por pedido")
                              + (f" · {sem_erp} sem par no ERP usam Parâmetros {pct * 100:.2f}%" if sem_erp else "")),
                     "quando": agora().isoformat(),
                     "diag": {"linhas": len(linhas), "modo": "comissão do ERP por pedido", "sem_erp": sem_erp}}
@@ -1098,6 +1106,19 @@ def cubagem_por_sku() -> dict:
             out[k] = float(c)
             out[sku_chave(k)] = float(c)
     return out
+
+
+def magalu_qtd_itens() -> dict:
+    """{pedido: quantidade de PRODUTOS} — sai da Planilha 2 · Vendas (1 linha
+    por item). A tarifa fixa do Magalu é por produto, então é esta quantidade
+    que multiplica a taxa no previsto. Vazio enquanto a Planilha 2 não subir."""
+    v = vendas_magalu_ler()
+    out: dict[str, float] = {}
+    for it in v.get("itens", {}).values():
+        ped = str(it.get("pedido") or "").strip()
+        if ped:
+            out[ped] = out.get(ped, 0.0) + float(it.get("qtd") or 0.0)
+    return {k: v for k, v in out.items() if v > 0}
 
 
 def vendidos_full_sku(comp: str) -> dict:
@@ -2825,6 +2846,97 @@ def _custo_full(comp: str, q: str = "", cd: str = "todos") -> list[dict]:
     return itens
 
 
+# =====================================================================
+# PEDIDOS FALTANTES · AMAZON — anotação e BAIXA da lista
+# =====================================================================
+# Nem todo faltante é buraco: o pedido pode ter sido CANCELADO no canal, e aí
+# ele nunca vai aparecer no relatório de transações. Ficar cobrando esse pedido
+# para sempre suja a lista e esconde o que importa. Aqui a Gabi anota o que
+# descobriu e, quando for caso resolvido, dá BAIXA — o pedido sai da lista de
+# procura mas NUNCA some do sistema: fica no filtro "Baixados", com quem deu
+# baixa, quando e por quê, e pode voltar com um clique.
+def amz_faltante_ler() -> dict:
+    return _json_ler(pasta("manual", "amazon_faltantes.json"), {})
+
+
+def amz_faltante_gravar(d):
+    _json_gravar(pasta("manual", "amazon_faltantes.json"), d)
+
+
+AMZ_MOTIVOS = {
+    "cancelado": "Cancelado no canal",
+    "oc_errada": "OC digitada diferente do ID da Amazon",
+    "nao_faturado": "Pedido não faturado / não vendido",
+    "outro": "Outro (ver observação)",
+}
+
+
+@app.route("/canal/amazon/faltantes/anotar", methods=["POST"])
+@logado
+@exige("faltante")
+def amazon_faltante_anotar():
+    """Grava a observação de UM pedido, sem tirar da lista."""
+    d = request.get_json(silent=True) or {}
+    oc = str(d.get("oc") or "").strip()
+    if not oc:
+        return jsonify({"ok": False, "erro": "pedido vazio"}), 400
+    tab = amz_faltante_ler()
+    reg = dict(tab.get(oc) or {})
+    reg["obs"] = (d.get("obs") or "").strip()
+    reg["quem"] = session["usuario"]
+    reg["quando"] = agora().isoformat()
+    if not reg["obs"] and not reg.get("baixado"):
+        tab.pop(oc, None)
+    else:
+        tab[oc] = reg
+    amz_faltante_gravar(tab)
+    return jsonify({"ok": True, "obs": reg.get("obs", ""), "quem": session["usuario"],
+                    "quando": f_quando(agora().isoformat())})
+
+
+@app.route("/canal/amazon/faltantes/baixar", methods=["POST"])
+@logado
+@exige("faltante")
+def amazon_faltante_baixar():
+    """BAIXA: tira o pedido da lista de procura. Não apaga nada — o pedido
+    continua no ERP e na tela, no filtro 'Baixados', e pode voltar."""
+    d = request.get_json(silent=True) or {}
+    oc = str(d.get("oc") or "").strip()
+    if not oc:
+        return jsonify({"ok": False, "erro": "pedido vazio"}), 400
+    motivo = str(d.get("motivo") or "outro").strip()
+    if motivo not in AMZ_MOTIVOS:
+        motivo = "outro"
+    tab = amz_faltante_ler()
+    reg = dict(tab.get(oc) or {})
+    reg.update({"baixado": True, "motivo": motivo, "motivo_nome": AMZ_MOTIVOS[motivo],
+                "obs": (d.get("obs") or reg.get("obs") or "").strip(),
+                "quem": session["usuario"], "quando": agora().isoformat()})
+    tab[oc] = reg
+    amz_faltante_gravar(tab)
+    return jsonify({"ok": True, "motivo_nome": AMZ_MOTIVOS[motivo], "quem": session["usuario"],
+                    "quando": f_quando(agora().isoformat())})
+
+
+@app.route("/canal/amazon/faltantes/voltar", methods=["POST"])
+@logado
+@exige("faltante")
+def amazon_faltante_voltar():
+    """Desfaz a baixa: o pedido volta para a lista de procura."""
+    d = request.get_json(silent=True) or {}
+    oc = str(d.get("oc") or "").strip()
+    tab = amz_faltante_ler()
+    reg = dict(tab.get(oc) or {})
+    reg.pop("baixado", None); reg.pop("motivo", None); reg.pop("motivo_nome", None)
+    reg["quem"] = session["usuario"]; reg["quando"] = agora().isoformat()
+    if reg.get("obs"):
+        tab[oc] = reg
+    else:
+        tab.pop(oc, None)
+    amz_faltante_gravar(tab)
+    return jsonify({"ok": True})
+
+
 def _amazon_faltantes(comp: str, q: str = "", filtro: str = "dentro") -> dict:
     """Pedidos do ERP (canal Amazon) do mês que NÃO apareceram em NENHUM
     relatório de transações subido — é a lista que a Gabi vai procurar.
@@ -2841,7 +2953,8 @@ def _amazon_faltantes(comp: str, q: str = "", filtro: str = "dentro") -> dict:
         de, ate = str(tx["data"].min()), str(tx["data"].max())
     pct, _taxa = comissao_cadastrada(("AMAZON",), (0.105, 0.0))
 
-    linhas, dentro, aguardando_l, fora, sem_id = [], [], [], [], 0
+    anot = amz_faltante_ler()
+    linhas, dentro, aguardando_l, fora, baixados, sem_id = [], [], [], [], [], 0
     for l in erp_linhas("amazon", comp):
         oc = (l.get("oc") or "").strip()
         if oc in vistos:
@@ -2870,28 +2983,52 @@ def _amazon_faltantes(comp: str, q: str = "", filtro: str = "dentro") -> dict:
             "pct_erp": float(l.get("pct_comissao") or 0.0),
             "comissao_prevista": round(total * pct, 2),
             "tem_id": tem_id, "onde": "", "dias": ((agora().date() - date.fromisoformat(d)).days if d else 0),
+            # colunas do ERP que a conferência pede na mão (da Data para a esquerda)
+            "natureza": l.get("natureza", ""), "hora": l.get("hora", ""),
+            "volumes": l.get("volumes") or 0, "peso": l.get("peso") or 0.0,
+            "representante": l.get("representante", ""), "obs05": l.get("obs05", ""),
         }
+        a = anot.get(oc) or {}
+        m["obs"] = a.get("obs", "")
+        m["baixado"] = bool(a.get("baixado"))
+        m["motivo"] = a.get("motivo", "")
+        m["motivo_nome"] = a.get("motivo_nome", "")
+        m["quem"] = a.get("quem", "")
+        m["quando"] = f_quando(a.get("quando")) if a.get("quando") else ""
+        if m["baixado"]:
+            m["onde"] = "baixado"
+            baixados.append(m)
+            linhas.append(m)
+            continue
         m["onde"] = "dentro" if na_janela else ("aguardando" if aguardando else "fora")
         linhas.append(m)
         (dentro if na_janela else (aguardando_l if aguardando else fora)).append(m)
 
-    sel = {"dentro": dentro, "aguardando": aguardando_l, "fora": fora, "todos": linhas}.get(filtro, dentro)
+    sel = {"dentro": dentro, "aguardando": aguardando_l, "fora": fora,
+           "baixados": baixados, "todos": linhas}.get(filtro, dentro)
     if q:
         qs = [t for t in unidecode_lower(q).split() if t]
         sel = [m for m in sel
-               if all(t in unidecode_lower(f"{m['oc']} {m['pedido_erp']} {m['nf']} {m['cidade']} {m['uf']} {m['cliente']}")
+               if all(t in unidecode_lower(f"{m['oc']} {m['pedido_erp']} {m['nf']} {m['cidade']} "
+                                            f"{m['uf']} {m['cliente']} {m.get('obs', '')}")
                       for t in qs)]
     sel.sort(key=lambda m: -m["total"])
     soma = lambda ls, k: round(sum(x[k] for x in ls), 2)  # noqa: E731
     return {
         "itens": sel, "de": de, "ate": ate, "pct": pct, "sem_id": sem_id,
         "folga": amazon.FOLGA_REPASSE,
-        "contagem": {"dentro": len(dentro), "aguardando": len(aguardando_l), "fora": len(fora), "todos": len(linhas)},
-        "erp_total": len(erp_linhas("amazon", comp)), "conferidos": len(erp_linhas("amazon", comp)) - len(linhas),
+        "contagem": {"dentro": len(dentro), "aguardando": len(aguardando_l), "fora": len(fora),
+                     "baixados": len(baixados), "todos": len(linhas)},
+        "motivos": AMZ_MOTIVOS,
+        "baixados_rs": round(sum(x["total"] for x in baixados), 2),
+        "erp_total": len(erp_linhas("amazon", comp)),
+        "conferidos": len(erp_linhas("amazon", comp)) - len(linhas) + len(baixados),
         "rs": {"dentro": soma(dentro, "total"), "aguardando": soma(aguardando_l, "total"),
-               "fora": soma(fora, "total"), "todos": soma(linhas, "total")},
+               "fora": soma(fora, "total"), "baixados": soma(baixados, "total"),
+               "todos": soma(linhas, "total")},
         "com": {"dentro": soma(dentro, "comissao_prevista"), "aguardando": soma(aguardando_l, "comissao_prevista"),
-                "fora": soma(fora, "comissao_prevista"), "todos": soma(linhas, "comissao_prevista")},
+                "fora": soma(fora, "comissao_prevista"), "baixados": soma(baixados, "comissao_prevista"),
+                "todos": soma(linhas, "comissao_prevista")},
     }
 
 
