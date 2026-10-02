@@ -26,7 +26,7 @@ from werkzeug.utils import secure_filename
 from motor import (meli, erp, magalu, magalu_vendas, magalu_full, magalu_real, magalu_copart,
                    shopee, madeira, webcont, colombo, amazon)
 import planilhas
-VERSAO = "2026-09-30d"
+VERSAO = "2026-10-02a"
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(RAIZ), "dados")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -331,6 +331,9 @@ def _migrar_taxa_magalu(p: dict) -> dict:
         if "magazine luiza" in nome or "magalu" in nome:
             if not str(lin.get("taxa_item", "") or "").strip():
                 lin["taxa_item"] = str(lin.get("taxa_pedido", "") or "5").strip()
+            # a taxa do Magalu é SÓ por produto: deixar as duas preenchidas faz
+            # a tela parecer que o canal cobra duas vezes
+            lin["taxa_pedido"] = ""
     p["correcoes"] = list(p.get("correcoes") or []) + ["magalu_taxa_por_produto"]
     _json_gravar(pasta("parametros.json"), p)
     return p

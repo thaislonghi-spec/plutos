@@ -15,13 +15,13 @@
   <input type="hidden" name="acao" value="comissoes"><input type="hidden" name="n" value="{{ PARAM.comissoes|length }}">
   <div class="cab-acoes"><h2 style="margin:0">Parâmetros por canal <span class="qtd">{{ PARAM.comissoes|length }} canais</span></h2>
     {% if PODE.parametros %}<button class="bt pri" type="submit">Gravar tabela</button>{% endif %}</div>
-  <div class="rol fit"><table class="acesso comis" data-sem-ordenar>
+  <div class="rol fit"><table class="tb-param" data-sem-ordenar>
     <thead><tr><th>Código</th><th>Canal</th><th>Gestor</th>
-      <th class="n" data-tip="O % negociado com o canal">Comissão %</th>
-      <th class="n" data-tip="Taxa financeira (antecipação). NÃO é comissão e fica FORA do rebate — só aparece separada no Linha a linha">Tx financeira %</th>
-      <th class="n" data-tip="Taxa em % que o canal cobra ALÉM da comissão (Amazon 1,5%). Entra na comissão do sistema, porque o canal cobra junto">Taxa % extra</th>
-      <th class="n" data-tip="R$ fixos por PEDIDO (Magalu R$ 5,00)">Taxa R$ / pedido</th>
-      <th class="n" data-tip="R$ fixos por ITEM (Shopee R$ 12,00 — já vem dentro da taxa de serviço do relatório dela, por isso não é somada de novo)">Taxa R$ / item</th>
+      <th class="n" data-tip="O % negociado com o canal">Comissão<i>%</i></th>
+      <th class="n" data-tip="Taxa financeira (antecipação). NÃO é comissão e fica FORA do rebate — só aparece separada no Linha a linha">Tx financeira<i>%</i></th>
+      <th class="n" data-tip="Taxa em % que o canal cobra ALÉM da comissão (Amazon 1,5%). Entra na comissão do sistema, porque o canal cobra junto">Taxa extra<i>%</i></th>
+      <th class="n" data-tip="R$ fixos por PEDIDO">Taxa por pedido<i>R$</i></th>
+      <th class="n" data-tip="R$ fixos por PRODUTO (Magalu R$ 5,00 · Shopee R$ 12,00 — na Shopee já vem dentro da taxa de serviço do relatório, por isso o motor não soma de novo)">Taxa por produto<i>R$</i></th>
       <th data-tip="Base da comissão: Produto = produto + IPI · GMV = total da NF (com frete)">Tipo</th>
       {% if PODE.parametros %}<th>Tirar</th>{% endif %}</tr></thead>
     <tbody>

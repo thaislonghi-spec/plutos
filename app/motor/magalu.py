@@ -215,7 +215,12 @@ def calcular(df: pd.DataFrame, pct: float, taxa: float, erp_por_base: dict | Non
         # Sem a quantidade, usa a taxa por pedido dos Parâmetros (mesma coisa
         # em 97,4% dos pedidos, que têm um item só).
         qtd = (qtd_por_pedido or {}).get(r.pedido)
-        taxa_ped = round(taxa_item * qtd, 2) if (taxa_item and qtd) else taxa
+        if taxa_item:
+            # cadastrou taxa por produto: ela manda. Sem a quantidade (Planilha 2
+            # não subiu), conta 1 produto — certo em 97,4% dos pedidos.
+            taxa_ped = round(taxa_item * (qtd or 1), 2)
+        else:
+            taxa_ped = taxa
         taxa_medida = bool(taxa_item and qtd)
         if e:
             pct_ped = float(e.get("pct_comissao") or 0.0) or pct

@@ -651,3 +651,32 @@ tr.linha-baixada td.forte{color:var(--tinta3)}
   padding:9px 11px;font:500 13.5px Archivo,sans-serif;border-radius:2px;
   background:var(--sup);color:var(--tinta)}
 .caixa .cx-bts{display:flex;gap:8px;justify-content:flex-end;margin-top:18px}
+
+/* ------------------------------------------------------------------
+   PARÂMETROS POR CANAL (02/10/2026) — a tabela usava as larguras da
+   tabela de ACESSO, que tem 4 colunas; com 10, as últimas ficavam
+   espremidas uma em cima da outra. Agora cada coluna tem a sua, em px,
+   e todas cabem na tela sem rolagem lateral.
+   ------------------------------------------------------------------ */
+table.tb-param{table-layout:fixed;min-width:1150px}
+table.tb-param th,table.tb-param td{padding:6px 7px;font-size:12.5px;white-space:nowrap}
+.rol.fit table.tb-param thead th,.rol.fit table.tb-param thead th.n{white-space:normal;
+  line-height:1.15;height:auto;vertical-align:bottom;font-size:8.5px;letter-spacing:.08em;
+  padding:7px 7px 6px;overflow:visible;text-overflow:clip}
+.rol.fit table.tb-param thead th i{display:block;font-style:normal;font-size:7.5px;
+  letter-spacing:.08em;color:var(--tinta3);font-weight:500;margin-top:2px}
+table.tb-param th:nth-child(1),table.tb-param td:nth-child(1){width:68px}
+table.tb-param th:nth-child(2),table.tb-param td:nth-child(2){width:232px}
+table.tb-param th:nth-child(3),table.tb-param td:nth-child(3){width:150px}
+table.tb-param th:nth-child(4),table.tb-param td:nth-child(4){width:108px}
+table.tb-param th:nth-child(5),table.tb-param td:nth-child(5){width:106px}
+table.tb-param th:nth-child(6),table.tb-param td:nth-child(6){width:100px}
+table.tb-param th:nth-child(7),table.tb-param td:nth-child(7){width:112px}
+table.tb-param th:nth-child(8),table.tb-param td:nth-child(8){width:112px}
+table.tb-param th:nth-child(9),table.tb-param td:nth-child(9){width:98px}
+table.tb-param th:nth-child(10),table.tb-param td:nth-child(10){width:62px;text-align:center}
+/* o campo ocupa a coluna inteira — nada de largura fixa estourando a célula */
+table.tb-param td input.cel,table.tb-param td select.cel{width:100%;box-sizing:border-box;
+  min-width:0;font-size:12.5px}
+table.tb-param td:first-child{font-weight:400}
+table.tb-param td:nth-child(2) input.cel{font-weight:600}
