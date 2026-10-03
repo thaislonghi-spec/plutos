@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<div class="kpis tres-com">
+  <div class="kpi {{ 'crit' if itens else 'bom' }}"><span class="l">Pedidos cobrados a maior</span><span class="v">{{ itens|length }}</span><span class="o">comissão acima dos {{ pct_contrato|brl(2) }}% de contrato</span></div>
+  <div class="kpi crit"><span class="l">Cobrado a mais</span><span class="v">R$ {{ total|brl(0) }}</span><span class="o">é isso que o canal tem que ajustar a menos</span></div>
+  <div class="kpi ouro"><span class="l">Rebate de comissão (o outro lado)</span><span class="v">R$ {{ resumo.rebate_comissao|brl(0) }}</span><span class="o">{{ resumo.ped_rebate_comissao or 0 }} pedido(s) cobrados ABAIXO do contrato — já somado no rebate do mês</span></div>
+</div>
+
+<div class="nota" style="margin:0 0 12px"><b>A régua é o contrato da casa: {{ pct_contrato|brl(2) }}%.</b>
+Não é o "Comissão Contratual %" que o relatório imprime — aquele é a tabela da Via <b>por categoria</b> (8% a 19%), não o que foi negociado.
+Dos {{ pct_contrato|brl(2) }}% saem duas listas que <b>nunca se compensam</b>:
+<b>cobrou acima</b> → cobrança indevida, é esta tela, e o canal ajusta a menos;
+<b>cobrou abaixo</b> → <b>rebate de comissão</b>, dinheiro que ficou com a gente e entra no rebate do mês.
+Somar um no outro esconderia as duas coisas.
+O percentual vem dos <a href="{{ url_for('parametros_tela') }}">Parâmetros</a>: mudou o contrato, muda lá e o mês recalcula sem subir arquivo de novo.</div>
+
+<div class="bloco">
+  <form method="get" class="barra-massa" id="ffiltro">
+    <input type="search" name="q" id="fq" value="{{ q }}" placeholder="Buscar pedido, SKU, produto ou categoria…" autocomplete="off">
+    <span class="nota" style="margin:0">{{ itens|length }} pedido(s)</span>
+  </form>
+  <div class="rol" style="max-height:60vh"><table class="tb-cb-com">
+    <thead><tr>
+      <th>Pedido Via</th><th>Liberação</th><th>SKU</th><th>Produto</th><th>Categoria</th>
+      <th class="n">Base<i>R$</i></th><th class="n">Contrato<i>%</i></th><th class="n">Cobrado<i>%</i></th>
+      <th class="n">Diferença<i>p.p.</i></th><th class="n">Comissão de contrato<i>R$</i></th>
+      <th class="n">Comissão cobrada<i>R$</i></th>
+      <th class="n">Cobrado a mais<i>R$</i></th><th>Forma</th>
+    </tr></thead>
+    <tbody>
+    {% for m in itens %}
+    <tr class="linha-alerta">
+      <td class="n sku">{{ m.pedido }}{% if m.cancelado %} <span class="tag pend">cancelado</span>{% endif %}</td>
+      <td data-ord="{{ m.data }}">{{ m.data|dia }}</td>
+      <td class="n sku">{{ m.sku or '—' }}</td><td class="desc">{{ m.produto or '—' }}</td>
+      <td class="desc">{{ m.categoria or '—' }}</td>
+      <td class="n">{{ m.base|brl }}</td>
+      <td class="n">{{ m.pct_contrato|brl(2) }}%</td><td class="n forte">{{ m.pct_cobrado|brl(2) }}%</td>
+      <td class="n">{{ '+' if m.pct_dif > 0 }}{{ m.pct_dif|brl(2) }}</td>
+      <td class="n">{{ m.com_contrato|brl }}</td>
+      <td class="n">{{ m.comissao|brl }}</td><td class="n forte">{{ m.cobrado_a_mais|brl }}</td>
+      <td>{{ 'Boleto' if m.forma == 'boleto' else 'Cartão' }}</td></tr>
+    {% else %}
+    <tr><td colspan="13" class="vazio">Nenhum pedido com comissão acima de {{ pct_contrato|brl(2) }}% em {{ comp|mesano }} — nada a cobrar de volta deste mês.</td></tr>
+    {% endfor %}
+    {% if itens %}
+    <tr class="linha-total"><td><b>Total</b></td><td></td><td></td><td></td><td></td>
+      <td class="n"><b>{{ base|brl }}</b></td><td></td><td></td><td></td><td></td><td></td>
+      <td class="n"><b>{{ total|brl }}</b></td><td></td></tr>
+    {% endif %}
+    </tbody>
+  </table></div>
+  <div class="nota">Leve esta lista para o canal com <b>pedido, base, os {{ pct_contrato|brl(2) }}% de contrato e o % cobrado</b>. A coluna <b>Cobrado a mais</b> é o valor do ajuste a pedir.
+  <a href="{{ url_for('canal', chave='cbahia', mes=comp) }}">Voltar ao box do canal →</a></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function(){var f=document.getElementById('ffiltro'),q=document.getElementById('fq'),t;
+ q.addEventListener('input',function(){clearTimeout(t);t=setTimeout(function(){f.submit();},450);});
+ q.focus(); q.setSelectionRange(q.value.length,q.value.length);})();
+</script>
+{% endblock %}

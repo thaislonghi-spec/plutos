@@ -125,6 +125,7 @@
           <input type="hidden" name="tipo" value="base"><input type="hidden" name="rodar" value="1"><input type="file" name="arquivo" {% if cn.chave != 'madeira' %}accept=".xlsx,.xls,.csv,.zip"{% endif %} required>
           <button class="bt pri" type="submit" style="padding:7px 14px">Subir e rodar</button>
         </form>
+        <span class="arq-n fmt-ok">aceita <b>.zip</b> (o portal quebra em partes quando o período é grande) ou a planilha <b>solta</b> — o PLUTOS abre os dois e junta sozinho</span>
         {% for x in pend_por.get(cn.chave, []) if x.tipo not in ('vendas', 'full', 'coleta') %}<span class="arq-n espera-n">⏳ {{ x.nome }} · aguardando ▶ rodar</span>{% endfor %}
         <div class="ok-canto">{% if rc %}<span class="pill-ok">ok · {{ rc.quando|quando }}</span>{% else %}<span class="pill-nao">sem arquivo · {{ comp|mesano }}</span>{% endif %}</div>
         {% endif %}

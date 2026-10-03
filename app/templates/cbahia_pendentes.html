@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<div class="kpis cinco">
+  <div class="kpi {{ 'crit' if cont['todos'] else 'bom' }}"><span class="l">Pendentes de baixa</span><span class="v">{{ cont['todos'] }}</span><span class="o">de {{ erp_mes }} pedidos do ERP em {{ comp|mesano }} · o canal ainda não repassou</span></div>
+  <div class="kpi crit"><span class="l">Saldo a receber</span><span class="v">R$ {{ rs['todos']|brl(0) }}</span><span class="o">o que entra na conta quando esses pedidos forem liberados</span></div>
+  <div class="kpi bom"><span class="l">No prazo</span><span class="v">{{ cont['no prazo'] }}</span><span class="o">até 30 dias do pedido · R$ {{ rs['no prazo']|brl(0) }} — ainda é ciclo normal</span></div>
+  <div class="kpi aten"><span class="l">Cobrar</span><span class="v">{{ cont['cobrar'] }}</span><span class="o">de 30 a 60 dias · R$ {{ rs['cobrar']|brl(0) }} — entra na próxima conversa com o canal</span></div>
+  <div class="kpi {{ 'crit' if cont['escalar'] else 'bom' }}"><span class="l">Escalar</span><span class="v">{{ cont['escalar'] }}</span><span class="o">mais de 60 dias · R$ {{ rs['escalar']|brl(0) }} — passou do aceitável, subir o tom</span></div>
+</div>
+
+<div class="nota" style="margin:0 0 12px"><b>A Via só libera o repasse quando o pedido está ENTREGUE.</b>
+Então esta lista não é erro: é o dinheiro que ainda vai cair, e a idade de cada pedido é o argumento para cobrar.
+Quando o pedido aparecer num relatório de repasse, ele <b>sai daqui sozinho</b> e o rebate entra no mês em que o dinheiro caiu.
+O <b>saldo a receber</b> é o valor do pedido menos a comissão do canal — é a estimativa do que entra, não um valor fechado.</div>
+
+<div class="bloco">
+  <form method="get" class="barra-massa filtro-mlb" id="ffiltro">
+    <input type="hidden" name="sla" id="fsla" value="{{ sla }}">
+    <input type="search" name="q" id="fq" value="{{ q }}" placeholder="Buscar: pedido, OC, NF, cidade…" autocomplete="off">
+    <div class="chips">
+      <button type="button" class="chip {{ 'on' if sla == 'todos' }}" data-tipo="todos">Todos · {{ cont['todos'] }}</button>
+      <button type="button" class="chip {{ 'on' if sla == 'no prazo' }}" data-tipo="no prazo">No prazo · {{ cont['no prazo'] }}</button>
+      <button type="button" class="chip {{ 'on' if sla == 'cobrar' }}" data-tipo="cobrar">Cobrar · {{ cont['cobrar'] }}</button>
+      <button type="button" class="chip {{ 'on' if sla == 'escalar' }}" data-tipo="escalar">Escalar · {{ cont['escalar'] }}</button>
+    </div>
+    <span class="nota" style="margin:0">{{ pend|length }} na tela</span>
+  </form>
+  <div class="rol" style="max-height:60vh"><table class="tb-cb-pend">
+    <thead><tr>
+      <th>Pedido Via</th><th>Pedido ERP</th><th>Data<i>do pedido</i></th><th class="n">Dias<i>esperando</i></th>
+      <th>NF</th><th>Situação</th><th>Cidade</th><th>UF</th>
+      <th class="n">Produtos<i>R$</i></th><th class="n">Frete<i>R$</i></th><th class="n">Total NF<i>R$</i></th>
+      <th class="n">A receber<i>R$</i></th><th>SLA</th>
+    </tr></thead>
+    <tbody>
+    {% for p in pend %}
+    <tr class="{{ 'linha-alerta' if p.sla == 'escalar' }}">
+      <td class="n sku">{{ p.oc }}</td><td class="n sku">{{ p.pedido_erp }}</td>
+      <td data-ord="{{ p.data }}">{{ p.data|dia }}</td>
+      <td class="n forte">{{ p.dias }}</td>
+      <td class="n sku">{{ p.nf or '—' }}</td><td>{{ p.status }}</td>
+      <td class="desc">{{ p.cidade }}</td><td>{{ p.uf }}</td>
+      <td class="n">{{ p.valor_prod|brl }}</td><td class="n">{{ p.frete|brl }}</td>
+      <td class="n">{{ p.total|brl }}</td><td class="n forte">{{ p.a_receber|brl }}</td>
+      <td>{% if p.sla == 'escalar' %}<span class="tag pend">escalar</span>{% elif p.sla == 'cobrar' %}<span class="tag ouro">cobrar</span>{% else %}<span class="tag ok2">no prazo</span>{% endif %}</td></tr>
+    {% else %}
+    <tr><td colspan="13" class="vazio">{% if cont['todos'] %}Nada com esse filtro.{% else %}Nenhum pendente — todos os pedidos da Casas Bahia em {{ comp|mesano }} já apareceram num relatório de repasse.{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  <div class="nota"><b>Como usar na cobrança:</b> leve a aba <b>Cobrar</b> e a <b>Escalar</b> para o canal, com pedido, data e o valor parado. A coluna <b>Dias esperando</b> conta da data do pedido até hoje — é o que transforma a conversa em número. Linha destacada passou de 60 dias.</div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function(){
+  var f=document.getElementById('ffiltro'),q=document.getElementById('fq'),ft=document.getElementById('fsla'),t;
+  document.querySelectorAll('.chip').forEach(function(b){b.addEventListener('click',function(){ft.value=b.getAttribute('data-tipo');f.submit();});});
+  q.addEventListener('input',function(){clearTimeout(t);t=setTimeout(function(){f.submit();},450);});
+  q.focus(); q.setSelectionRange(q.value.length,q.value.length);
+})();
+</script>
+{% endblock %}

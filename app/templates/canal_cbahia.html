@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block conteudo %}
+{% if not r %}
+<div class="aviso"><b>Sem repasse da {{ c.nome }} em {{ comp|mesano }}.</b> Suba os relatórios de <b>REPASSE FINANCEIRO</b> em <a href="{{ url_for('arquivos', mes=comp) }}">Arquivos</a> — são três por mês: o boleto do ciclo 06→05 (dois arquivos, repasse no dia 20) e o cartão (repasse semanal).</div>
+{% else %}
+{% set s = r.resumo %}
+<div class="kpis cinco">
+  <div class="kpi bom"><span class="l">Rebate do mês</span><span class="v">R$ {{ s.rebate_mes|brl(0) }}</span><span class="o">{{ s.ped_mes }} pedido(s) vendidos em {{ comp|mesano }} e já repassados</span></div>
+  <div class="kpi ouro"><span class="l">Saldo de meses anteriores</span><span class="v">R$ {{ s.rebate_saldo|brl(0) }}</span><span class="o">{{ s.ped_saldo }} pedido(s) de meses passados, pagos agora — <b>dinheiro deste mês</b></span></div>
+  <div class="kpi ouro"><span class="l">Rebate total recebido</span><span class="v">R$ {{ s.rebate_total|brl(0) }}</span><span class="o">ônus Via R$ {{ s.reb_onus|brl(0) }} + campanha R$ {{ s.reb_campanha|brl(0) }} + comissão R$ {{ s.rebate_comissao|brl(0) }}</span></div>
+  <div class="kpi {{ 'crit' if s.pendentes_rs else 'bom' }}"><span class="l">Saldo pendente</span><span class="v">R$ {{ s.pendentes_rs|brl(0) }}</span><span class="o">a receber de pedidos que o canal ainda não repassou</span></div>
+  <div class="kpi {{ 'crit' if s.pendentes else 'bom' }}"><span class="l">Pendentes de baixa</span><span class="v">{{ s.pendentes }}</span><span class="o">de {{ s.erp_mes }} pedidos do ERP no mês — <a href="{{ url_for('cbahia_pendentes', mes=comp) }}">abrir a lista</a></span></div>
+</div>
+
+<div class="nota" style="margin:0 0 12px"><b>Este canal é REGIME DE CAIXA, não apuração.</b>
+O relatório da Via é um <b>extrato de repasse</b>: cada linha é dinheiro entrando na conta numa data.
+O canal só libera o pagamento quando o pedido está <b>entregue</b>, então um arquivo de {{ comp|mesano }} traz venda de meses atrás.
+Esse dinheiro conta <b>neste</b> mês, separado como <b>saldo de meses anteriores</b> — mês fechado não é mexido.</div>
+
+{% if s.cancelados %}
+<div class="nota" style="margin:0 0 12px"><b>{{ s.cancelados }} pedido(s) cancelados</b> no repasse (R$ {{ s.cancelados_rs|brl }} de rebate que seria gerado): pedido cancelado <b>não gera rebate</b>, então o valor sai da conta e o pedido fica marcado no linha a linha.</div>
+{% endif %}
+
+{% if s.motivos_novos %}
+<div class="aviso" style="margin:0 0 12px;border-left-color:var(--crit)"><b>MOTIVO DE AJUSTE NOVO: {{ s.motivos_novos_nomes|join(', ') }}</b> — {{ s.motivos_novos }} linha(s), R$ {{ s.motivos_novos_rs|brl }}.
+O canal usou uma nomenclatura que o PLUTOS ainda não conhece. <b>Quando a Via percebe que cobrou comissão errada, ela devolve como ajuste</b> — e pode dar outro nome para isso.
+Se este motivo for devolução de comissão, ele é <b>rebate</b> e tem que entrar na conta. Confira antes de fechar o mês e me avise para eu incluir na regra.</div>
+{% endif %}
+{% if s.cobrou_mais %}
+<div class="aviso" style="margin:0 0 12px"><b>COBRANÇA INDEVIDA: {{ s.cobrou_mais }} pedido(s) com comissão acima dos {{ r.sistema_diag.cadastro_pct|brl(2) }}% de contrato</b> — R$ {{ s.cobrou_mais_rs|brl }} a cobrar de volta.
+Isto <b>não abate</b> do rebate: é ajuste a pedir para o canal corrigir a menos. <a href="{{ url_for('cbahia_comissoes', mes=comp) }}">Abrir a subaba Comissões a maior →</a></div>
+{% endif %}
+
+<div class="dois-blocos">
+<div class="bloco">
+  <h2>Como o rebate nasce na {{ c.nome }}</h2>
+  <div class="rol fit"><table data-sem-ordenar>
+    <thead><tr><th>Rebate</th><th>Onde está no relatório</th><th class="n">{{ comp|mesano }}</th></tr></thead>
+    <tbody>
+      <tr><td><b>Desconto Ônus Via</b></td><td>linha de <b>VENDA</b> · coluna "Desconto Ônus Via" — o desconto que o CANAL bancou</td><td class="n"><b>{{ s.reb_onus|brl }}</b></td></tr>
+      <tr><td><b>Crédito de Campanha</b></td><td>linha de <b>AJUSTE</b> com motivo "Credito de Campanha" · coluna "Valor Líquido de Repasse"</td><td class="n"><b>{{ s.reb_campanha|brl }}</b></td></tr>
+      <tr><td><b>Rebate de comissão</b></td><td>comissão cobrada <b>abaixo</b> dos {{ r.sistema_diag.cadastro_pct|brl(2) }}% de contrato · {{ s.ped_rebate_comissao or 0 }} pedido(s)</td><td class="n"><b>{{ s.rebate_comissao|brl }}</b></td></tr>
+      <tr><td>Cancelamento</td><td>zera o rebate do pedido e fica sinalizado</td><td class="n">− {{ s.cancelados_rs|brl }}</td></tr>
+      <tr class="linha-total"><td><b>Total recebido</b></td><td></td><td class="n"><b>{{ s.rebate_total|brl }}</b></td></tr>
+    </tbody></table></div>
+  <div class="nota">O mesmo pedido pode ter <b>ônus Via e crédito de campanha</b> — os dois somam. O crédito de campanha é a campanha que não foi descontada da comissão na hora e o canal paga depois, por isso chega meses após a venda.</div>
+</div>
+<div class="bloco">
+  <h2>Por forma de recebimento</h2>
+  <div class="rol fit"><table data-sem-ordenar>
+    <thead><tr><th>Forma</th><th class="n">Pedidos</th><th class="n">Rebate</th><th>Ciclo do repasse</th></tr></thead>
+    <tbody>
+    {% for k, v in s.por_forma.items() %}
+    <tr><td><b>{{ 'Boleto' if k == 'boleto' else 'Cartão' }}</b></td><td class="n">{{ v.pedidos }}</td><td class="n"><b>{{ v.rebate|brl }}</b></td>
+      <td>{{ 'ciclo 06 → 05, repasse no dia 20' if k == 'boleto' else 'semanal, datas soltas no mês' }}</td></tr>
+    {% endfor %}
+    <tr class="linha-total"><td><b>Total</b></td><td class="n"><b>{{ s.pedidos }}</b></td><td class="n"><b>{{ s.rebate_total|brl }}</b></td><td></td></tr>
+    </tbody></table></div>
+  <div class="nota">O PLUTOS separa sozinho pela coluna <b>Origem Repasse</b> do arquivo: INTERNO é boleto, adquirente (GETNET) é cartão. Pode subir os três relatórios no mesmo cartão — cada linha entra uma vez só, mesmo que os períodos se sobreponham.</div>
+</div>
+</div>
+
+{% if s.cadastro_difere %}
+<div class="bloco">
+  <h2>Comissão contra o contrato de {{ r.sistema_diag.cadastro_pct|brl(2) }}% <span class="qtd">{{ s.cadastro_difere }} de {{ s.pedidos }} pedidos fora da régua</span></h2>
+  <div class="rol fit"><table data-sem-ordenar>
+    <tbody>
+      <tr><td>Comissão que o <b>contrato</b> manda cobrar ({{ r.sistema_diag.cadastro_pct|brl(2) }}% sobre R$ {{ s.com_base|brl }} de base)</td><td class="n">R$ {{ s.com_contrato|brl }}</td></tr>
+      <tr><td>Comissão que o <b>canal cobrou</b> de fato</td><td class="n">R$ {{ s.com_cobrada|brl }}</td></tr>
+      <tr class="linha-total"><td><b>Diferença</b> — e ela se abre exatamente nas duas linhas abaixo</td><td class="n"><b>R$ {{ (s.com_contrato - s.com_cobrada)|brl }}</b></td></tr>
+      <tr><td><b>Cobrou abaixo</b> do contrato → <b>rebate de comissão</b> ({{ s.ped_rebate_comissao or 0 }} pedidos)</td><td class="n bom"><b>+ R$ {{ s.rebate_comissao|brl }}</b></td></tr>
+      <tr><td><b>Cobrou acima</b> do contrato → <b>cobrança indevida</b> ({{ s.cobrou_mais }} pedidos) — <a href="{{ url_for('cbahia_comissoes', mes=comp) }}">Comissões a maior</a></td><td class="n neg"><b>− R$ {{ s.cobrou_mais_rs|brl }}</b></td></tr>
+      {% if s.cancelados %}
+      <tr><td>Fora da régua: <b>{{ s.cancelados }} pedido(s) cancelados</b> (comissão de contrato R$ {{ s.canc_com_contrato|brl }} × cobrada R$ {{ s.canc_com_cobrada|brl }})</td><td class="n">não entra</td></tr>
+      {% endif %}
+    </tbody></table></div>
+  {% if s.venda_linhas and not s.tabela_fora %}
+  <div class="aviso" style="margin:10px 0;border-left-color:var(--ouro)"><b>O QUE SUSTENTA A COBRANÇA: o percentual não segue regra nenhuma.</b>
+  O canal aplicou <b>{{ s.pcts_distintos }} percentuais diferentes</b> neste mês ({% for p, n in s.tabela_pcts.items() %}{{ p }}% ({{ n }}){% if not loop.last %} · {% endif %}{% endfor %}) contra um contrato de {{ r.sistema_diag.cadastro_pct|brl(2) }}%.
+  E não é tabela por categoria nem por produto: <b>{{ s.skus_multi_pct }} dos {{ s.skus }} SKUs vendidos</b> receberam mais de um percentual — o mesmo item, comissão diferente conforme a data do pedido.
+  Esse é o argumento: não existe regra publicada que explique o percentual, então a régua que vale é a contratada.
+  <b>O que NÃO adianta alegar:</b> a <b>Comissão Aplicada %</b> bate com a <b>Comissão Contratual %</b> do relatório em <b>100%</b> das {{ s.venda_linhas }} linhas — o canal cumpriu a tabela interna dele.
+  A discussão é a tabela contra o contrato, não erro de sistema.
+  Se num mês esta linha mudar (<b>aplicada ≠ contratual</b>), aí vira erro do canal e cobrança direta com chamado.</div>
+  {% elif s.tabela_fora %}
+  <div class="aviso" style="margin:10px 0;border-left-color:var(--crit)"><b>ERRO DE COBRANÇA DE VERDADE: {{ s.tabela_fora }} linha(s) com Comissão Aplicada ≠ Contratual</b> — R$ {{ s.tabela_fora_rs|brl }} de comissão.
+  Aqui o canal cobrou fora da <b>tabela dele próprio</b>: é indiscutível, abra chamado no portal com estas linhas.</div>
+  {% endif %}
+  <div class="nota"><b>As duas pontas não se compensam — e é de propósito.</b>
+  O que o canal cobrou <b>abaixo</b> de {{ r.sistema_diag.cadastro_pct|brl(2) }}% é dinheiro que já ficou com a gente: é <b>rebate de comissão</b> e soma no rebate do mês.
+  O que ele cobrou <b>acima</b> é dinheiro que saiu indevidamente: tem que ser <b>cobrado de volta</b> para o canal ajustar a menos.
+  Se um abatesse o outro, R$ {{ s.rebate_comissao|brl }} de rebate e R$ {{ s.cobrou_mais_rs|brl }} de cobrança indevida virariam um número só e ninguém cobraria nada.
+  A régua é o <b>contrato</b> ({{ r.sistema_diag.cadastro_pct|brl(2) }}%, dos <a href="{{ url_for('parametros_tela') }}">Parâmetros</a>), não o "Contratual %" do relatório — esse é a tabela interna da Via.
+  <b>Pedido cancelado fica fora das duas pontas:</b> não gera rebate e também não gera cobrança, porque no cancelamento o canal já devolveu a comissão inteira.
+  Veja pedido a pedido no <a href="{{ url_for('linha', chave='cbahia', mes=comp) }}">linha a linha</a>.</div>
+</div>
+{% endif %}
+
+{% if r.ajustes_fora %}
+<div class="bloco">
+  <h2>Ajustes que não entram no rebate <span class="qtd">{{ r.ajustes_fora|length }} · R$ {{ s.ajustes_fora_rs|brl }}</span></h2>
+  <div class="rol fit"><table class="cols-6">
+    <thead><tr><th>Pedido</th><th>Liberação</th><th>Motivo</th><th>Forma</th><th class="n">Valor</th><th>O que é</th></tr></thead>
+    <tbody>
+    {% for a in r.ajustes_fora %}
+    <tr><td class="n" style="text-align:left">{{ a.pedido }}</td><td>{{ a.data_caixa|dia }}</td><td><b>{{ a.motivo }}</b></td>
+      <td>{{ 'Boleto' if a.forma == 'boleto' else 'Cartão' }}</td>
+      <td class="n {{ 'neg' if a.repasse_liquido < 0 }}"><b>{{ a.repasse_liquido|brl }}</b></td>
+      <td>{% if a.motivo_novo %}<span class="tag pend">motivo novo — conferir</span>
+        {% elif a.estorno_com_cancel %}devolução do rebate de um pedido <b>cancelado</b> — já coberto
+        {% else %}não é rebate{% endif %}</td></tr>
+    {% endfor %}
+    </tbody></table></div>
+  <div class="nota"><b>ADS, Outros e Imposto de Renda</b> não são rebate e ficam de fora — decidido com a Gabi.
+  <b>Estorno de Campanha</b> é a devolução do rebate quando o pedido é cancelado: conferido nos três casos de set/26, o estorno bate exatamente com o Desconto Ônus Via do pedido e sempre vem junto de um CANCELAMENTO.
+  Como a regra da casa já <b>zera o rebate do pedido cancelado</b>, somar o estorno tiraria o mesmo dinheiro duas vezes — por isso ele aparece aqui, ligado ao cancelamento que o explica, mas não entra na conta.
+  <b>Motivo novo</b> é o que precisa de atenção: pode ser devolução de comissão cobrada a maior com outro nome, e aí é rebate.</div>
+</div>
+{% endif %}
+
+<div class="bloco">
+  <h2>Sinais desta rodada</h2>
+  <div class="rol fit"><table data-sem-ordenar>
+    <tbody>
+      <tr><td>Arquivo</td><td class="n">{{ r.arquivo.nome }}</td></tr>
+      <tr><td>Janela do repasse (o dinheiro)</td><td class="n">{{ r.arquivo.diag.de|dia }} a {{ r.arquivo.diag.ate|dia }}</td></tr>
+      <tr><td>Janela dos pedidos (a venda)</td><td class="n">{{ r.arquivo.diag.pedido_de|dia }} a {{ r.arquivo.diag.pedido_ate|dia }}</td></tr>
+      <tr><td>Linhas por tipo</td><td class="n">{% for k, v in r.arquivo.diag.tipos.items() %}{{ k }} {{ v }}{% if not loop.last %} · {% endif %}{% endfor %}</td></tr>
+      <tr><td>Repasse líquido no mês</td><td class="n">R$ {{ s.repasse|brl }}</td></tr>
+      <tr><td>Pedidos do ERP na competência</td><td class="n">{{ s.erp_mes }}</td></tr>
+      <tr><td>Contrato da casa (Parâmetros)</td><td class="n">{{ r.sistema_diag.cadastro_pct|brl(2) }}%</td></tr>
+      <tr><td>Comissão cobrada ACIMA do contrato</td><td class="n">{{ s.cobrou_mais }} pedido(s) · R$ {{ s.cobrou_mais_rs|brl }}</td></tr>
+      <tr><td>Comissão cobrada ABAIXO do contrato (rebate)</td><td class="n">{{ s.ped_rebate_comissao or 0 }} pedido(s) · R$ {{ s.rebate_comissao|brl }}</td></tr>
+    </tbody></table></div>
+  <div class="acoes" style="margin-top:10px">
+    <a class="bt sec" href="{{ url_for('pedidos', mes=comp, canal=c.chave) }}">Ver por pedido →</a>
+    <a class="bt sec" href="{{ url_for('cbahia_pendentes', mes=comp) }}">Pendentes de baixa ({{ s.pendentes }}) →</a>
+    <a class="bt sec" href="{{ url_for('cbahia_comissoes', mes=comp) }}">Comissões a maior ({{ s.cobrou_mais }}) →</a>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

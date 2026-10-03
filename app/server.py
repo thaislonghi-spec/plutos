@@ -24,9 +24,9 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
 from motor import (meli, erp, magalu, magalu_vendas, magalu_full, magalu_real, magalu_copart,
-                   shopee, madeira, webcont, colombo, amazon)
+                   shopee, madeira, webcont, colombo, amazon, cbahia)
 import planilhas
-VERSAO = "2026-10-02a"
+VERSAO = "2026-10-02f"
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(RAIZ), "dados")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -54,7 +54,9 @@ CANAIS = [
     {"chave": "colombo",  "nome": "Colombo",         "ativo": True,
      "arquivo": "RELATÓRIO DE PEDIDOS (portal Colombo)", "arquivo_sub": "Colombo_Pedidos_DDMMateDDMMAA.csv · csv ; · 1 linha por item · dia 01 a 31",
      "extra": None},
-    {"chave": "cbahia",   "nome": "Casas Bahia",     "ativo": False},
+    {"chave": "cbahia",   "nome": "Casas Bahia",     "ativo": True,
+     "arquivo": "REPASSE FINANCEIRO (boleto e cartão)", "arquivo_sub": "portal Via · 3 relatórios por mês: boleto do ciclo 06→05 (repasse dia 20, dois arquivos) e cartão (repasse semanal)",
+     "extra": None},
     {"chave": "amazon",   "nome": "Amazon",          "ativo": True,
      "arquivo": "TRANSAÇÕES (Seller Central → Pagamentos)", "arquivo_sub": "Amazon_Transações referentes ao período de DD_MM_AAAA a DD_MM_AAAA.csv · 1 linha por transação · acumula por ID do pedido",
      "extra": None},
@@ -1544,6 +1546,234 @@ def processar_amazon(destino: str, nome: str, quem: str) -> str:
             f"{_txt_upsert(res)}. {txt}.{dsv}{dev}{pub}{alerta}")
 
 
+# =====================================================================
+# CASAS BAHIA (Via) — REPASSE FINANCEIRO, regime de CAIXA
+# =====================================================================
+def processar_cbahia(destino: str, nome: str, quem: str) -> str:
+    """Lê um dos três relatórios de repasse (boleto × 2, cartão) e acumula.
+    O mês é o do DINHEIRO (data do repasse), não o da venda — regra da Gabi:
+    o que vem aqui é dinheiro na conta, não apuração."""
+    df, diag = cbahia.ler(destino)
+    res = base_upsert("cbahia", df, "chave", nome, destino, quem)
+    feitos, resumos = [], []
+    for comp in sorted(res):
+        r = dict(rodada_cab("cbahia", comp) or {"canal": "cbahia", "competencia": comp}); r.pop("linhas_n", None)
+        r.update({"quando": agora().isoformat(), "quem": quem,
+                  "arquivo": {"nome": nome, "caminho": destino,
+                              "diag": {k: v for k, v in diag.items() if k != "competencias"}},
+                  "linhas": [], "resumo": {}})
+        rodada_gravar("cbahia", comp, r)
+        r = recalcular_cbahia(comp)
+        if not _resumo_pronto(r):
+            continue
+        s = r["resumo"]
+        resumos.append(s)
+        feitos.append(f"{f_mesano(comp)}: R$ {f_brl(s['rebate_total'])} "
+                      f"(do mês R$ {f_brl(s['rebate_mes'])} + saldo anterior R$ {f_brl(s['rebate_saldo'])})")
+    forma = " · ".join(f"{k}: {v}" for k, v in diag["forma"].items())
+    alerta = ""
+    n_mais = sum(int(s.get("cobrou_mais") or 0) for s in resumos)
+    rs_mais = round(sum(float(s.get("cobrou_mais_rs") or 0.0) for s in resumos), 2)
+    rs_reb = round(sum(float(s.get("rebate_comissao") or 0.0) for s in resumos), 2)
+    pct_ct, _t = comissao_cadastrada(("CASAS BAHIA",), (0.13, 0.0))
+    if rs_reb:
+        alerta += (f" REBATE DE COMISSÃO: R$ {f_brl(rs_reb)} de comissão cobrada ABAIXO do contrato "
+                   f"({round(pct_ct * 100, 2)}%) — já somado no rebate do mês.")
+    if n_mais:
+        alerta += (f" ATENÇÃO: {n_mais} pedido(s) com comissão ACIMA do contrato "
+                   f"({round(pct_ct * 100, 2)}%), R$ {f_brl(rs_mais)} — cobrança indevida, peça o ajuste a menos "
+                   f"no canal. Não abate do rebate; está na subaba Comissões a maior.")
+    if diag.get("motivos_novos"):
+        nn = " · ".join(f"{k} ({v})" for k, v in diag["motivos_novos"].items())
+        alerta += (f" MOTIVO DE AJUSTE NOVO: {nn} "
+                   f"(R$ {f_brl(diag['motivos_novos_rs'])}) — o canal usou uma nomenclatura que o PLUTOS "
+                   f"ainda não conhece. Pode ser devolução de comissão cobrada a maior com outro nome. "
+                   f"CONFIRA antes de fechar o mês: se for rebate, me avise que eu incluo na regra.")
+    if diag["ajustes_fora"]:
+        alerta += (f" {diag['ajustes_fora']} ajuste(s) fora da regra de rebate "
+                   f"(R$ {f_brl(diag['ajustes_fora_rs'])}): "
+                   f"{' · '.join(f'{k} ({v})' for k, v in diag['ajustes_fora_motivos'].items())} — "
+                   f"ficam listados na tela para decidir se entram.")
+    return (f"Casas Bahia lida — {diag['linhas']} linhas ({forma}) de {diag['pedidos']} pedidos, "
+            f"repasse de {f_dia(diag['de'])} a {f_dia(diag['ate'])}; os pedidos são de "
+            f"{f_dia(diag['pedido_de'])} a {f_dia(diag['pedido_ate'])}. {_txt_upsert(res)}. "
+            f"{' · '.join(feitos)}.{alerta}")
+
+
+def _cbahia_pendentes(comp: str) -> list[dict]:
+    """PENDENTES DE BAIXA: pedido do ERP que ainda não apareceu em NENHUM
+    relatório de repasse. O canal só libera quando o pedido está ENTREGUE, por
+    isso a lista envelhece — é com ela que se cobra o canal no próximo ciclo."""
+    vistos = set()
+    for c in competencias():
+        d = base_df("cbahia", c)
+        if d is not None and len(d):
+            vistos |= {str(p).strip() for p in d["pedido"]}
+    pct, _t = comissao_cadastrada(("CASAS BAHIA",), (0.13, 0.0))
+    hoje = agora().date()
+    out = []
+    for l in erp_linhas("cbahia", comp):
+        oc = (l.get("oc") or "").strip()
+        if not oc or oc in vistos:
+            continue
+        d = str(l.get("data") or "")
+        dias = ((hoje - date.fromisoformat(d)).days if d else 0)
+        total = float(l.get("valor_total") or 0.0)
+        out.append({
+            "oc": oc, "pedido_erp": l.get("pedido_erp", ""), "data": d, "dias": dias,
+            "nf": l.get("nf", ""), "status": l.get("status", ""),
+            "cidade": l.get("cidade", ""), "uf": l.get("uf", ""),
+            "valor_prod": float(l.get("valor_prod") or 0.0),
+            "frete": float(l.get("valor_frete") or 0.0), "total": total,
+            "a_receber": round(total * (1 - pct), 2),
+            "sla": ("no prazo" if dias <= 30 else ("cobrar" if dias <= 60 else "escalar")),
+        })
+    out.sort(key=lambda x: -x["dias"])
+    return out
+
+
+def recalcular_cbahia(comp: str):
+    r = rodada_cab("cbahia", comp)
+    if not r:
+        return None
+    r = dict(r); r.pop("linhas_n", None)
+    df = base_df("cbahia", comp)
+    if df is None or not len(df):
+        return None
+    pct, _t = comissao_cadastrada(("CASAS BAHIA",), (0.13, 0.0))
+    linhas = cbahia.por_pedido(df, comp, erp_por_base("cbahia"), pct)
+    if not linhas:
+        return None
+    pend = _cbahia_pendentes(comp)
+    # A base acumulada pode ter linha gravada por uma VERSÃO ANTERIOR do leitor,
+    # sem estas colunas (vira NaN). NaN não serve de máscara booleana e derruba
+    # o recálculo — por isso o fillna(False) antes de filtrar.
+    def _mask(col):
+        if col not in df:
+            return df.iloc[0:0]
+        return df[df[col].fillna(False).astype(bool)]
+    fora, novos = _mask("ajuste_fora"), _mask("motivo_novo")
+    extra = {"ajustes_fora": int(len(fora)),
+             "ajustes_fora_rs": round(float(fora["repasse_liquido"].sum()), 2) if len(fora) else 0.0,
+             "motivos_novos": int(len(novos)),
+             "motivos_novos_rs": round(float(novos["repasse_liquido"].sum()), 2) if len(novos) else 0.0,
+             "motivos_novos_nomes": (sorted({str(x) for x in novos["motivo"]}) if len(novos) else []),
+             "erp_mes": len(erp_linhas("cbahia", comp))}
+    # SENTINELA DA TABELA: o canal respeitou a tabela DELE? Se aplicada ==
+    # contratual em tudo, a diferença contra os 13% é a TABELA POR CATEGORIA do
+    # canal, não erro de cobrança. É isso que a tela precisa dizer.
+    vnd = df[df["tipo"].fillna("").astype(str) == "VENDA"]
+    tfora = _mask("tabela_fora")
+    extra.update({
+        "venda_linhas": len(vnd),
+        "tabela_fora": len(tfora), "tabela_fora_rs": round(float(tfora["comissao_rs"].sum()), 2) if len(tfora) else 0.0,
+        "tabela_pcts": ({f"{k:.2f}".replace(".", ","): int(v) for k, v in
+                         vnd["pct_contratual"].fillna(0).round(2).value_counts().sort_index().items()}
+                        if len(vnd) else {}),
+    })
+    # O MESMO SKU COM MAIS DE UM PERCENTUAL. Esta é a prova de que o percentual
+    # não é tabela por categoria nem por produto: ele muda por janela de data.
+    # É o número que sustenta a cobrança junto ao canal, então fica medido todo
+    # mês, sozinho, em vez de depender de alguém refazer a análise na mão.
+    if len(vnd):
+        pv = vnd.assign(p=vnd["pct_aplicada"].fillna(0).round(2)).groupby("sku")["p"].nunique()
+        extra.update({"skus": int(len(pv)), "skus_multi_pct": int((pv > 1).sum()),
+                      "pcts_distintos": int(vnd["pct_aplicada"].fillna(0).round(2).nunique())})
+    else:
+        extra.update({"skus": 0, "skus_multi_pct": 0, "pcts_distintos": 0})
+    r["linhas"] = linhas
+    r["resumo"] = cbahia.resumo(linhas, pend, extra)
+    r["pendentes"] = pend
+    r["ajustes_fora"] = ([{k: (v if not isinstance(v, float) else round(v, 2))
+                           for k, v in x.items() if k in ("pedido", "data_caixa", "motivo", "obs",
+                                                          "repasse_liquido", "forma", "motivo_novo",
+                                                          "estorno_com_cancel")}
+                          for x in fora.to_dict("records")] if len(fora) else [])
+    r["sistema"] = {"nome": (f"Repasse financeiro (regime de CAIXA) · rebate = Desconto Ônus Via + "
+                             f"Crédito de Campanha + comissão cobrada abaixo do contrato "
+                             f"({round(pct * 100, 2)}%)"),
+                    "quando": agora().isoformat(),
+                    "diag": {"linhas": len(linhas), "modo": "caixa · mês do repasse",
+                             "cadastro_pct": round(pct * 100, 2)}}
+    r["sistema_diag"] = r["sistema"]["diag"]
+    r["recalculado"] = agora().isoformat()
+    rodada_gravar("cbahia", comp, r)
+    return r
+
+
+@app.route("/canal/cbahia/comissoes-a-maior")
+@logado
+def cbahia_comissoes():
+    """COMISSÕES A MAIOR — pedido em que o canal cobrou acima do CONTRATO.
+
+    A régua é o contrato da casa: 13% (Parâmetros, canal CASAS BAHIA). Não é o
+    "Comissão Contratual %" que o relatório imprime — esse é a tabela da Via
+    por categoria (8% a 19%), não o que foi negociado.
+
+      · cobrou ACIMA de 13% ... cobrança indevida, está nesta lista: o canal
+        tem que ajustar a menos;
+      · cobrou ABAIXO de 13% .. é REBATE DE COMISSÃO e já entra no rebate do
+        mês (box do canal) — não aparece aqui, e os dois nunca se compensam."""
+    comp = comp_atual()
+    q = (request.args.get("q") or "").strip()
+    pct, _t = comissao_cadastrada(("CASAS BAHIA",), (0.13, 0.0))
+    r = rodada("cbahia", comp) or {}
+    itens = []
+    for l in (r.get("linhas") or []):
+        if not l.get("cobrou_mais"):
+            continue
+        itens.append({
+            "pedido": l.get("pedido_mkt", ""), "data": l.get("data", ""),
+            "data_pedido": l.get("data_pedido", ""),
+            "sku": l.get("sku", ""), "produto": l.get("produto", ""),
+            "categoria": l.get("categoria", ""), "forma": l.get("forma", ""),
+            "cancelado": bool(l.get("cancelado")),
+            "base": round(float(l.get("sis_base") or 0.0), 2),
+            "pct_contrato": round(pct * 100, 2),
+            "pct_cobrado": round(float(l.get("pct_cobrado") or 0.0), 2),
+            "pct_dif": round(float(l.get("pct_cobrado") or 0.0) - pct * 100, 2),
+            "com_contrato": round(float(l.get("com_contrato") or 0.0), 2),
+            "comissao": round(float(l.get("com_cobrada") or 0.0), 2),
+            "cobrado_a_mais": round(float(l.get("cobrou_mais_rs") or 0.0), 2),
+        })
+    if q:
+        qs = [t for t in unidecode_lower(q).split() if t]
+        itens = [m for m in itens
+                 if all(t in unidecode_lower(f"{m['pedido']} {m['sku']} {m['produto']} {m['categoria']}")
+                        for t in qs)]
+    itens.sort(key=lambda m: -m["cobrado_a_mais"])
+    return render_template("cbahia_comissoes.html", c=canal_por_chave()["cbahia"], comp=comp,
+                           itens=itens, q=q, pct_contrato=round(pct * 100, 2),
+                           resumo=(r.get("resumo") or {}),
+                           total=round(sum(m["cobrado_a_mais"] for m in itens), 2),
+                           base=round(sum(m["base"] for m in itens), 2))
+
+
+@app.route("/canal/cbahia/pendentes")
+@logado
+def cbahia_pendentes():
+    """PENDENTES DE BAIXA — o que o canal ainda não repassou."""
+    comp = comp_atual()
+    q = (request.args.get("q") or "").strip()
+    sla = (request.args.get("sla") or "todos").strip()
+    pend = _cbahia_pendentes(comp)
+    if sla != "todos":
+        pend = [p for p in pend if p["sla"] == sla]
+    if q:
+        qs = [t for t in unidecode_lower(q).split() if t]
+        pend = [p for p in pend
+                if all(t in unidecode_lower(f"{p['oc']} {p['pedido_erp']} {p['nf']} {p['cidade']} {p['uf']}")
+                       for t in qs)]
+    todos = _cbahia_pendentes(comp)
+    cont = {k: len([p for p in todos if p["sla"] == k]) for k in ("no prazo", "cobrar", "escalar")}
+    cont["todos"] = len(todos)
+    rs = {k: round(sum(p["a_receber"] for p in todos if p["sla"] == k), 2) for k in ("no prazo", "cobrar", "escalar")}
+    rs["todos"] = round(sum(p["a_receber"] for p in todos), 2)
+    return render_template("cbahia_pendentes.html", c=canal_por_chave()["cbahia"], comp=comp,
+                           pend=pend, cont=cont, rs=rs, q=q, sla=sla,
+                           erp_mes=len(erp_linhas("cbahia", comp)))
+
+
 def recalcular_canais(comp: str) -> list[str]:
     """Recalcula um canal de cada vez e SOLTA a memória entre eles (o Render tem
     512 MB: dois canais grandes juntos na memória derrubavam o app)."""
@@ -1581,6 +1811,11 @@ def recalcular_canais(comp: str) -> list[str]:
     r = recalcular_amazon(comp)
     if r:
         feitos.append(f"Amazon {f_mesano(comp)}: R$ {f_brl(r['resumo']['rebate_total'])}")
+    r = None
+    gc.collect()
+    r = recalcular_cbahia(comp)
+    if r:
+        feitos.append(f"Casas Bahia {f_mesano(comp)}: R$ {f_brl(r['resumo']['rebate_total'])}")
     r = None
     gc.collect()
     return feitos
@@ -1735,6 +1970,8 @@ def canal(chave):
         sm = base_sumidos("meli", comp)
         return render_template("canal.html", c=c, r=r, sumidos=len(sm),
                                sumidos_rs=round(sum(float(v.get("valor_prod") or 0) for v in sm.values()), 2))
+    if chave == "cbahia":
+        return render_template("canal_cbahia.html", c=c, r=r)
     if chave == "magalu":
         return render_template("canal_magalu.html", c=c, r=r)
     if chave == "shopee":
@@ -2282,6 +2519,8 @@ def pend_processar(chave: str | None = None) -> list[str]:
                 m = processar_webcont(x["caminho"], x["nome"], x["quem"])
             elif x["chave"] == "colombo":
                 m = processar_colombo(x["caminho"], x["nome"], x["quem"])
+            elif x["chave"] == "cbahia":
+                m = processar_cbahia(x["caminho"], x["nome"], x["quem"])
             elif x["chave"] == "amazon":
                 m = processar_amazon(x["caminho"], x["nome"], x["quem"])
             else:
@@ -2293,6 +2532,65 @@ def pend_processar(chave: str | None = None) -> list[str]:
         gc.collect()   # solta a memória do arquivo anterior antes do próximo
     pend_gravar([x for x in pend_ler() if x["quando"] not in feitos])
     return msgs
+
+
+def _comps_citadas(msgs: list[str]) -> set:
+    """As competências que as mensagens de processamento citaram ("set/26",
+    "out/26"…), para avisar quando o arquivo é de outro mês."""
+    meses = {"jan": 1, "fev": 2, "mar": 3, "abr": 4, "mai": 5, "jun": 6,
+             "jul": 7, "ago": 8, "set": 9, "out": 10, "nov": 11, "dez": 12}
+    out = set()
+    for m in msgs or []:
+        for mes, ano in re.findall(r"\b([a-z]{3})/(\d{2})\b", str(m).lower()):
+            if mes in meses:
+                out.add(f"20{ano}-{meses[mes]:02d}")
+    return out
+
+
+def _periodo_do_nome(nome: str) -> tuple[str, str] | None:
+    """O período que o NOME do arquivo promete. Os portais carimbam no nome:
+       Magalu/Meli  '0110ate021026'            → 01/10/26 a 02/10/26
+       Amazon       '01_08_2026_a_18_09_2026'  → 01/08/26 a 18/09/26
+       Shopee       '20260901_20260923'        → 01/09/26 a 23/09/26
+    Serve para conferir se o conteúdo bate com o que foi pedido no portal."""
+    n = str(nome or "")
+    m = re.search(r"(?<!\d)(\d{2})(\d{2})ate(\d{2})(\d{2})(\d{2})(?!\d)", n)
+    if m:
+        d1, m1, d2, m2, a2 = m.groups()
+        a1 = a2 if int(m1) <= int(m2) else f"{int(a2) - 1:02d}"
+        return (f"20{a1}-{m1}-{d1}", f"20{a2}-{m2}-{d2}")
+    m = re.search(r"(\d{2})_(\d{2})_(\d{4})_a_(\d{2})_(\d{2})_(\d{4})", n)
+    if m:
+        d1, m1, a1, d2, m2, a2 = m.groups()
+        return (f"{a1}-{m1}-{d1}", f"{a2}-{m2}-{d2}")
+    m = re.search(r"(?<!\d)(20\d{2})(\d{2})(\d{2})_(20\d{2})(\d{2})(\d{2})(?!\d)", n)
+    if m:
+        a1, m1, d1, a2, m2, d2 = m.groups()
+        return (f"{a1}-{m1}-{d1}", f"{a2}-{m2}-{d2}")
+    return None
+
+
+def _conferir_periodo(nome: str, msgs: list[str]) -> str:
+    """AVISO DE ARQUIVO TROCADO (02/10/2026). O nome do arquivo carrega o
+    período que foi pedido no portal; as mensagens trazem a competência que
+    de fato veio dentro. Quando os dois discordam, quase sempre o período foi
+    escolhido errado na hora de gerar o relatório — e sem este aviso o mês
+    inteiro entra na competência errada sem ninguém perceber.
+    Caso real: 'Magalu_Financeiro_0110ate021026.xlsx' (01 a 02/10) veio com
+    pedidos de 01 e 02 de FEVEREIRO. O PLUTOS leu certo; o arquivo é que era
+    de outro mês."""
+    per = _periodo_do_nome(nome)
+    if not per:
+        return ""
+    comps_nome = {per[0][:7], per[1][:7]}
+    comps_dados = _comps_citadas(msgs)
+    if not comps_dados or (comps_dados & comps_nome):
+        return ""
+    return (f"CONFIRA O ARQUIVO: o nome diz {f_dia(per[0])} a {f_dia(per[1])}, "
+            f"mas os pedidos lá dentro são de "
+            f"{' e '.join(f_mesano(c) for c in sorted(comps_dados))}. "
+            f"Quase sempre é o período escolhido errado na hora de gerar o "
+            f"relatório no portal — vale gerar de novo antes de fechar o mês.")
 
 
 @app.route("/arquivos/subir/<chave>", methods=["POST"])
@@ -2322,8 +2620,22 @@ def subir(chave):
     pend_gravar(lista)
     nome = " + ".join(n for n, _ in arquivos_) if len(arquivos_) > 1 else arquivos_[0][0]
     if request.form.get("rodar"):
-        for m in pend_processar(chave):
+        msgs = pend_processar(chave)
+        for m in msgs:
             flash(m)
+        # O ARQUIVO PODE SER DE OUTRO MÊS (02/10/2026): o export vai pela data
+        # do pedido, então subir um arquivo de 01–02/10 com a tela em setembro
+        # dá a impressão de que "não entrou nada". Aqui o PLUTOS diz para onde
+        # foi e leva o link do mês certo — ninguém mais fica procurando.
+        aviso = _conferir_periodo(nome, msgs)
+        if aviso:
+            flash(aviso)
+        outras = _comps_citadas(msgs) - {comp_atual()}
+        if outras:
+            alvo = sorted(outras)[-1]
+            flash(f"ATENÇÃO: este arquivo é de {f_mesano(alvo)}, e a tela está em "
+                  f"{f_mesano(comp_atual())}. Os pedidos entraram na competência deles — "
+                  f"abra {f_mesano(alvo)} no seletor de mês lá em cima para ver.")
         # fica em Arquivos: quem sobe costuma subir vários seguidos. Só o
         # ▶ Rodar o PLUTOS leva para o GERAL, quando termina tudo.
         return redirect(url_for("arquivos", mes=comp_atual()))

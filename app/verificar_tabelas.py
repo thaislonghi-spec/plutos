@@ -17,8 +17,10 @@ srv=make_server("127.0.0.1",5091,S.app); threading.Thread(target=srv.serve_forev
 ck=SecureCookieSessionInterface().get_signing_serializer(S.app).dumps({"usuario":"THAIS","empresa":"multimoveis","papel":"admin"})
 
 URLS=["/","/canal/meli","/canal/magalu","/canal/shopee","/canal/madeira","/canal/webcont",
-      "/canal/colombo","/canal/amazon","/canal/amazon/faltantes","/pedidos?canal=meli","/pedidos?canal=amazon",
-      "/linha/meli","/linha/amazon","/linha/magalu","/linha/shopee","/coletas","/custo-coletas",
+      "/canal/colombo","/canal/amazon","/canal/amazon/faltantes","/canal/cbahia",
+      "/canal/cbahia/comissoes-a-maior","/canal/cbahia/pendentes",
+      "/pedidos?canal=meli","/pedidos?canal=amazon","/pedidos?canal=cbahia",
+      "/linha/meli","/linha/amazon","/linha/magalu","/linha/shopee","/linha/cbahia","/coletas","/custo-coletas",
       "/custo-full","/custo-full-real","/envio-full","/entregas","/faltante","/mlbs",
       "/arquivos","/parametros","/conta","/saude","/canais","/erp"]
 

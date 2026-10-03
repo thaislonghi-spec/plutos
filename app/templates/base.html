@@ -56,6 +56,8 @@
   'estoque_full': ['Estoque Full', 'Magazine Luiza · o que está guardado no CD do Magalu, quanto vale e o que está parado'],
   'custo_full': ['Custo do Full por item · Cobrado', 'Magazine Luiza · o que o canal COBROU no mês, por SKU — é daqui que sai a soma do custo'],
   'custo_full_real': ['Coparticipação · Tabela do canal', 'Magazine Luiza · a tabela por SKU que entra na FORMAÇÃO DE PREÇO — não é a apuração do mês'],
+  'cbahia_pendentes': ['Pendentes de baixa · Casas Bahia', 'o que o canal ainda não repassou — a Via só libera quando o pedido está entregue'],
+  'cbahia_comissoes': ['Comissões a maior · Casas Bahia', 'pedidos em que a Via aplicou comissão acima do contrato dela — vira chamado no portal'],
   'coparticipacao_real': ['Coparticipação · Real por pedido', 'Magazine Luiza · o frete que NÓS pagamos de fato, pedido a pedido — arquivo SXC do portal'],
   'frete_full': ['Custo Frete Full', 'Magazine Luiza · Planilha 2 — quanto o frete dos pedidos Fulfillment está custando'],
   'coparticipacao': ['Coparticipação de Frete', 'Magazine Luiza · Planilha 2 — o pedaço do frete que nós pagamos'],
@@ -80,7 +82,7 @@
     <a class="item {{ 'on' if atual == 'entregas' }}" href="{{ url_for('entregas', mes=comp) }}">Entregas · custo por SKU</a>
     <div class="grupo">Canais</div>
     {% for cn in CANAIS %}
-      {% set aberto = (c is defined and c.chave == cn.chave) or (atual in ('faltante', 'mlbs', 'coletas', 'custo_coletas') and cn.chave == 'meli') or (atual in ('fulfillment', 'custo_full', 'custo_full_real', 'estoque_full', 'frete_full', 'coparticipacao', 'coparticipacao_real') and cn.chave == 'magalu') or (atual == 'amazon_faltantes' and cn.chave == 'amazon') %}
+      {% set aberto = (c is defined and c.chave == cn.chave) or (atual in ('faltante', 'mlbs', 'coletas', 'custo_coletas') and cn.chave == 'meli') or (atual in ('fulfillment', 'custo_full', 'custo_full_real', 'estoque_full', 'frete_full', 'coparticipacao', 'coparticipacao_real') and cn.chave == 'magalu') or (atual == 'amazon_faltantes' and cn.chave == 'amazon') or (atual in ('cbahia_pendentes', 'cbahia_comissoes') and cn.chave == 'cbahia') %}
       <div class="grupo-canal {{ 'aberto' if aberto }}" data-canal="{{ cn.chave }}">
         {% if cn.ativo %}
         <a class="item canal {{ 'on' if atual == 'canal' and c is defined and c.chave == cn.chave }}" href="{{ url_for('canal', chave=cn.chave, mes=comp) }}">{{ cn.nome }}<i class="seta" data-toggle="{{ cn.chave }}" title="abrir / fechar">›</i></a>
@@ -100,6 +102,10 @@
           {% endif %}
           {% if cn.chave == 'amazon' %}
           <a class="item sub {{ 'on' if atual == 'amazon_faltantes' }}" href="{{ url_for('amazon_faltantes', mes=comp) }}">Pedidos faltantes</a>
+          {% endif %}
+          {% if cn.chave == 'cbahia' %}
+          <a class="item sub {{ 'on' if atual == 'cbahia_pendentes' }}" href="{{ url_for('cbahia_pendentes', mes=comp) }}">Pendentes de baixa</a>
+          <a class="item sub {{ 'on' if atual == 'cbahia_comissoes' }}" href="{{ url_for('cbahia_comissoes', mes=comp) }}">Comissões a maior</a>
           {% endif %}
           {% if cn.chave == 'meli' %}
           <a class="item sub {{ 'on' if atual == 'faltante' }}" href="{{ url_for('faltante', mes=comp) }}">Faltante campanha</a>
@@ -151,7 +157,7 @@
   <div class="acoes-topo">
     {% set ano = comp[:4] %}
     {% set anos = [] %}{% for cp in COMPS + [HOJE_COMP] %}{% if cp[:4] not in anos %}{% set _ = anos.append(cp[:4]) %}{% endif %}{% endfor %}{% set anos = anos|sort %}
-    {% set pag_mes = atual if atual in ('painel','pedidos','faltante','arquivos','canal','linha','coletas','fulfillment','custo_full','custo_full_real','estoque_full','frete_full','coparticipacao','coparticipacao_real','amazon_faltantes','entregas') else 'painel' %}
+    {% set pag_mes = atual if atual in ('painel','pedidos','faltante','arquivos','canal','linha','coletas','fulfillment','custo_full','custo_full_real','estoque_full','frete_full','coparticipacao','coparticipacao_real','amazon_faltantes','cbahia_pendentes','cbahia_comissoes','entregas') else 'painel' %}
     {% set extra = dict(chave=c.chave) if atual in ('canal','linha') and c is defined else {} %}
     <div class="meses">
       {% if anos|length > 1 %}<div class="anos">{% for a in anos %}<a class="ano {{ 'on' if a == ano }}" href="{{ url_for(pag_mes, mes=a ~ '-' ~ (HOJE_COMP[5:] if a == HOJE_COMP[:4] else '01'), **extra) }}">{{ a }}</a>{% endfor %}</div>{% endif %}
